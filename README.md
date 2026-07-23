@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Morton's Mechanicals
 
-## Getting Started
+Mobile mechanic marketing website with a full staff portal dashboard.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** — frontend + API routes
+- **Supabase** — PostgreSQL database (content, auth, quotes, shop data)
+- **Vercel** — hosting
+- **GitHub** — source control
+
+---
+
+## 1. Supabase setup
+
+1. Create a free project at [supabase.com](https://supabase.com)
+2. Open **SQL Editor** → **New query**
+3. Paste and run the entire contents of [`supabase/schema.sql`](./supabase/schema.sql)
+4. Go to **Project Settings → API** and copy:
+   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon` public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` secret key → `SUPABASE_SERVICE_ROLE_KEY`
+
+5. Enable Realtime (should be automatic after schema):
+   - **Database → Replication** — confirm `site_content` is listed
+
+---
+
+## 2. Local development
 
 ```bash
+cp .env.example .env.local
+# Fill in your Supabase keys in .env.local
+
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) — public site  
+Open [http://localhost:3000/admin](http://localhost:3000/admin) — staff portal (first visit runs setup)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> Without Supabase env vars, the app falls back to local JSON files in `data/` for development.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 3. GitHub setup
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+git init
+git add .
+git commit -m "Initial commit: Morton's Mechanicals website + staff portal"
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Create a new repo on github.com, then:
+git remote add origin https://github.com/YOUR_USERNAME/mortonsmechanicals.git
+git branch -M main
+git push -u origin main
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 4. Vercel deployment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Go to [vercel.com](https://vercel.com) → **Add New Project**
+2. Import your GitHub repository
+3. Add **Environment Variables** (same as `.env.local`):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
+
+4. Click **Deploy**
+
+Your live site will be at `https://your-project.vercel.app`
+
+---
+
+## 5. Owner workflow (live updates)
+
+1. Visit **`/admin`** on the live Vercel URL
+2. Complete one-time setup (create owner account)
+3. Use **Page Customizer** to edit website content → **Save changes**
+4. Open the public site in another tab — changes appear immediately via Supabase Realtime
+
+---
+
+## Project structure
+
+```
+src/
+  app/           # Pages + API routes
+  components/    # Public site + admin dashboard
+  lib/           # Auth, content, shop data, Supabase clients
+supabase/
+  schema.sql     # Database schema — run once in Supabase
+```
+
+## Security notes
+
+- Never commit `.env.local` or expose `SUPABASE_SERVICE_ROLE_KEY` in client code
+- The service role key is server-only (API routes)
+- Rotate keys if accidentally exposed
