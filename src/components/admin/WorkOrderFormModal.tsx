@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, MapPin, Plus, UserRound } from "lucide-react";
 import type { CustomerVehicle, Priority, StaffMember, WorkOrder, WorkOrderStatus } from "@/lib/shop-types";
-import { formatCustomerVehicleOption } from "@/lib/customer-vehicles";
+import { formatCustomerVehicleOption, parseWorkOrderVehicleLabel } from "@/lib/customer-vehicles";
 import { adminGet, adminSend } from "./admin-fetch";
 import { CustomerPickerModal, type CustomerWithVehicles } from "./CustomerPickerModal";
 import { useAdminToast } from "./AdminToast";
@@ -109,6 +109,18 @@ function vehicleFromRecord(vehicle?: CustomerVehicle | null) {
   };
 }
 
+function vehicleFromWorkOrderLabel(label: string) {
+  const parsed = parseWorkOrderVehicleLabel(label);
+  return {
+    ...emptyVehicle,
+    year: parsed.year ? String(parsed.year) : emptyVehicle.year,
+    make: parsed.make ?? "",
+    model: parsed.model ?? "",
+    trim: parsed.trim ?? "",
+    plate: parsed.plate ?? "",
+  };
+}
+
 function vehiclePayload(form: typeof emptyForm, id?: string) {
   return {
     id,
@@ -140,6 +152,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
   const [models, setModels] = useState<string[]>([]);
   const [loadingMakes, setLoadingMakes] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(false);
 
   const addressListId = useMemo(() => `wo-address-${editingOrder?.id ?? "new"}`, [editingOrder?.id]);
 
@@ -179,6 +192,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
   useEffect(() => {
     async function hydrate() {
       if (!editingOrder) {
+        setLoadingEdit(false);
         setForm(emptyForm);
         setCustomer(null);
         setVehicles([]);
@@ -188,8 +202,80 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
         return;
       }
 
+      setLoadingEdit(true);
+
+      let nextCustomer: CustomerWithVehicles | null = null;
+      let vehicleList: CustomerVehicle[] = [];
+      let nextCustomerVehicleId = editingOrder.customerVehicleId ?? "";
+      let nextVehicleJobOnly = !editingOrder.customerVehicleId;
+      let customerAddress = "";
+      let vehicleForm = editingOrder.vehicle
+        ? vehicleFromWorkOrderLabel(editingOrder.vehicle)
+        : { ...emptyVehicle };
+
+      if (editingOrder.customerId) {
+        const [{ data: customers }, { data: customerVehicles }] = await Promise.all([
+          adminGet<CustomerWithVehicles[]>("/api/admin/customers?includeVehicles=1"),
+          adminGet<CustomerVehicle[]>(`/api/admin/customers/vehicles?customerId=${encodeURIComponent(editingOrder.customerId)}`),
+        ]);
+        const match = customers?.find((row) => row.id === editingOrder.customerId) ?? null;
+        vehicleList = customerVehicles ?? match?.vehicles ?? [];
+        customerAddress = match?.address ?? "";
+
+        if (match) {
+          nextCustomer = { ...match, vehicles: vehicleList };
+        } else {
+          nextCustomer = {
+            id: editingOrder.customerId,
+            name: editingOrder.customerName,
+            phone: editingOrder.phone,
+            createdAt: editingOrder.createdAt,
+            updatedAt: editingOrder.updatedAt,
+            vehicles: vehicleList,
+          };
+        }
+
+        let selectedVehicle =
+          vehicleList.find((vehicle) => vehicle.id === editingOrder.customerVehicleId) ?? null;
+
+        if (!selectedVehicle && editingOrder.customerVehicleId) {
+          const { data: allVehicles } = await adminGet<CustomerVehicle[]>("/api/admin/customers/vehicles");
+          selectedVehicle = allVehicles?.find((vehicle) => vehicle.id === editingOrder.customerVehicleId) ?? null;
+          if (selectedVehicle && !vehicleList.some((vehicle) => vehicle.id === selectedVehicle?.id)) {
+            vehicleList = [selectedVehicle, ...vehicleList];
+          }
+        }
+
+        if (selectedVehicle) {
+          vehicleForm = vehicleFromRecord(selectedVehicle);
+          nextCustomerVehicleId = selectedVehicle.id;
+          nextVehicleJobOnly = false;
+        } else if (editingOrder.vehicle) {
+          vehicleForm = vehicleFromWorkOrderLabel(editingOrder.vehicle);
+          nextCustomerVehicleId = "";
+          nextVehicleJobOnly = true;
+        }
+      } else {
+        nextCustomer = {
+          id: "",
+          name: editingOrder.customerName,
+          phone: editingOrder.phone,
+          createdAt: editingOrder.createdAt,
+          updatedAt: editingOrder.updatedAt,
+          vehicles: [],
+        };
+        if (editingOrder.vehicle) {
+          vehicleForm = vehicleFromWorkOrderLabel(editingOrder.vehicle);
+        }
+      }
+
+      setCustomer(nextCustomer);
+      setVehicles(vehicleList);
+      setCustomerVehicleId(nextCustomerVehicleId);
+      setVehicleJobOnly(nextVehicleJobOnly);
+      setShowInternalNotes(Boolean(editingOrder.internalNotes?.trim()));
       setForm({
-        customerAddress: "",
+        customerAddress,
         customerConcern: editingOrder.customerConcern ?? "",
         service: editingOrder.service,
         status: editingOrder.status,
@@ -198,47 +284,9 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
         notes: editingOrder.notes ?? "",
         assignedTo: editingOrder.assignedTo ?? "",
         scheduledDate: editingOrder.scheduledDate ?? "",
-        ...emptyVehicle,
+        ...vehicleForm,
       });
-      setCustomerVehicleId(editingOrder.customerVehicleId ?? "");
-      setVehicleJobOnly(!editingOrder.customerVehicleId);
-      setShowInternalNotes(Boolean(editingOrder.internalNotes?.trim()));
-
-      if (editingOrder.customerId) {
-        const [{ data: customers }, { data: customerVehicles }] = await Promise.all([
-          adminGet<CustomerWithVehicles[]>("/api/admin/customers?includeVehicles=1"),
-          adminGet<CustomerVehicle[]>(`/api/admin/customers/vehicles?customerId=${encodeURIComponent(editingOrder.customerId)}`),
-        ]);
-        const match = customers?.find((row) => row.id === editingOrder.customerId) ?? null;
-        const vehicleList = customerVehicles ?? match?.vehicles ?? [];
-        if (match) {
-          setCustomer({ ...match, vehicles: vehicleList });
-          setVehicles(vehicleList);
-          setForm((prev) => ({ ...prev, customerAddress: match.address ?? "" }));
-        } else {
-          setCustomer({
-            id: editingOrder.customerId,
-            name: editingOrder.customerName,
-            phone: editingOrder.phone,
-            createdAt: editingOrder.createdAt,
-            updatedAt: editingOrder.updatedAt,
-            vehicles: vehicleList,
-          });
-          setVehicles(vehicleList);
-        }
-        const selectedVehicle = vehicleList.find((vehicle) => vehicle.id === editingOrder.customerVehicleId);
-        setForm((prev) => ({ ...prev, ...vehicleFromRecord(selectedVehicle) }));
-      } else {
-        setCustomer({
-          id: "",
-          name: editingOrder.customerName,
-          phone: editingOrder.phone,
-          createdAt: editingOrder.createdAt,
-          updatedAt: editingOrder.updatedAt,
-          vehicles: [],
-        });
-        setVehicles([]);
-      }
+      setLoadingEdit(false);
     }
 
     hydrate();
@@ -456,12 +504,14 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
           <FormSection
             title="Vehicle"
             description={
-              customer?.id
-                ? "Use a vehicle assigned to this customer, or enter details manually below."
-                : "Select a customer first to choose vehicles on file."
+              loadingEdit
+                ? "Loading saved vehicle details…"
+                : customer?.id
+                  ? "Use a vehicle assigned to this customer, or enter details manually below."
+                  : "Select a customer first to choose vehicles on file."
             }
           >
-            <div className="space-y-4">
+            <div className={`space-y-4 ${loadingEdit ? "pointer-events-none opacity-60" : ""}`}>
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                 <FormField
                   label="Vehicle on file"
@@ -711,7 +761,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
             <button type="button" onClick={onClose} className={btnSecondary}>
               Cancel
             </button>
-            <button type="submit" className={btnPrimary} disabled={saving}>
+            <button type="submit" className={btnPrimary} disabled={saving || loadingEdit}>
               {saving ? "Saving…" : editingOrder ? "Save changes" : "Create work order"}
             </button>
           </div>

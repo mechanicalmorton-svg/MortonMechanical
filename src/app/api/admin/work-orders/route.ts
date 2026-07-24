@@ -99,19 +99,32 @@ export async function PATCH(req: Request) {
         saveVehicleToFile: body.saveVehicleToFile,
       });
 
+      const manualJobVehicle =
+        body.saveVehicleToFile === false &&
+        !optionalId(body.customerVehicleId) &&
+        !optionalId(links.customerVehicleId);
+
       const updated: WorkOrder = {
-        ...item,
-        ...body,
+        id: item.id,
         customerId: optionalId(links.customerId ?? item.customerId),
-        customerVehicleId:
-          body.saveVehicleToFile === false && !optionalId(body.customerVehicleId)
-            ? undefined
-            : optionalId(links.customerVehicleId ?? body.customerVehicleId ?? item.customerVehicleId),
+        customerVehicleId: manualJobVehicle
+          ? undefined
+          : optionalId(links.customerVehicleId ?? body.customerVehicleId ?? item.customerVehicleId),
         customerName: links.customerName || item.customerName,
         phone: links.phone || item.phone,
         vehicle: links.vehicle || item.vehicle,
+        customerConcern:
+          typeof body.customerConcern === "string" ? body.customerConcern : item.customerConcern ?? "",
+        service: typeof body.service === "string" && body.service.trim() ? body.service.trim() : item.service,
         status: body.status ? parseStatus(body.status) : item.status,
         priority: body.priority ? parsePriority(body.priority) : item.priority,
+        assignedTo: optionalId(body.assignedTo) ?? item.assignedTo,
+        notes: typeof body.notes === "string" ? body.notes : item.notes,
+        internalNotes:
+          typeof body.internalNotes === "string" ? body.internalNotes : item.internalNotes ?? "",
+        revenue: body.revenue ?? item.revenue,
+        scheduledDate: optionalId(body.scheduledDate) ?? item.scheduledDate,
+        createdAt: item.createdAt,
         updatedAt: new Date().toISOString(),
       };
       await upsertWorkOrder(updated);

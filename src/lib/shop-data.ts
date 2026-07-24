@@ -428,9 +428,24 @@ export async function resolveWorkOrderLinks(input: {
   let vehicle: CustomerVehicle | null = null;
   if (input.customerVehicleId) {
     vehicle = await getCustomerVehicleById(input.customerVehicleId);
-    if (!vehicle) throw new Error("Selected vehicle was not found.");
-    if (customer && vehicle.customerId !== customer.id) throw new Error("Vehicle does not belong to this customer.");
-    if (!customer) customer = await getCustomerById(vehicle.customerId);
+    if (vehicle) {
+      if (customer && vehicle.customerId !== customer.id) throw new Error("Vehicle does not belong to this customer.");
+      if (!customer) customer = await getCustomerById(vehicle.customerId);
+      if (input.vehicle && hasVehicleDetails(input.vehicle)) {
+        vehicle = {
+          ...vehicle,
+          year: input.vehicle.year ?? vehicle.year,
+          make: input.vehicle.make ?? vehicle.make,
+          model: input.vehicle.model ?? vehicle.model,
+          trim: input.vehicle.trim ?? vehicle.trim,
+          vin: input.vehicle.vin ?? vehicle.vin,
+          plate: input.vehicle.plate ?? vehicle.plate,
+          powertrain: input.vehicle.powertrain ?? vehicle.powertrain,
+          notes: input.vehicle.notes ?? vehicle.notes,
+        };
+        await upsertCustomerVehicle(vehicle);
+      }
+    }
   } else if (customer && input.vehicle && hasVehicleDetails(input.vehicle) && input.saveVehicleToFile !== false) {
     const now = new Date().toISOString();
     if (input.vehicle.id) {
