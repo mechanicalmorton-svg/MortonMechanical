@@ -42,6 +42,19 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Select a customer for this work order." }, { status: 400 });
       }
 
+      const vin = typeof body.vehicle?.vin === "string" ? body.vehicle.vin.trim() : "";
+      const plate = typeof body.vehicle?.plate === "string" ? body.vehicle.plate.trim() : "";
+      const assignedTo = typeof body.assignedTo === "string" ? body.assignedTo.trim() : "";
+      if (!vin) {
+        return NextResponse.json({ error: "VIN is required." }, { status: 400 });
+      }
+      if (!plate) {
+        return NextResponse.json({ error: "License plate is required." }, { status: 400 });
+      }
+      if (!assignedTo) {
+        return NextResponse.json({ error: "Assigned to is required." }, { status: 400 });
+      }
+
       const order: WorkOrder = {
         id: createId(),
         customerId: optionalId(links.customerId),
@@ -50,10 +63,10 @@ export async function POST(req: Request) {
         phone: links.phone,
         vehicle: links.vehicle,
         customerConcern: body.customerConcern ?? "",
-        service: body.service ?? "General repair",
+        service: typeof body.service === "string" && body.service.trim() ? body.service.trim() : "General repair",
         status: parseStatus(body.status),
         priority: parsePriority(body.priority),
-        assignedTo: body.assignedTo || undefined,
+        assignedTo,
         notes: body.notes,
         internalNotes: body.internalNotes ?? "",
         revenue: body.revenue,

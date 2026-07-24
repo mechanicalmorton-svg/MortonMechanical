@@ -324,11 +324,21 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
       toast.error("Select a customer before saving.");
       return;
     }
-    if (!form.service.trim()) {
-      toast.error("Work description is required.");
-      return;
-    }
     if (!validateVehicle("Year, make, model, and powertrain are required for the vehicle on this job.")) return;
+    if (!editingOrder) {
+      if (!form.vin.trim()) {
+        toast.error("VIN is required.");
+        return;
+      }
+      if (!form.plate.trim()) {
+        toast.error("License plate is required.");
+        return;
+      }
+      if (!form.assignedTo) {
+        toast.error("Assigned to is required.");
+        return;
+      }
+    }
 
     setSaving(true);
     await saveCustomerAddress();
@@ -534,7 +544,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                     onChange={(e) => setForm({ ...form, trim: e.target.value })}
                   />
                 </FormField>
-                <FormField label="VIN" htmlFor="wo-vin">
+                <FormField label="VIN" htmlFor="wo-vin" required={!editingOrder}>
                   <input
                     id="wo-vin"
                     className={inputClass}
@@ -545,7 +555,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                     onChange={(e) => setForm({ ...form, vin: e.target.value.toUpperCase() })}
                   />
                 </FormField>
-                <FormField label="License plate" htmlFor="wo-plate">
+                <FormField label="License plate" htmlFor="wo-plate" required={!editingOrder}>
                   <input
                     id="wo-plate"
                     className={inputClass}
@@ -593,12 +603,11 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
 
           <FormSection title="Work & assignment">
             <div className="grid gap-4">
-              <FormField label="Work description" htmlFor="wo-service" required>
+              <FormField label="Work description" htmlFor="wo-service">
                 <textarea
                   id="wo-service"
                   className={inputClass}
                   rows={3}
-                  required
                   placeholder="Describe the work to be performed…"
                   value={form.service}
                   onChange={(e) => setForm({ ...form, service: e.target.value })}
@@ -639,7 +648,12 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                     onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })}
                   />
                 </FormField>
-                <FormField label="Assigned to" htmlFor="wo-assigned" hint="Staff with work order / booking access.">
+                <FormField
+                  label="Assigned to"
+                  htmlFor="wo-assigned"
+                  required={!editingOrder}
+                  hint="Staff with work order / booking access."
+                >
                   <select
                     id="wo-assigned"
                     className={inputClass}
