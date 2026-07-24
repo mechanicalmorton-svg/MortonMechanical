@@ -52,13 +52,41 @@ function emailToDisplayName(email: string) {
     .join(" ");
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
+function decodeJwtPart(part: string): Record<string, unknown> | null {
   try {
-    const payload = token.split(".")[1];
-    if (!payload) return null;
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const normalized = part.replace(/-/g, "+").replace(/_/g, "/");
     const json = Buffer.from(normalized, "base64").toString("utf8");
     return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  return decodeJwtPart(payload);
+}
+
+function isJwtExpired(payload: Record<string, unknown>) {
+  const exp = typeof payload.exp === "number" ? payload.exp : null;
+  if (!exp) return false;
+  return exp * 1000 <= Date.now();
+}
+
+/**
+ * ES256 access tokens without a `kid` fail Auth `/user` and `getClaims()` verification.
+ * Prefer reading the cookie session and confirming the user via the service-role Admin API.
+ */
+async function getAccessTokenFromSession() {
+  const supabase = await createAuthServerClient();
+  if (!supabase) return null;
+
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
   } catch {
     return null;
   }
@@ -112,24 +140,6 @@ function buildAdminUser(
   };
 }
 
-function adminUserFromClaims(claims: Record<string, unknown>, staff?: { name?: string | null; role?: string | null } | null) {
-  const email = typeof claims.email === "string" ? claims.email : undefined;
-  const userId = typeof claims.sub === "string" ? claims.sub : undefined;
-  if (!email || !userId) return null;
-
-  return buildAdminUser(
-    {
-      id: userId,
-      email,
-      user_metadata:
-        typeof claims.user_metadata === "object" && claims.user_metadata
-          ? (claims.user_metadata as Record<string, unknown>)
-          : undefined,
-    },
-    staff,
-  );
-}
-
 async function adminUserFromAuthUser(user: User) {
   if (!user.email) return null;
   const staff = await loadStaffProfile(user.id);
@@ -137,32 +147,20 @@ async function adminUserFromAuthUser(user: User) {
 }
 
 export async function getSupabaseAuthUser(): Promise<AdminUser | null> {
-  const supabase = await createAuthServerClient();
-  if (!supabase) return null;
-
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
-  if (!claimsError && claimsData?.claims) {
-    const userId = typeof claimsData.claims.sub === "string" ? claimsData.claims.sub : null;
-    const staff = userId ? await loadStaffProfile(userId) : null;
-    return adminUserFromClaims(claimsData.claims as Record<string, unknown>, staff);
-  }
-
-  // Some ES256 session tokens lack a JWT `kid` header and fail Auth `/user` verification.
-  // Confirm the cookie session via service role instead of local JWT verification.
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
+  const token = await getAccessTokenFromSession();
   if (!token) return null;
 
   const payload = decodeJwtPayload(token);
   const userId = typeof payload?.sub === "string" ? payload.sub : null;
-  if (!userId) return null;
+  if (!userId || !payload || isJwtExpired(payload)) return null;
 
   const admin = getSupabaseAdmin();
   if (!admin) return null;
 
-  const { data: { user }, error } = await admin.auth.admin.getUserById(userId);
+  const {
+    data: { user },
+    error,
+  } = await admin.auth.admin.getUserById(userId);
   if (error || !user) return null;
 
   return adminUserFromAuthUser(user);

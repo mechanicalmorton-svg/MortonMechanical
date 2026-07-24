@@ -4,6 +4,12 @@ import { AUTH_COOKIE, isSetupComplete, login, logout, setupAdmin } from "@/lib/a
 import { createAuthServerClient, isAllowedAdminEmail } from "@/lib/supabase/server-auth";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/server";
 
+function isJwtKidError(message: string | undefined) {
+  if (!message) return false;
+  const lower = message.toLowerCase();
+  return lower.includes("jwt") || lower.includes("kid") || lower.includes("unverifiable");
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
 
@@ -25,12 +31,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Auth is not configured." }, { status: 500 });
     }
 
+    // signInWithPassword saves the session from the token response without calling getUser().
+    // Avoid setSession()/getClaims() — ES256 tokens without a JWT `kid` fail those paths.
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.user?.email) {
-      const message =
-        error?.message?.includes("JWT") || error?.message?.includes("kid")
-          ? "Sign-in failed due to an auth configuration issue. Try again, or contact support if it persists."
-          : "Wrong email or password.";
+      const message = isJwtKidError(error?.message)
+        ? "Sign-in failed due to an auth configuration issue. Try again, or contact support if it persists."
+        : "Wrong email or password.";
       return NextResponse.json({ error: message }, { status: 401 });
     }
 

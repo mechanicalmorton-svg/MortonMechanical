@@ -22,8 +22,13 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Refresh the session cookie. Avoid getUser() — ES256 tokens can fail legacy JWT verification.
-  await supabase.auth.getSession();
+  // Refresh the session cookie. Avoid getUser()/getClaims() — ES256 tokens without a
+  // JWT `kid` fail Auth signature verification on those paths.
+  try {
+    await supabase.auth.getSession();
+  } catch {
+    /* session refresh is best-effort; API routes resolve the user via Admin API */
+  }
   return response;
 }
 

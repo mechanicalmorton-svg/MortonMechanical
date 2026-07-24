@@ -171,9 +171,10 @@ export async function changeAccountPassword(userId: string, password: string, cu
       if (verifyError) throw new Error("Current password is incorrect.");
     }
 
-    const supabase = await createAuthServerClient();
-    if (!supabase) throw new Error("Auth is not configured.");
-    const { error } = await supabase.auth.updateUser({ password });
+    // Avoid auth.updateUser() — ES256 tokens without a `kid` fail JWT verification on Auth.
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error("Auth is not configured.");
+    const { error } = await admin.auth.admin.updateUserById(userId, { password });
     if (error) throw new Error(error.message);
     return;
   }
