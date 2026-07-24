@@ -23,6 +23,11 @@ export function isSupabaseConfigured() {
   return !!(getSupabaseUrl() && getSecretKey());
 }
 
+/** True when Supabase Auth (email/password login) can run. */
+export function isSupabaseAuthConfigured() {
+  return !!(getSupabaseUrl() && getPublishableKey());
+}
+
 /** Server-side client with secret key — use only in API routes and server components. */
 export function getSupabaseAdmin() {
   if (!isSupabaseConfigured()) return null;

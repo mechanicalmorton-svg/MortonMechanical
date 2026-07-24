@@ -46,7 +46,7 @@ export type Tab =
   | "customizer"
   | "settings";
 
-type Props = { user: { id: string; username: string } };
+type Props = { user: { id: string; username: string; email?: string } };
 
 type NavItem = {
   id: Tab;
@@ -88,6 +88,7 @@ const validTabs = new Set<Tab>(nav.flatMap((n) => [n.id, ...(n.children?.map((c)
 
 export function AdminDashboard({ user }: Props) {
   const router = useRouter();
+  const displayName = user.email ?? user.username;
   const [tab, setTab] = useState<Tab>("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ inventory: true, routes: true });
@@ -179,7 +180,7 @@ export function AdminDashboard({ user }: Props) {
       <div className="border-t border-slate-800/80 p-3">
         <div className="mb-3 rounded-xl border border-slate-800/80 bg-slate-950/50 px-3 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Signed in</p>
-          <p className="mt-0.5 truncate text-sm font-medium text-slate-200">{user.username}</p>
+          <p className="mt-0.5 truncate text-sm font-medium text-slate-200">{displayName}</p>
         </div>
         <Link
           href="/"
@@ -239,7 +240,7 @@ export function AdminDashboard({ user }: Props) {
             {tab === "routes" && <RoutesPanel />}
             {tab === "routes-today" && <RoutesPanel todayOnly />}
             {tab === "customizer" && <ContentEditor />}
-            {tab === "settings" && <SettingsPanel username={user.username} />}
+            {tab === "settings" && <SettingsPanel username={displayName} />}
           </div>
         </main>
       </div>

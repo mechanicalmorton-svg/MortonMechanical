@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { readJson, writeJson } from "./store";
-import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase/server";
+import { getSupabaseAdmin, isSupabaseAuthConfigured, isSupabaseConfigured } from "./supabase/server";
 
 const SESSION_TTL = 1000 * 60 * 60 * 24 * 7;
 
@@ -57,11 +57,8 @@ async function cleanupExpiredSessions() {
 }
 
 export async function isSetupComplete() {
-  if (isSupabaseConfigured()) {
-    const sb = getSupabaseAdmin()!;
-    const { count } = await sb.from("admin_users").select("*", { count: "exact", head: true });
-    return (count ?? 0) > 0;
-  }
+  // Supabase Auth users live in auth.users — no separate setup step.
+  if (isSupabaseAuthConfigured()) return true;
   return loadUsersJson().length > 0;
 }
 

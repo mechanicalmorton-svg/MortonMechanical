@@ -145,7 +145,18 @@ select * from (values
 where not exists (select 1 from fleet limit 1);
 
 -- Realtime: live website updates when owner saves content
-alter publication supabase_realtime add table site_content;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'site_content'
+  ) then
+    alter publication supabase_realtime add table site_content;
+  end if;
+end $$;
 
 -- Row Level Security (server uses service role key — bypasses RLS)
 alter table admin_users enable row level security;
@@ -160,7 +171,9 @@ alter table fleet enable row level security;
 alter table routes enable row level security;
 
 -- Allow anon to read site content only (public website)
+drop policy if exists "Public can read site content" on site_content;
 create policy "Public can read site content" on site_content for select using (true);
 
 -- Allow anon to insert quotes (contact form)
+drop policy if exists "Public can submit quotes" on quotes;
 create policy "Public can submit quotes" on quotes for insert with check (true);

@@ -1,9 +1,43 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE, isSetupComplete, login, logout, setupAdmin } from "@/lib/auth";
+import { createAuthServerClient, isAllowedAdminEmail } from "@/lib/supabase/server-auth";
+import { isSupabaseAuthConfigured } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
   const body = await req.json();
+
+  if (isSupabaseAuthConfigured()) {
+    const email = (body.email ?? body.username ?? "").trim().toLowerCase();
+    const password = body.password ?? "";
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
+    }
+    if (!isAllowedAdminEmail(email)) {
+      return NextResponse.json(
+        { error: "Only @mortonsmechanical.com accounts can access this portal." },
+        { status: 403 },
+      );
+    }
+
+    const supabase = await createAuthServerClient();
+    if (!supabase) {
+      return NextResponse.json({ error: "Auth is not configured." }, { status: 500 });
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.user?.email) {
+      return NextResponse.json({ error: "Wrong email or password." }, { status: 401 });
+    }
+
+    return NextResponse.json({
+      user: {
+        id: data.user.id,
+        username: data.user.email.split("@")[0],
+        email: data.user.email,
+      },
+    });
+  }
 
   if (body.action === "setup") {
     if (await isSetupComplete()) {
@@ -30,6 +64,12 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE() {
+  if (isSupabaseAuthConfigured()) {
+    const supabase = await createAuthServerClient();
+    if (supabase) await supabase.auth.signOut();
+    return NextResponse.json({ ok: true });
+  }
+
   const jar = await cookies();
   const token = jar.get(AUTH_COOKIE)?.value;
   if (token) await logout(token);

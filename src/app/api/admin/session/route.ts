@@ -1,9 +1,12 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { AUTH_COOKIE, getSessionUser, isSetupComplete } from "@/lib/auth";
+import { getAuthUser } from "@/lib/admin-api";
+import { isSetupComplete } from "@/lib/auth";
+import { isSupabaseAuthConfigured } from "@/lib/supabase/server";
 
 export async function GET() {
-  const jar = await cookies();
-  const user = await getSessionUser(jar.get(AUTH_COOKIE)?.value);
-  return NextResponse.json({ setupComplete: await isSetupComplete(), user });
+  const user = await getAuthUser();
+  return NextResponse.json({
+    setupComplete: isSupabaseAuthConfigured() ? true : await isSetupComplete(),
+    user,
+  });
 }
