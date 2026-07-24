@@ -31,6 +31,8 @@ import { RoutesPanel } from "./RoutesPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { StaffPanel } from "./StaffPanel";
 import { WorkOrdersPanel } from "./WorkOrdersPanel";
+import { SiteLogo } from "@/components/SiteLogo";
+import type { StaffRole } from "@/lib/shop-types";
 
 export type Tab =
   | "dashboard"
@@ -46,7 +48,14 @@ export type Tab =
   | "customizer"
   | "settings";
 
-type Props = { user: { id: string; username: string; email?: string } };
+type Props = { user: { id: string; username: string; email?: string; name: string; role: StaffRole } };
+
+const roleLabels: Record<StaffRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  mechanic: "Mechanic",
+  dispatcher: "Dispatcher",
+};
 
 type NavItem = {
   id: Tab;
@@ -88,7 +97,6 @@ const validTabs = new Set<Tab>(nav.flatMap((n) => [n.id, ...(n.children?.map((c)
 
 export function AdminDashboard({ user }: Props) {
   const router = useRouter();
-  const displayName = user.email ?? user.username;
   const [tab, setTab] = useState<Tab>("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ inventory: true, routes: true });
@@ -133,15 +141,7 @@ export function AdminDashboard({ user }: Props) {
   const sidebar = (
     <>
       <div className="border-b border-slate-800/80 px-5 py-5">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-pink-600 text-white shadow-lg shadow-amber-500/10">
-            <Wrench className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate font-bold text-white">Morton&apos;s Mechanicals</p>
-            <p className="text-xs text-slate-500">Staff Portal</p>
-          </div>
-        </div>
+        <SiteLogo size={44} showName subtitle="Staff Portal" />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
@@ -180,7 +180,8 @@ export function AdminDashboard({ user }: Props) {
       <div className="border-t border-slate-800/80 p-3">
         <div className="mb-3 rounded-xl border border-slate-800/80 bg-slate-950/50 px-3 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Signed in</p>
-          <p className="mt-0.5 truncate text-sm font-medium text-slate-200">{displayName}</p>
+          <p className="mt-0.5 truncate text-sm font-medium text-slate-200">{user.name}</p>
+          <p className="text-xs text-slate-500">{roleLabels[user.role]}</p>
         </div>
         <Link
           href="/"
@@ -229,7 +230,7 @@ export function AdminDashboard({ user }: Props) {
         <main className="relative flex-1 overflow-auto">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(245,158,11,0.04),transparent_50%)]" />
           <div className="relative p-4 sm:p-6 lg:p-8">
-            {tab === "dashboard" && <DashboardHome username={user.username} onNavigate={selectTab} />}
+            {tab === "dashboard" && <DashboardHome username={user.name} onNavigate={selectTab} />}
             {tab === "inventory" && <InventoryPanel />}
             {tab === "inventory-low" && <InventoryPanel lowStockOnly />}
             {tab === "work-orders" && <WorkOrdersPanel />}
@@ -240,7 +241,7 @@ export function AdminDashboard({ user }: Props) {
             {tab === "routes" && <RoutesPanel />}
             {tab === "routes-today" && <RoutesPanel todayOnly />}
             {tab === "customizer" && <ContentEditor />}
-            {tab === "settings" && <SettingsPanel username={displayName} />}
+            {tab === "settings" && <SettingsPanel username={user.name} />}
           </div>
         </main>
       </div>

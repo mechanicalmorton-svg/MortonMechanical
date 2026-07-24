@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { SiteLogo } from "@/components/SiteLogo";
 
 type Props = { useEmailLogin?: boolean };
 
@@ -35,10 +37,17 @@ export function LoginForm({ useEmailLogin = false }: Props) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-slate-950 px-4">
+      <div className="absolute bottom-6 left-6 hidden sm:block">
+        <SiteLogo size={52} showName subtitle="Staff Portal" />
+      </div>
+
       <form onSubmit={handleSubmit} className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/50 p-8">
-        <h1 className="text-2xl font-bold text-white">Portal Login</h1>
-        <p className="mt-2 text-sm text-slate-400">
+        <div className="mb-6 flex justify-center">
+          <SiteLogo size={88} />
+        </div>
+        <h1 className="text-center text-2xl font-bold text-white">Portal Login</h1>
+        <p className="mt-2 text-center text-sm text-slate-400">
           {useEmailLogin
             ? "Sign in with your Morton’s Mechanical email and password."
             : "Sign in to manage your shop website and quote requests."}
@@ -75,6 +84,11 @@ export function LoginForm({ useEmailLogin = false }: Props) {
         >
           {loading ? "Signing in…" : "Sign in"}
         </button>
+        <p className="mt-6 text-center sm:hidden">
+          <Link href="/" className="text-sm text-slate-500 transition hover:text-slate-300">
+            Back to website
+          </Link>
+        </p>
       </form>
     </div>
   );

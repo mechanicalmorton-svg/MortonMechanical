@@ -132,13 +132,13 @@ export async function getSessionUser(token: string | undefined) {
     const { data: session } = await sb.from("admin_sessions").select("user_id, expires_at").eq("token", token).maybeSingle();
     if (!session || new Date(session.expires_at).getTime() < Date.now()) return null;
     const { data: user } = await sb.from("admin_users").select("id, username").eq("id", session.user_id).maybeSingle();
-    return user ? { id: user.id, username: user.username } : null;
+    return user ? { id: user.id, username: user.username, name: user.username, role: "owner" as const } : null;
   }
 
   const s = loadSessionsJson()[token];
   if (!s || s.expires < Date.now()) return null;
   const user = loadUsersJson().find((u) => u.id === s.userId);
-  return user ? { id: user.id, username: user.username } : null;
+  return user ? { id: user.id, username: user.username, name: user.username, role: "owner" as const } : null;
 }
 
 export async function updatePassword(userId: string, newPassword: string) {

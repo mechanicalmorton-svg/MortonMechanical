@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Menu, Phone, X } from "lucide-react";
+import { SiteLogo } from "@/components/SiteLogo";
 import { phoneHref } from "@/lib/content-types";
 
 type Props = {
@@ -18,17 +19,13 @@ const nav = [
 
 export function HeaderNav({ name, phone }: Props) {
   const [open, setOpen] = useState(false);
-  const initial = name.charAt(0);
   const tel = phoneHref(phone);
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/60 bg-slate-950/80 backdrop-blur">
       <div className="mx-auto flex max-w-screen-xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <Link href="/" className="flex min-w-0 items-center gap-2">
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-pink-600 text-xs font-bold text-white shadow-sm">
-            {initial}
-          </span>
-          <h1 className="truncate text-lg font-bold tracking-tight text-slate-100 sm:text-2xl">{name}</h1>
+        <Link href="/" className="flex min-w-0 items-center gap-3">
+          <SiteLogo size={44} showName name={name} />
         </Link>
 
         <nav className="hidden md:block" aria-label="Main">
