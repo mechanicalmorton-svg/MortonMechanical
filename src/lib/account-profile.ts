@@ -18,10 +18,15 @@ const AVATAR_BUCKET = "avatars";
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
+/** Stable production domain for this Vercel project — do not change. */
+const PRODUCTION_SITE_URL = "https://morton-mechanical.vercel.app";
+
 function siteUrl() {
   if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
+  // Production always uses the project domain, never a per-deployment *.vercel.app URL.
+  if (process.env.VERCEL_ENV === "production") return PRODUCTION_SITE_URL;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "https://morton-mechanical.vercel.app";
+  return PRODUCTION_SITE_URL;
 }
 
 function avatarExtension(contentType: string) {
