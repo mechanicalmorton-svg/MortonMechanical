@@ -5,12 +5,13 @@ import { Calendar, Plus, Trash2 } from "lucide-react";
 import type { Booking } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
-import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { useAdminToast } from "./AdminToast";
+import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 export function BookingsPanel() {
+  const toast = useAdminToast();
   const [items, setItems] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     customerName: "",
@@ -25,9 +26,8 @@ export function BookingsPanel() {
 
   async function load() {
     setLoading(true);
-    setError("");
     const { data, error: message } = await adminGet<Booking[]>("/api/admin/bookings");
-    if (message) setError(message);
+    if (message) toast.error(message);
     else setItems(data ?? []);
     setLoading(false);
   }
@@ -43,9 +43,10 @@ export function BookingsPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else {
       setShowForm(false);
+      toast.success("Booking created.");
       load();
     }
   }
@@ -56,7 +57,7 @@ export function BookingsPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -67,7 +68,7 @@ export function BookingsPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -77,7 +78,6 @@ export function BookingsPanel() {
         <PageHeader title="Bookings" subtitle="Schedule and manage customer appointments." />
         <button type="button" onClick={() => setShowForm(true)} className={btnPrimary}><Plus className="h-4 w-4" /> New Booking</button>
       </div>
-      <ErrorBanner message={error} />
 
       <AdminModal open={showForm} onClose={() => setShowForm(false)} title="New Booking" wide>
         <form onSubmit={add} className="grid gap-3 sm:grid-cols-2">

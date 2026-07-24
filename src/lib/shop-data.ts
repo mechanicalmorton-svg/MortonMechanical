@@ -111,7 +111,9 @@ function rowToInventory(r: Record<string, unknown>): InventoryItem {
     quantity: Number(r.quantity),
     minStock: Number(r.min_stock),
     unitCost: Number(r.unit_cost),
+    sellPrice: Number(r.sell_price ?? 0),
     supplier: r.supplier as string | undefined,
+    supplierLink: (r.supplier_link as string) || undefined,
     vehicleId: (r.vehicle_id as string) || undefined,
     location: r.location as string | undefined,
     updatedAt: r.updated_at as string,
@@ -128,7 +130,9 @@ function inventoryToRow(i: InventoryItem) {
     quantity: i.quantity,
     min_stock: i.minStock,
     unit_cost: i.unitCost,
+    sell_price: i.sellPrice,
     supplier: i.supplier,
+    supplier_link: i.supplierLink ?? "",
     vehicle_id: i.vehicleId ?? "",
     location: i.location,
     updated_at: i.updatedAt,
@@ -268,6 +272,8 @@ export async function loadInventory(): Promise<InventoryItem[]> {
   return readJson<InventoryItem[]>("inventory.json", []).map((item) => ({
     ...item,
     partNumber: item.partNumber ?? "",
+    sellPrice: item.sellPrice ?? 0,
+    supplierLink: item.supplierLink ?? undefined,
     vehicleId: item.vehicleId ?? undefined,
   }));
 }

@@ -5,7 +5,8 @@ import { Plus, Trash2, Truck } from "lucide-react";
 import type { FleetStatus, FleetVehicle } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
-import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { useAdminToast } from "./AdminToast";
+import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { VehicleMakeModelFields } from "./VehicleMakeModelFields";
 
 type MakeOption = { id: number; name: string };
@@ -27,9 +28,9 @@ const emptyForm = {
 };
 
 export function FleetPanel() {
+  const toast = useAdminToast();
   const [items, setItems] = useState<FleetVehicle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -40,9 +41,8 @@ export function FleetPanel() {
 
   async function load() {
     setLoading(true);
-    setError("");
     const { data, error: message } = await adminGet<FleetVehicle[]>("/api/admin/fleet");
-    if (message) setError(message);
+    if (message) toast.error(message);
     else setItems(data ?? []);
     setLoading(false);
   }
@@ -55,7 +55,7 @@ export function FleetPanel() {
     setLoadingMakes(true);
     adminGet<MakeOption[]>("/api/admin/vehicles/makes")
       .then(({ data, error: message }) => {
-        if (message) setError(message);
+        if (message) toast.error(message);
         else setMakes(data ?? []);
       })
       .finally(() => setLoadingMakes(false));
@@ -72,7 +72,7 @@ export function FleetPanel() {
     if (form.year) params.set("year", form.year);
     adminGet<string[]>(`/api/admin/vehicles/models?${params}`)
       .then(({ data, error: message }) => {
-        if (message) setError(message);
+        if (message) toast.error(message);
         else setModels(data ?? []);
       })
       .finally(() => setLoadingModels(false));
@@ -97,11 +97,12 @@ export function FleetPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else {
       setShowForm(false);
       setEditingId(null);
       setForm(emptyForm);
+      toast.success(editingId ? "Vehicle updated." : "Vehicle added.");
       load();
     }
   }
@@ -130,7 +131,7 @@ export function FleetPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -153,7 +154,7 @@ export function FleetPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -168,7 +169,6 @@ export function FleetPanel() {
           <Plus className="h-4 w-4" /> Add Vehicle
         </button>
       </div>
-      <ErrorBanner message={error} />
 
       <AdminModal
         open={showForm}

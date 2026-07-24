@@ -4,20 +4,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SiteLogo } from "@/components/SiteLogo";
+import { useAdminToast } from "./AdminToast";
 
 type Props = { useEmailLogin?: boolean };
 
 export function LoginForm({ useEmailLogin = false }: Props) {
   const router = useRouter();
+  const toast = useAdminToast();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError("");
     const body = useEmailLogin
       ? { email: identifier.trim(), password }
       : { username: identifier, password };
@@ -29,7 +29,7 @@ export function LoginForm({ useEmailLogin = false }: Props) {
     const data = await res.json();
     setLoading(false);
     if (!res.ok) {
-      setError(data.error ?? "Login failed.");
+      toast.error(data.error ?? "Login failed.");
       return;
     }
     router.push("/admin");
@@ -52,9 +52,6 @@ export function LoginForm({ useEmailLogin = false }: Props) {
             ? "Sign in with your Morton’s Mechanical email and password."
             : "Sign in to manage your shop website and quote requests."}
         </p>
-        {error && (
-          <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p>
-        )}
         <label className="mt-6 block text-sm font-medium text-slate-300">
           {useEmailLogin ? "Email" : "Username"}
           <input

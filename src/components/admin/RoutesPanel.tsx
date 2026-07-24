@@ -5,16 +5,17 @@ import { CheckCircle2, MapPin, Plus, Route, Trash2 } from "lucide-react";
 import type { FleetVehicle, RoutePlan, RouteStop, StaffMember } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
-import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { useAdminToast } from "./AdminToast";
+import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 type Props = { todayOnly?: boolean; userId?: string };
 
 export function RoutesPanel({ todayOnly, userId }: Props) {
+  const toast = useAdminToast();
   const [routes, setRoutes] = useState<RoutePlan[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -28,16 +29,17 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
 
   async function load() {
     setLoading(true);
-    setError("");
     const [routeRes, staffRes, fleetRes] = await Promise.all([
       adminGet<RoutePlan[]>("/api/admin/routes"),
       adminGet<StaffMember[]>("/api/admin/staff"),
       adminGet<FleetVehicle[]>("/api/admin/fleet"),
     ]);
-    if (routeRes.error) setError(routeRes.error);
+    if (routeRes.error) toast.error(routeRes.error);
     else setRoutes(routeRes.data ?? []);
-    if (!staffRes.error) setStaff(staffRes.data ?? []);
-    if (!fleetRes.error) setFleet(fleetRes.data ?? []);
+    if (staffRes.error) toast.error(staffRes.error);
+    else setStaff(staffRes.data ?? []);
+    if (fleetRes.error) toast.error(fleetRes.error);
+    else setFleet(fleetRes.data ?? []);
     setLoading(false);
   }
 
@@ -73,9 +75,10 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
         status: "planned",
       }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else {
       setShowForm(false);
+      toast.success("Route created.");
       load();
     }
   }
@@ -91,7 +94,7 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
         status: updated.every((stop) => stop.completed) ? "completed" : "in_progress",
       }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -102,7 +105,7 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -128,7 +131,6 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
           <button type="button" onClick={() => setShowForm(true)} className={btnPrimary}><Plus className="h-4 w-4" /> New Route</button>
         )}
       </div>
-      <ErrorBanner message={error} />
 
       <AdminModal open={showForm} onClose={() => setShowForm(false)} title="New Route" wide>
         <form onSubmit={createRoute} className="grid gap-3 sm:grid-cols-2">

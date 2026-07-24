@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, Users } from "lucide-react";
 import type { StaffMember, StaffRole } from "@/lib/shop-types";
 import { AdminModal } from "./AdminModal";
-import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { useAdminToast } from "./AdminToast";
+import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 function formatWhen(value?: string | null) {
   if (!value) return "Never signed in";
@@ -12,10 +13,10 @@ function formatWhen(value?: string | null) {
 }
 
 export function StaffPanel() {
+  const toast = useAdminToast();
   const [items, setItems] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [error, setError] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -26,11 +27,10 @@ export function StaffPanel() {
 
   async function load() {
     setLoading(true);
-    setError("");
     const res = await fetch("/api/admin/staff");
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Could not load users.");
+      toast.error(data.error ?? "Could not load users.");
       setItems([]);
     } else {
       setItems(data);
@@ -44,7 +44,6 @@ export function StaffPanel() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
     const res = await fetch("/api/admin/staff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -52,18 +51,18 @@ export function StaffPanel() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Could not create user.");
+      toast.error(data.error ?? "Could not create user.");
       return;
     }
     setShowForm(false);
     setForm({ name: "", email: "", password: "", phone: "", role: "mechanic" });
+    toast.success("User created.");
     load();
   }
 
   async function updateMember(id: string, patch: Partial<StaffMember>) {
     const current = items.find((item) => item.id === id);
     if (!current) return;
-    setError("");
     const res = await fetch("/api/admin/staff", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -71,7 +70,7 @@ export function StaffPanel() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Could not update user.");
+      toast.error(data.error ?? "Could not update user.");
       return;
     }
     load();
@@ -79,7 +78,6 @@ export function StaffPanel() {
 
   async function remove(id: string, email: string) {
     if (!confirm(`Delete ${email} from Supabase Authentication? They will lose portal access.`)) return;
-    setError("");
     const res = await fetch("/api/admin/staff", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -87,9 +85,10 @@ export function StaffPanel() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Could not delete user.");
+      toast.error(data.error ?? "Could not delete user.");
       return;
     }
+    toast.success("User removed.");
     load();
   }
 
@@ -104,8 +103,6 @@ export function StaffPanel() {
           <Plus className="h-4 w-4" /> Add User
         </button>
       </div>
-
-      <ErrorBanner message={error} />
 
       <AdminModal open={showForm} onClose={() => setShowForm(false)} title="Add Portal User" wide>
         <form onSubmit={add} className="grid gap-3 sm:grid-cols-2">

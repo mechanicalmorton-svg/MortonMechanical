@@ -33,6 +33,7 @@ import { RoutesPanel } from "./RoutesPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { StaffPanel } from "./StaffPanel";
 import { WorkOrdersPanel } from "./WorkOrdersPanel";
+import { AdminToastProvider } from "./AdminToast";
 
 export type Tab =
   | "dashboard"
@@ -228,6 +229,7 @@ export function AdminDashboard({ user }: Props) {
   );
 
   return (
+    <AdminToastProvider>
     <div className="flex min-h-screen bg-slate-950">
       <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-800/80 bg-slate-900/30 backdrop-blur xl:flex">
         {sidebar}
@@ -283,5 +285,6 @@ export function AdminDashboard({ user }: Props) {
         </main>
       </div>
     </div>
+    </AdminToastProvider>
   );
 }

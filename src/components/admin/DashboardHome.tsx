@@ -6,7 +6,8 @@ import type { Booking, DashboardStats, StaffRole, WorkOrder } from "@/lib/shop-t
 import { canManageUsers } from "@/lib/admin-roles";
 import { adminGet } from "./admin-fetch";
 import type { Tab } from "./AdminDashboard";
-import { EmptyState, ErrorBanner, PageHeader, Panel, StatCard, btnPrimary, btnSecondary } from "./admin-ui";
+import { useAdminToast } from "./AdminToast";
+import { EmptyState, PageHeader, Panel, StatCard, btnPrimary, btnSecondary } from "./admin-ui";
 
 type Props = {
   name: string;
@@ -22,17 +23,17 @@ type DashboardData = {
 };
 
 export function DashboardHome({ name, role, onNavigate }: Props) {
+  const toast = useAdminToast();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     adminGet<DashboardData>("/api/admin/dashboard").then(({ data: payload, error: message }) => {
-      if (message) setError(message);
+      if (message) toast.error(message);
       else setData(payload);
       setLoading(false);
     });
-  }, []);
+  }, [toast]);
 
   const stats = data?.stats;
   const quickActions: { label: string; tab: Tab; primary?: boolean }[] = [
@@ -46,7 +47,6 @@ export function DashboardHome({ name, role, onNavigate }: Props) {
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader title="Dashboard Overview" subtitle={`Welcome back, ${name}!`} />
-      <ErrorBanner message={error} />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Open Work Orders" value={loading ? "—" : stats?.openWorkOrders ?? 0} hint={`${stats?.inProgressWorkOrders ?? 0} in progress`} icon={ClipboardList} accent="amber" />

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import type { ServiceIcon, SiteContent } from "@/lib/content-types";
 import { normalizeContent } from "@/lib/content-normalize";
+import { useAdminToast } from "./AdminToast";
 import { PageHeader, btnPrimary, inputClass } from "./admin-ui";
 
 const input = `${inputClass} mt-1`;
@@ -46,11 +47,10 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 const iconOptions: ServiceIcon[] = ["scan", "calendar", "shield", "cog", "battery", "wind"];
 
 export function ContentEditor() {
+  const toast = useAdminToast();
   const [content, setContent] = useState<SiteContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/admin/content")
@@ -66,8 +66,6 @@ export function ContentEditor() {
   async function save() {
     if (!content) return;
     setSaving(true);
-    setError("");
-    setMessage("");
     const res = await fetch("/api/admin/content", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -76,11 +74,11 @@ export function ContentEditor() {
     const data = await res.json();
     setSaving(false);
     if (!res.ok) {
-      setError(data.error ?? "Could not save.");
+      toast.error(data.error ?? "Could not save.");
       return;
     }
     setContent(normalizeContent(data.content ?? data));
-    setMessage("Site contents saved. Changes are live on your website.");
+    toast.success("Site contents saved. Changes are live on your website.");
   }
 
   if (loading || !content) {
@@ -96,11 +94,6 @@ export function ContentEditor() {
           {saving ? "Saving…" : "Save changes"}
         </button>
       </div>
-
-      {error && <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-200">{error}</p>}
-      {message && (
-        <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">{message}</p>
-      )}
 
       <div className="space-y-4">
         <Panel title="Business info">

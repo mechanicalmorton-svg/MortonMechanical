@@ -5,13 +5,14 @@ import { ClipboardList, Plus, Trash2 } from "lucide-react";
 import type { StaffMember, WorkOrder } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
-import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { useAdminToast } from "./AdminToast";
+import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 export function WorkOrdersPanel() {
+  const toast = useAdminToast();
   const [items, setItems] = useState<WorkOrder[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     customerName: "",
@@ -26,14 +27,14 @@ export function WorkOrdersPanel() {
 
   async function load() {
     setLoading(true);
-    setError("");
     const [orders, team] = await Promise.all([
       adminGet<WorkOrder[]>("/api/admin/work-orders"),
       adminGet<StaffMember[]>("/api/admin/staff"),
     ]);
-    if (orders.error) setError(orders.error);
+    if (orders.error) toast.error(orders.error);
     else setItems(orders.data ?? []);
-    if (!team.error) setStaff(team.data ?? []);
+    if (team.error) toast.error(team.error);
+    else setStaff(team.data ?? []);
     setLoading(false);
   }
 
@@ -49,11 +50,12 @@ export function WorkOrdersPanel() {
       body: JSON.stringify(form),
     });
     if (message) {
-      setError(message);
+      toast.error(message);
       return;
     }
     setShowForm(false);
     setForm({ customerName: "", phone: "", vehicle: "", service: "", priority: "normal", notes: "", assignedTo: "", scheduledDate: "" });
+    toast.success("Work order created.");
     load();
   }
 
@@ -63,7 +65,7 @@ export function WorkOrdersPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, ...patch }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -72,7 +74,7 @@ export function WorkOrdersPanel() {
     if (input === null) return;
     const revenue = Number(input);
     if (Number.isNaN(revenue) || revenue < 0) {
-      setError("Enter a valid revenue amount.");
+      toast.error("Enter a valid revenue amount.");
       return;
     }
     await patch(id, { status: "completed", revenue });
@@ -85,7 +87,7 @@ export function WorkOrdersPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -100,7 +102,6 @@ export function WorkOrdersPanel() {
         <PageHeader title="Work Orders" subtitle="Track jobs from open to completion." />
         <button type="button" onClick={() => setShowForm(true)} className={btnPrimary}><Plus className="h-4 w-4" /> New Work Order</button>
       </div>
-      <ErrorBanner message={error} />
 
       <AdminModal open={showForm} onClose={() => setShowForm(false)} title="New Work Order" wide>
         <form onSubmit={add} className="grid gap-3 sm:grid-cols-2">

@@ -44,7 +44,9 @@ export type InventoryItem = {
   quantity: number;
   minStock: number;
   unitCost: number;
+  sellPrice: number;
   supplier?: string;
+  supplierLink?: string;
   vehicleId?: string;
   location?: string;
   updatedAt: string;

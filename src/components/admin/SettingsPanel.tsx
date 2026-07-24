@@ -1,26 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { ErrorBanner, PageHeader, btnPrimary, inputClass } from "./admin-ui";
+import { useAdminToast } from "./AdminToast";
+import { PageHeader, btnPrimary, inputClass } from "./admin-ui";
 
 type Props = { name: string };
 
 export function SettingsPanel({ name }: Props) {
+  const toast = useAdminToast();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password !== confirm) {
-      setError("Passwords do not match.");
+      toast.error("Passwords do not match.");
       return;
     }
     setLoading(true);
-    setError("");
-    setMessage("");
     const res = await fetch("/api/admin/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -29,10 +27,10 @@ export function SettingsPanel({ name }: Props) {
     const data = await res.json();
     setLoading(false);
     if (!res.ok) {
-      setError(data.error ?? "Could not update password.");
+      toast.error(data.error ?? "Could not update password.");
       return;
     }
-    setMessage("Password updated successfully.");
+    toast.success("Password updated successfully.");
     setPassword("");
     setConfirm("");
   }
@@ -48,8 +46,6 @@ export function SettingsPanel({ name }: Props) {
 
       <form onSubmit={handleSubmit} className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
         <h2 className="font-semibold text-white">Change password</h2>
-        <ErrorBanner message={error} />
-        {message && <p className="mt-3 text-sm text-emerald-300">{message}</p>}
         <label className="mt-4 block text-sm text-slate-300">
           New password
           <input type="password" className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />

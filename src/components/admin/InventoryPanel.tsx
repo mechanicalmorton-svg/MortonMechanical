@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Barcode, Minus, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Barcode, ExternalLink, Minus, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import type { FleetVehicle, InventoryItem } from "@/lib/shop-types";
 import {
   formatFleetVehicleOption,
@@ -11,7 +11,8 @@ import {
 } from "@/lib/inventory-fleet";
 import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
-import { EmptyState, ErrorBanner, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { useAdminToast } from "./AdminToast";
+import { EmptyState, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { SearchableSelect } from "./SearchableSelect";
 
 type Props = { lowStockOnly?: boolean };
@@ -38,7 +39,9 @@ const emptyForm = {
   quantity: "0",
   minStock: "1",
   unitCost: "0",
+  sellPrice: "0",
   supplier: "",
+  supplierLink: "",
   vehicleId: "",
 };
 
@@ -53,6 +56,20 @@ function categoryOptions(current?: string) {
     if (bi !== -1) return 1;
     return a.localeCompare(b);
   });
+}
+
+function formatUrlForDisplay(url: string) {
+  try {
+    return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function normalizeSupplierLink(raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
 }
 
 function groupByCategory(items: InventoryItem[]) {
@@ -128,11 +145,10 @@ function FormField({
 }
 
 export function InventoryPanel({ lowStockOnly }: Props) {
+  const toast = useAdminToast();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [scanMessage, setScanMessage] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [scanMode, setScanMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -143,14 +159,13 @@ export function InventoryPanel({ lowStockOnly }: Props) {
 
   async function load() {
     setLoading(true);
-    setError("");
     const [inventoryRes, fleetRes] = await Promise.all([
       adminGet<InventoryItem[]>("/api/admin/inventory"),
       adminGet<FleetVehicle[]>("/api/admin/fleet"),
     ]);
-    if (inventoryRes.error) setError(inventoryRes.error);
+    if (inventoryRes.error) toast.error(inventoryRes.error);
     else setItems(inventoryRes.data ?? []);
-    if (fleetRes.error) setError((prev) => prev || fleetRes.error || "");
+    if (fleetRes.error) toast.error(fleetRes.error);
     else setFleet(fleetRes.data ?? []);
     setLoading(false);
   }
@@ -172,14 +187,12 @@ export function InventoryPanel({ lowStockOnly }: Props) {
       const sku = rawSku.trim();
       if (!sku) return;
       closeAllDropdowns();
-      setScanMessage("");
-      setError("");
 
       const { data: item, error: lookupError } = await adminGet<InventoryItem | null>(
         `/api/admin/inventory?sku=${encodeURIComponent(sku)}`,
       );
       if (lookupError) {
-        setError(lookupError);
+        toast.error(lookupError);
         return;
       }
 
@@ -190,25 +203,25 @@ export function InventoryPanel({ lowStockOnly }: Props) {
           body: JSON.stringify({ sku, adjust: 1 }),
         });
         if (adjustError) {
-          setError(adjustError);
+          toast.error(adjustError);
           return;
         }
 
         const nextItem = updated ?? { ...item, quantity: item.quantity + 1 };
         setItems((prev) => prev.map((row) => (row.id === nextItem.id ? nextItem : row)));
-        setScanMessage(`+1 ${nextItem.name} (${sku}) — stock now ${nextItem.quantity}`);
+        toast.success(`+1 ${nextItem.name} (${sku}) — stock now ${nextItem.quantity}`);
         return;
       }
 
       if (showForm && !editingId) {
         setForm((prev) => ({ ...prev, sku }));
-        setScanMessage(`Barcode ${sku} added to the form — complete details and click Save part.`);
+        toast.info(`Barcode ${sku} added to the form — complete details and click Save part.`);
         return;
       }
 
-      setScanMessage(`SKU "${sku}" not found. Click Add Part to create a new inventory item.`);
+      toast.info(`SKU "${sku}" not found. Click Add Part to create a new inventory item.`);
     },
-    [closeAllDropdowns, showForm, editingId],
+    [closeAllDropdowns, showForm, editingId, toast],
   );
 
   useEffect(() => {
@@ -254,15 +267,18 @@ export function InventoryPanel({ lowStockOnly }: Props) {
       quantity: Number(form.quantity),
       minStock: Number(form.minStock),
       unitCost: Number(form.unitCost),
+      sellPrice: Number(form.sellPrice),
+      supplierLink: normalizeSupplierLink(form.supplierLink) || undefined,
     };
     const { error: message } = await adminSend("/api/admin/inventory", {
       method: editingId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else {
       closeModal();
+      toast.success(editingId ? "Part updated." : "Part saved.");
       load();
     }
   }
@@ -289,7 +305,9 @@ export function InventoryPanel({ lowStockOnly }: Props) {
       quantity: String(item.quantity),
       minStock: String(item.minStock),
       unitCost: String(item.unitCost),
+      sellPrice: String(item.sellPrice ?? 0),
       supplier: item.supplier ?? "",
+      supplierLink: item.supplierLink ?? "",
       vehicleId: item.vehicleId ?? "",
     });
     setShowForm(true);
@@ -301,7 +319,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: item.id, quantity: Math.max(0, item.quantity + delta) }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -312,7 +330,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -326,10 +344,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => {
-              setScanMode((v) => !v);
-              setScanMessage("");
-            }}
+            onClick={() => setScanMode((v) => !v)}
             className={scanMode ? `${btnPrimary} ring-2 ring-emerald-400/40` : btnSecondary}
           >
             <Barcode className="h-4 w-4" />
@@ -368,11 +383,6 @@ export function InventoryPanel({ lowStockOnly }: Props) {
             />
           </label>
         </div>
-      )}
-
-      <ErrorBanner message={error} />
-      {scanMessage && (
-        <p className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">{scanMessage}</p>
       )}
 
       <AdminModal
@@ -450,28 +460,53 @@ export function InventoryPanel({ lowStockOnly }: Props) {
             </div>
           </FormSection>
 
-          <FormSection title="Pricing & supplier" description="Unit cost and vendor information.">
+          <FormSection title="Pricing & supplier" description="Cost, sell price, and vendor information.">
             <div className="grid gap-4 sm:grid-cols-2">
-              <FormField label="Unit cost ($)" htmlFor="inv-cost">
-                <input
-                  id="inv-cost"
-                  className={inputClass}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.unitCost}
-                  onChange={(e) => setForm({ ...form, unitCost: e.target.value })}
-                />
-              </FormField>
-              <FormField label="Supplier / vendor" htmlFor="inv-supplier">
-                <input
-                  id="inv-supplier"
-                  className={inputClass}
-                  placeholder="e.g. NAPA, AutoZone"
-                  value={form.supplier}
-                  onChange={(e) => setForm({ ...form, supplier: e.target.value })}
-                />
-              </FormField>
+              <div className="space-y-4">
+                <FormField label="Unit cost ($)" htmlFor="inv-cost">
+                  <input
+                    id="inv-cost"
+                    className={inputClass}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.unitCost}
+                    onChange={(e) => setForm({ ...form, unitCost: e.target.value })}
+                  />
+                </FormField>
+                <FormField label="Sell price ($)" htmlFor="inv-sell-price" hint="Customer-facing price for this part.">
+                  <input
+                    id="inv-sell-price"
+                    className={inputClass}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.sellPrice}
+                    onChange={(e) => setForm({ ...form, sellPrice: e.target.value })}
+                  />
+                </FormField>
+              </div>
+              <div className="space-y-4">
+                <FormField label="Supplier / vendor" htmlFor="inv-supplier">
+                  <input
+                    id="inv-supplier"
+                    className={inputClass}
+                    placeholder="e.g. NAPA, AutoZone"
+                    value={form.supplier}
+                    onChange={(e) => setForm({ ...form, supplier: e.target.value })}
+                  />
+                </FormField>
+                <FormField label="Vendor link" htmlFor="inv-supplier-link" hint="Product page or ordering link from the supplier.">
+                  <input
+                    id="inv-supplier-link"
+                    className={inputClass}
+                    type="url"
+                    placeholder="https://supplier.com/part/123"
+                    value={form.supplierLink}
+                    onChange={(e) => setForm({ ...form, supplierLink: e.target.value })}
+                  />
+                </FormField>
+              </div>
             </div>
           </FormSection>
 
@@ -549,7 +584,8 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                                 <span className="font-mono text-slate-300">{item.partNumber?.trim() || "—"}</span>
                               </p>
                               <p className="text-xs text-slate-500 md:hidden">{resolveInventoryVehicle(item, fleet)}</p>
-                              <p className="text-xs text-slate-500">${item.unitCost.toFixed(2)} each</p>
+                              <p className="text-xs text-slate-500">${item.unitCost.toFixed(2)} cost</p>
+                              <p className="text-xs text-emerald-400/90">${(item.sellPrice ?? 0).toFixed(2)} sell</p>
                             </div>
                           </div>
                         </td>
@@ -566,7 +602,20 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                             <span className="text-slate-600">/ {item.minStock}</span>
                           </div>
                         </td>
-                        <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">{item.supplier || "—"}</td>
+                        <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">
+                          <p>{item.supplier || "—"}</p>
+                          {item.supplierLink ? (
+                            <a
+                              href={normalizeSupplierLink(item.supplierLink)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-1 inline-flex items-center gap-1 text-xs text-sky-400 transition hover:text-sky-300"
+                            >
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                              {formatUrlForDisplay(item.supplierLink)}
+                            </a>
+                          ) : null}
+                        </td>
                         <td className="hidden px-4 py-3 text-slate-400 md:table-cell">
                           {resolveInventoryVehicle(item, fleet)}
                         </td>

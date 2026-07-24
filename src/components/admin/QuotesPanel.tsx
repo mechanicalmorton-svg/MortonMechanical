@@ -4,20 +4,20 @@ import { useEffect, useState } from "react";
 import { Archive, Inbox, Mail, Phone, Trash2 } from "lucide-react";
 import type { Quote } from "@/lib/quotes";
 import { adminGet, adminSend } from "./admin-fetch";
-import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnSecondary } from "./admin-ui";
+import { useAdminToast } from "./AdminToast";
+import { EmptyState, PageHeader, StatusBadge, btnDanger, btnSecondary } from "./admin-ui";
 
 export function QuotesPanel() {
+  const toast = useAdminToast();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [filter, setFilter] = useState<"all" | Quote["status"]>("all");
 
   async function load() {
     setLoading(true);
-    setError("");
     const { data, error: message } = await adminGet<{ quotes: Quote[] }>("/api/admin/quotes");
     if (message) {
-      setError(message);
+      toast.error(message);
       setQuotes([]);
     } else {
       setQuotes(data?.quotes ?? []);
@@ -35,7 +35,7 @@ export function QuotesPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -46,7 +46,7 @@ export function QuotesPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    if (message) setError(message);
+    if (message) toast.error(message);
     else load();
   }
 
@@ -55,7 +55,6 @@ export function QuotesPanel() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="Quote Requests" subtitle="Enquiries submitted through your website contact form." />
-      <ErrorBanner message={error} />
 
       <div className="mb-6 flex flex-wrap gap-2">
         {(["all", "new", "read", "archived"] as const).map((f) => (
