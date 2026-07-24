@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getContent } from "@/lib/content";
 
 export async function Footer() {
-  const { site } = await getContent();
+  const { site, footer } = await getContent();
   const year = new Date().getFullYear();
 
   return (
@@ -16,16 +16,16 @@ export async function Footer() {
         </div>
         <div className="flex items-center gap-5">
           <Link href="/privacy" className="text-slate-400 transition hover:text-amber-400">
-            Privacy
+            {footer.privacyLabel}
           </Link>
           <Link href="/terms" className="text-slate-400 transition hover:text-amber-400">
-            Terms
+            {footer.termsLabel}
           </Link>
           <Link href="/contact" className="text-slate-400 transition hover:text-amber-400">
-            Contact
+            {footer.contactLabel}
           </Link>
           <Link href="/admin" className="text-slate-600 transition hover:text-slate-400">
-            Staff login
+            {footer.staffLoginLabel}
           </Link>
         </div>
       </div>

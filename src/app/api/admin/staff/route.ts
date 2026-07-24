@@ -1,18 +1,14 @@
 import { NextResponse } from "next/server";
-import { requireAuth, requireOwnerOrAdmin } from "@/lib/admin-api";
+import { withAdminAuth, withOwnerAdmin } from "@/lib/admin-route";
 import { createPortalUser, deleteStaffMember, loadStaff, upsertStaffMember } from "@/lib/shop-data";
 import type { StaffRole } from "@/lib/shop-types";
 
 export async function GET() {
-  const { error } = await requireAuth();
-  if (error) return error;
-  return NextResponse.json(await loadStaff());
+  return withAdminAuth(async () => NextResponse.json(await loadStaff()));
 }
 
 export async function POST(req: Request) {
-  const { error } = await requireOwnerOrAdmin();
-  if (error) return error;
-  try {
+  return withOwnerAdmin(async () => {
     const body = await req.json();
     const member = await createPortalUser({
       name: body.name ?? "",
@@ -22,15 +18,11 @@ export async function POST(req: Request) {
       role: (body.role ?? "mechanic") as StaffRole,
     });
     return NextResponse.json(member);
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not create user." }, { status: 400 });
-  }
+  });
 }
 
 export async function PATCH(req: Request) {
-  const { error } = await requireAuth();
-  if (error) return error;
-  try {
+  return withAdminAuth(async () => {
     const body = await req.json();
     const member = await upsertStaffMember({
       id: body.id,
@@ -42,19 +34,13 @@ export async function PATCH(req: Request) {
       createdAt: body.createdAt,
     });
     return NextResponse.json(member);
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not update user." }, { status: 400 });
-  }
+  });
 }
 
 export async function DELETE(req: Request) {
-  const { error } = await requireOwnerOrAdmin();
-  if (error) return error;
-  try {
+  return withOwnerAdmin(async () => {
     const { id } = await req.json();
     await deleteStaffMember(id);
     return NextResponse.json({ ok: true });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not delete user." }, { status: 400 });
-  }
+  });
 }

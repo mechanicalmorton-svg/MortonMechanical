@@ -1,4 +1,5 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase/server";
+import { requireAdminClient, requireDatabaseInProduction, throwOnError } from "./supabase/db";
 import { readJson, writeJson, newId } from "./store";
 
 export type Quote = {
@@ -13,6 +14,11 @@ export type Quote = {
   status: "new" | "read" | "archived";
   createdAt: string;
 };
+
+function useDatabase() {
+  requireDatabaseInProduction();
+  return isSupabaseConfigured();
+}
 
 function rowToQuote(r: Record<string, unknown>): Quote {
   return {
@@ -45,8 +51,12 @@ function quoteToRow(q: Quote) {
 }
 
 export async function loadQuotes(): Promise<Quote[]> {
-  if (isSupabaseConfigured()) {
-    const { data } = await getSupabaseAdmin()!.from("quotes").select("*").order("created_at", { ascending: false });
+  if (useDatabase()) {
+    const { data, error } = await requireAdminClient()
+      .from("quotes")
+      .select("*")
+      .order("created_at", { ascending: false });
+    throwOnError(error, "Could not load quote requests");
     return (data ?? []).map(rowToQuote);
   }
   return readJson("quotes.json", []);
@@ -60,8 +70,9 @@ export async function addQuote(entry: Omit<Quote, "id" | "createdAt" | "status">
     createdAt: new Date().toISOString(),
   };
 
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("quotes").insert(quoteToRow(quote));
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("quotes").insert(quoteToRow(quote));
+    throwOnError(error, "Could not save quote request");
     return quote;
   }
 
@@ -72,10 +83,13 @@ export async function addQuote(entry: Omit<Quote, "id" | "createdAt" | "status">
 }
 
 export async function updateQuote(id: string, patch: Partial<Quote>) {
-  if (isSupabaseConfigured()) {
+  if (useDatabase()) {
     const row: Record<string, unknown> = {};
     if (patch.status) row.status = patch.status;
-    await getSupabaseAdmin()!.from("quotes").update(row).eq("id", id);
+    if (Object.keys(row).length) {
+      const { error } = await requireAdminClient().from("quotes").update(row).eq("id", id);
+      throwOnError(error, "Could not update quote request");
+    }
     const quotes = await loadQuotes();
     return quotes.find((q) => q.id === id) ?? null;
   }
@@ -89,8 +103,9 @@ export async function updateQuote(id: string, patch: Partial<Quote>) {
 }
 
 export async function deleteQuote(id: string) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("quotes").delete().eq("id", id);
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("quotes").delete().eq("id", id);
+    throwOnError(error, "Could not delete quote request");
     return;
   }
   writeJson("quotes.json", readJson<Quote[]>("quotes.json", []).filter((q) => q.id !== id));

@@ -54,7 +54,11 @@ export async function getSupabaseAuthUser(): Promise<AdminUser | null> {
 
   const admin = getSupabaseAdmin();
   if (admin) {
-    const { data: staff } = await admin.from("staff").select("name, role").eq("id", user.id).maybeSingle();
+    const { data: staffById } = await admin.from("staff").select("name, role").eq("id", user.id).maybeSingle();
+    const { data: staffByAuth } = staffById
+      ? { data: null }
+      : await admin.from("staff").select("name, role").eq("auth_user_id", user.id).maybeSingle();
+    const staff = staffById ?? staffByAuth;
     if (staff?.name) name = staff.name;
     if (staff?.role) role = staff.role as StaffRole;
   }

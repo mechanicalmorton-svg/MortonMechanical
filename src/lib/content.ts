@@ -2,6 +2,7 @@ import { cache } from "react";
 import { readJson, writeJson } from "./store";
 import { DEFAULT_CONTENT, type SiteContent } from "./content-types";
 import { getSupabaseAdmin, getSupabasePublic, isSupabaseConfigured } from "./supabase/server";
+import { requireAdminClient, requireDatabaseInProduction, throwOnError } from "./supabase/db";
 
 function deepMerge<T extends Record<string, unknown>>(base: T, patch: Partial<T>): T {
   const out = { ...base };
@@ -17,9 +18,11 @@ function deepMerge<T extends Record<string, unknown>>(base: T, patch: Partial<T>
 }
 
 async function fetchStoredContent(): Promise<Partial<SiteContent>> {
+  requireDatabaseInProduction();
   if (isSupabaseConfigured()) {
-    const sb = getSupabasePublic() ?? getSupabaseAdmin()!;
-    const { data } = await sb.from("site_content").select("content").eq("id", 1).maybeSingle();
+    const sb = getSupabasePublic() ?? requireAdminClient();
+    const { data, error } = await sb.from("site_content").select("content").eq("id", 1).maybeSingle();
+    throwOnError(error, "Could not load site content");
     return (data?.content as Partial<SiteContent>) ?? {};
   }
   return readJson<Partial<SiteContent>>("content.json", {});
@@ -31,12 +34,12 @@ export const getContent = cache(async (): Promise<SiteContent> => {
 });
 
 export async function saveContent(content: SiteContent) {
+  requireDatabaseInProduction();
   if (isSupabaseConfigured()) {
-    const sb = getSupabaseAdmin()!;
-    const { error } = await sb
+    const { error } = await requireAdminClient()
       .from("site_content")
       .upsert({ id: 1, content, updated_at: new Date().toISOString() });
-    if (error) throw new Error(error.message);
+    throwOnError(error, "Could not save site content");
     return;
   }
   writeJson("content.json", content);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DatabaseError } from "@/lib/supabase/db";
 import { getContent } from "@/lib/content";
 import { addQuote } from "@/lib/quotes";
 
@@ -22,7 +23,11 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Could not save your request." }, { status: 500 });
+  } catch (err) {
+    const message =
+      err instanceof DatabaseError
+        ? "Our booking system is temporarily unavailable. Please call us directly."
+        : "Could not save your request.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

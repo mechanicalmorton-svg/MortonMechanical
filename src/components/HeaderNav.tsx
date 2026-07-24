@@ -4,20 +4,16 @@ import Link from "next/link";
 import { useState } from "react";
 import { Menu, Phone, X } from "lucide-react";
 import { SiteLogo } from "@/components/SiteLogo";
+import type { SiteContent } from "@/lib/content-types";
 import { phoneHref } from "@/lib/content-types";
 
 type Props = {
   name: string;
   phone: string;
+  header: SiteContent["header"];
 };
 
-const nav = [
-  { href: "/#services", label: "Services" },
-  { href: "/#about", label: "About" },
-  { href: "/#reviews", label: "Reviews" },
-];
-
-export function HeaderNav({ name, phone }: Props) {
+export function HeaderNav({ name, phone, header }: Props) {
   const [open, setOpen] = useState(false);
   const tel = phoneHref(phone);
 
@@ -30,7 +26,7 @@ export function HeaderNav({ name, phone }: Props) {
 
         <nav className="hidden md:block" aria-label="Main">
           <ul className="flex items-center gap-8 text-sm font-medium text-slate-300">
-            {nav.map((item) => (
+            {header.nav.map((item) => (
               <li key={item.href}>
                 <Link href={item.href} className="transition hover:text-amber-400">
                   {item.label}
@@ -46,19 +42,19 @@ export function HeaderNav({ name, phone }: Props) {
             className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-amber-500/50 hover:text-amber-400"
           >
             <Phone className="h-4 w-4" aria-hidden />
-            Call Now
+            {header.callButtonText}
           </a>
           <Link
             href="/admin"
             className="inline-flex items-center rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-amber-500/50 hover:text-amber-400"
           >
-            Portal
+            {header.portalButtonText}
           </Link>
           <Link
             href="/contact"
             className="inline-flex items-center rounded-lg bg-gradient-to-r from-amber-500 to-pink-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-amber-400 hover:to-pink-500"
           >
-            Request Quote
+            {header.quoteButtonText}
           </Link>
         </div>
 
@@ -76,7 +72,7 @@ export function HeaderNav({ name, phone }: Props) {
       {open && (
         <nav className="border-t border-slate-800/60 px-4 py-4 md:hidden" aria-label="Mobile">
           <ul className="flex flex-col gap-1">
-            {nav.map((item) => (
+            {header.nav.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}
@@ -93,21 +89,21 @@ export function HeaderNav({ name, phone }: Props) {
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-semibold text-slate-200"
               >
                 <Phone className="h-4 w-4" />
-                Call Now
+                {header.callButtonText}
               </a>
               <Link
                 href="/admin"
                 className="inline-flex items-center justify-center rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-semibold text-slate-200"
                 onClick={() => setOpen(false)}
               >
-                Portal
+                {header.portalButtonText}
               </Link>
               <Link
                 href="/contact"
                 className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-amber-500 to-pink-600 px-4 py-2.5 text-sm font-semibold text-white"
                 onClick={() => setOpen(false)}
               >
-                Request Quote
+                {header.quoteButtonText}
               </Link>
             </li>
           </ul>

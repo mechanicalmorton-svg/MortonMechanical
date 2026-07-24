@@ -1,4 +1,5 @@
 import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase/server";
+import { throwOnError } from "./supabase/db";
 import { isAllowedAdminEmail } from "./supabase/server-auth";
 import type { StaffMember, StaffRole } from "./shop-types";
 
@@ -86,7 +87,8 @@ export async function loadStaffFromAuth(): Promise<StaffMember[]> {
     };
 
     if (!existing || existing.authUserId !== user.id || existing.id !== user.id) {
-      await sb.from("staff").upsert(staffToRow(member));
+      const { error } = await sb.from("staff").upsert(staffToRow(member));
+      throwOnError(error, `Could not sync staff record for ${email}`);
     }
 
     members.push(member);
@@ -130,7 +132,8 @@ export async function createPortalUser(input: {
     lastSignIn: null,
   };
 
-  await sb.from("staff").upsert(staffToRow(member));
+  const { error: upsertError } = await sb.from("staff").upsert(staffToRow(member));
+  throwOnError(upsertError, "Could not save staff record");
   return member;
 }
 
@@ -172,7 +175,8 @@ export async function updatePortalUser(
     if (error) throw new Error(error.message);
   }
 
-  await sb.from("staff").upsert(staffToRow(updated));
+  const { error: upsertError } = await sb.from("staff").upsert(staffToRow(updated));
+  throwOnError(upsertError, "Could not save staff record");
   return updated;
 }
 
@@ -182,5 +186,6 @@ export async function deletePortalUser(id: string) {
   const sb = getSupabaseAdmin()!;
   const { error } = await sb.auth.admin.deleteUser(id);
   if (error) throw new Error(error.message);
-  await sb.from("staff").delete().eq("id", id);
+  const { error: deleteError } = await sb.from("staff").delete().eq("id", id);
+  throwOnError(deleteError, "Could not remove staff record");
 }

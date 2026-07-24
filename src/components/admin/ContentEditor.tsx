@@ -89,7 +89,7 @@ export function ContentEditor() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeader title="Page Customizer" subtitle="Edit every section of your public website. Save when you're done." />
+        <PageHeader title="Site Contents" subtitle="Customize every section of your public homepage. Save when you're done." />
         <button type="button" onClick={save} disabled={saving} className={btnPrimary}>
           <Save className="h-4 w-4" />
           {saving ? "Saving…" : "Save changes"}
@@ -115,7 +115,7 @@ export function ContentEditor() {
           <div className="space-y-3">
             <p className="text-sm font-medium text-slate-300">Business hours</p>
             {content.site.hours.map((h, i) => (
-              <div key={i} className="grid gap-2 sm:grid-cols-2">
+              <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                 <input
                   className={input}
                   value={h.days}
@@ -138,8 +138,49 @@ export function ContentEditor() {
                     })
                   }
                 />
+                <button
+                  type="button"
+                  onClick={() => patch((c) => { c.site.hours.splice(i, 1); return c; })}
+                  className="self-end text-red-400 hover:text-red-300"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             ))}
+            <button
+              type="button"
+              onClick={() => patch((c) => { c.site.hours.push({ days: "New days", time: "Hours" }); return c; })}
+              className="inline-flex items-center gap-1 text-sm text-amber-400 hover:text-amber-300"
+            >
+              <Plus className="h-4 w-4" /> Add hours row
+            </button>
+          </div>
+        </Panel>
+
+        <Panel title="Header & navigation">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Call button text" value={content.header.callButtonText} onChange={(v) => patch((c) => { c.header.callButtonText = v; return c; })} />
+            <Field label="Portal button text" value={content.header.portalButtonText} onChange={(v) => patch((c) => { c.header.portalButtonText = v; return c; })} />
+            <Field label="Quote button text" value={content.header.quoteButtonText} onChange={(v) => patch((c) => { c.header.quoteButtonText = v; return c; })} />
+          </div>
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-slate-300">Navigation links</p>
+            {content.header.nav.map((item, i) => (
+              <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                <input className={input} value={item.label} placeholder="Label" onChange={(e) => patch((c) => { c.header.nav[i].label = e.target.value; return c; })} />
+                <input className={input} value={item.href} placeholder="Link (e.g. /#services)" onChange={(e) => patch((c) => { c.header.nav[i].href = e.target.value; return c; })} />
+                <button type="button" onClick={() => patch((c) => { c.header.nav.splice(i, 1); return c; })} className="self-end text-red-400 hover:text-red-300">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => patch((c) => { c.header.nav.push({ label: "New link", href: "/#section" }); return c; })}
+              className="inline-flex items-center gap-1 text-sm text-amber-400 hover:text-amber-300"
+            >
+              <Plus className="h-4 w-4" /> Add nav link
+            </button>
           </div>
         </Panel>
 
@@ -153,18 +194,29 @@ export function ContentEditor() {
           <div className="space-y-2">
             <p className="text-sm text-slate-300">Bullet points</p>
             {content.hero.bullets.map((b, i) => (
-              <input
-                key={i}
-                className={input}
-                value={b}
-                onChange={(e) =>
-                  patch((c) => {
-                    c.hero.bullets[i] = e.target.value;
-                    return c;
-                  })
-                }
-              />
+              <div key={i} className="flex gap-2">
+                <input
+                  className={input}
+                  value={b}
+                  onChange={(e) =>
+                    patch((c) => {
+                      c.hero.bullets[i] = e.target.value;
+                      return c;
+                    })
+                  }
+                />
+                <button type="button" onClick={() => patch((c) => { c.hero.bullets.splice(i, 1); return c; })} className="shrink-0 text-red-400 hover:text-red-300">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             ))}
+            <button
+              type="button"
+              onClick={() => patch((c) => { c.hero.bullets.push("New bullet point"); return c; })}
+              className="inline-flex items-center gap-1 text-sm text-amber-400 hover:text-amber-300"
+            >
+              <Plus className="h-4 w-4" /> Add bullet
+            </button>
           </div>
           <Field label="Image caption" value={content.hero.imageCaption} onChange={(v) => patch((c) => { c.hero.imageCaption = v; return c; })} />
           <Field label="Image subcaption" value={content.hero.imageSubcaption} onChange={(v) => patch((c) => { c.hero.imageSubcaption = v; return c; })} />
@@ -172,7 +224,7 @@ export function ContentEditor() {
 
         <Panel title="Trust bar">
           {content.trustBar.map((item, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-2">
+            <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
               <input
                 className={input}
                 value={item.label}
@@ -195,8 +247,18 @@ export function ContentEditor() {
                   })
                 }
               />
+              <button type="button" onClick={() => patch((c) => { c.trustBar.splice(i, 1); return c; })} className="self-end text-red-400 hover:text-red-300">
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
           ))}
+          <button
+            type="button"
+            onClick={() => patch((c) => { c.trustBar.push({ label: "New item", detail: "Detail text" }); return c; })}
+            className="inline-flex items-center gap-1 text-sm text-amber-400 hover:text-amber-300"
+          >
+            <Plus className="h-4 w-4" /> Add trust bar item
+          </button>
         </Panel>
 
         <Panel title="Services section">
@@ -271,6 +333,12 @@ export function ContentEditor() {
           <Field label="Section subtitle" value={content.sections.howItWorks.subtitle} onChange={(v) => patch((c) => { c.sections.howItWorks.subtitle = v; return c; })} />
           {content.howItWorks.map((step, i) => (
             <div key={i} className="rounded-lg border border-slate-800 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-medium text-slate-300">Step {i + 1}</p>
+                <button type="button" onClick={() => patch((c) => { c.howItWorks.splice(i, 1); return c; })} className="text-red-400 hover:text-red-300">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label="Step number" value={step.step} onChange={(v) => patch((c) => { c.howItWorks[i].step = v; return c; })} />
                 <Field label="Title" value={step.title} onChange={(v) => patch((c) => { c.howItWorks[i].title = v; return c; })} />
@@ -278,6 +346,18 @@ export function ContentEditor() {
               <Field label="Text" value={step.text} onChange={(v) => patch((c) => { c.howItWorks[i].text = v; return c; })} multiline />
             </div>
           ))}
+          <button
+            type="button"
+            onClick={() =>
+              patch((c) => {
+                c.howItWorks.push({ step: String(c.howItWorks.length + 1).padStart(2, "0"), title: "New step", text: "Describe this step." });
+                return c;
+              })
+            }
+            className="inline-flex items-center gap-1 text-sm text-amber-400 hover:text-amber-300"
+          >
+            <Plus className="h-4 w-4" /> Add step
+          </button>
         </Panel>
 
         <Panel title="About section">
@@ -293,11 +373,21 @@ export function ContentEditor() {
           <div className="space-y-3">
             <p className="text-sm font-medium text-slate-300">Why choose us cards</p>
             {content.whyUs.map((item, i) => (
-              <div key={i} className="grid gap-2 sm:grid-cols-2">
+              <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                 <input className={input} value={item.title} placeholder="Title" onChange={(e) => patch((c) => { c.whyUs[i].title = e.target.value; return c; })} />
                 <input className={input} value={item.text} placeholder="Text" onChange={(e) => patch((c) => { c.whyUs[i].text = e.target.value; return c; })} />
+                <button type="button" onClick={() => patch((c) => { c.whyUs.splice(i, 1); return c; })} className="self-end text-red-400 hover:text-red-300">
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             ))}
+            <button
+              type="button"
+              onClick={() => patch((c) => { c.whyUs.push({ title: "New reason", text: "Why customers choose you." }); return c; })}
+              className="inline-flex items-center gap-1 text-sm text-amber-400 hover:text-amber-300"
+            >
+              <Plus className="h-4 w-4" /> Add card
+            </button>
           </div>
         </Panel>
 
@@ -374,6 +464,15 @@ export function ContentEditor() {
             >
               <Plus className="h-4 w-4" /> Add option
             </button>
+          </div>
+        </Panel>
+
+        <Panel title="Footer links">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Privacy link text" value={content.footer.privacyLabel} onChange={(v) => patch((c) => { c.footer.privacyLabel = v; return c; })} />
+            <Field label="Terms link text" value={content.footer.termsLabel} onChange={(v) => patch((c) => { c.footer.termsLabel = v; return c; })} />
+            <Field label="Contact link text" value={content.footer.contactLabel} onChange={(v) => patch((c) => { c.footer.contactLabel = v; return c; })} />
+            <Field label="Staff login link text" value={content.footer.staffLoginLabel} onChange={(v) => patch((c) => { c.footer.staffLoginLabel = v; return c; })} />
           </div>
         </Panel>
 

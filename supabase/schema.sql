@@ -89,14 +89,64 @@ create table if not exists inventory (
 
 create table if not exists staff (
   id text primary key,
-  auth_user_id uuid unique,
   name text not null,
-  email text not null unique,
+  email text not null,
   phone text default '',
   role text not null default 'mechanic',
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- Link staff records to Supabase Auth users on existing databases
+alter table staff add column if not exists auth_user_id uuid;
+
+-- Backfill auth_user_id when id is already a Supabase Auth UUID
+update staff
+set auth_user_id = id::uuid
+where auth_user_id is null
+  and id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+-- Remove duplicate staff emails (keep auth-linked row, then newest)
+delete from staff s
+where s.id in (
+  select id
+  from (
+    select
+      id,
+      row_number() over (
+        partition by lower(trim(email))
+        order by
+          (auth_user_id is not null) desc,
+          created_at desc nulls last,
+          id desc
+      ) as rn
+    from staff
+  ) ranked
+  where rn > 1
+);
+
+-- Add unique constraints safely after dedupe
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conrelid = 'public.staff'::regclass and conname = 'staff_email_key'
+  ) then
+    alter table staff add constraint staff_email_key unique (email);
+  end if;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conrelid = 'public.staff'::regclass and conname = 'staff_auth_user_id_key'
+  ) then
+    alter table staff add constraint staff_auth_user_id_key unique (auth_user_id);
+  end if;
+exception
+  when duplicate_object then null;
+end $$;
 
 create table if not exists fleet (
   id text primary key,
@@ -120,10 +170,6 @@ create table if not exists routes (
   status text not null default 'planned',
   notes text
 );
-
--- Link staff records to Supabase Auth users on existing databases
-alter table staff add column if not exists auth_user_id uuid unique;
-create unique index if not exists staff_email_idx on staff (email);
 
 -- Realtime: live website updates when owner saves content
 do $$
@@ -158,3 +204,16 @@ create policy "Public can read site content" on site_content for select using (t
 -- Allow anon to insert quotes (contact form)
 drop policy if exists "Public can submit quotes" on quotes;
 create policy "Public can submit quotes" on quotes for insert with check (true);
+
+-- Performance indexes for dashboard queries
+create index if not exists inventory_name_idx on inventory (name);
+create index if not exists inventory_sku_idx on inventory (sku) where sku <> '';
+create index if not exists work_orders_status_idx on work_orders (status);
+create index if not exists work_orders_updated_idx on work_orders (updated_at desc);
+create index if not exists bookings_date_idx on bookings (date);
+create index if not exists bookings_status_idx on bookings (status);
+create index if not exists bookings_created_idx on bookings (created_at desc);
+create index if not exists fleet_status_idx on fleet (status);
+create index if not exists routes_date_idx on routes (date desc);
+create index if not exists staff_auth_user_idx on staff (auth_user_id);
+create index if not exists staff_role_idx on staff (role);

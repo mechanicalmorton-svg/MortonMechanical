@@ -10,7 +10,7 @@ export function canEditSiteContent(role: StaffRole) {
 
 export function canAccessTab(role: StaffRole, tab: string) {
   if (tab === "users") return canManageUsers(role);
-  if (tab === "customizer") return canEditSiteContent(role);
+  if (tab === "site-contents" || tab === "customizer") return canEditSiteContent(role);
   return true;
 }
 

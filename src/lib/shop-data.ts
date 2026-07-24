@@ -1,5 +1,6 @@
 import { readJson, writeJson, newId } from "./store";
-import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase/server";
+import { isSupabaseConfigured } from "./supabase/server";
+import { requireAdminClient, requireDatabaseInProduction, throwOnError } from "./supabase/db";
 import {
   createPortalUser,
   deletePortalUser,
@@ -23,6 +24,11 @@ function today() {
 function monthStart() {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
+}
+
+function useDatabase() {
+  requireDatabaseInProduction();
+  return isSupabaseConfigured();
 }
 
 // --- mappers ---
@@ -182,16 +188,21 @@ function routeToRow(r: RoutePlan) {
 // --- load / save ---
 
 export async function loadWorkOrders(): Promise<WorkOrder[]> {
-  if (isSupabaseConfigured()) {
-    const { data } = await getSupabaseAdmin()!.from("work_orders").select("*").order("updated_at", { ascending: false });
+  if (useDatabase()) {
+    const { data, error } = await requireAdminClient()
+      .from("work_orders")
+      .select("*")
+      .order("updated_at", { ascending: false });
+    throwOnError(error, "Could not load work orders");
     return (data ?? []).map(rowToWorkOrder);
   }
   return readJson("work-orders.json", []);
 }
 
 export async function upsertWorkOrder(item: WorkOrder) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("work_orders").upsert(workOrderToRow(item));
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("work_orders").upsert(workOrderToRow(item));
+    throwOnError(error, "Could not save work order");
     return;
   }
   const items = await loadWorkOrders();
@@ -202,24 +213,30 @@ export async function upsertWorkOrder(item: WorkOrder) {
 }
 
 export async function deleteWorkOrder(id: string) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("work_orders").delete().eq("id", id);
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("work_orders").delete().eq("id", id);
+    throwOnError(error, "Could not delete work order");
     return;
   }
   writeJson("work-orders.json", (await loadWorkOrders()).filter((w) => w.id !== id));
 }
 
 export async function loadBookings(): Promise<Booking[]> {
-  if (isSupabaseConfigured()) {
-    const { data } = await getSupabaseAdmin()!.from("bookings").select("*").order("created_at", { ascending: false });
+  if (useDatabase()) {
+    const { data, error } = await requireAdminClient()
+      .from("bookings")
+      .select("*")
+      .order("created_at", { ascending: false });
+    throwOnError(error, "Could not load bookings");
     return (data ?? []).map(rowToBooking);
   }
   return readJson("bookings.json", []);
 }
 
 export async function upsertBooking(item: Booking) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("bookings").upsert(bookingToRow(item));
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("bookings").upsert(bookingToRow(item));
+    throwOnError(error, "Could not save booking");
     return;
   }
   const items = await loadBookings();
@@ -230,24 +247,27 @@ export async function upsertBooking(item: Booking) {
 }
 
 export async function deleteBooking(id: string) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("bookings").delete().eq("id", id);
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("bookings").delete().eq("id", id);
+    throwOnError(error, "Could not delete booking");
     return;
   }
   writeJson("bookings.json", (await loadBookings()).filter((b) => b.id !== id));
 }
 
 export async function loadInventory(): Promise<InventoryItem[]> {
-  if (isSupabaseConfigured()) {
-    const { data } = await getSupabaseAdmin()!.from("inventory").select("*").order("name");
+  if (useDatabase()) {
+    const { data, error } = await requireAdminClient().from("inventory").select("*").order("name");
+    throwOnError(error, "Could not load inventory");
     return (data ?? []).map(rowToInventory);
   }
   return readJson<InventoryItem[]>("inventory.json", []);
 }
 
 export async function upsertInventoryItem(item: InventoryItem) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("inventory").upsert(inventoryToRow(item));
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("inventory").upsert(inventoryToRow(item));
+    throwOnError(error, "Could not save inventory item");
     return;
   }
   const items = await loadInventory();
@@ -258,20 +278,21 @@ export async function upsertInventoryItem(item: InventoryItem) {
 }
 
 export async function deleteInventoryItem(id: string) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("inventory").delete().eq("id", id);
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("inventory").delete().eq("id", id);
+    throwOnError(error, "Could not delete inventory item");
     return;
   }
   writeJson("inventory.json", (await loadInventory()).filter((i) => i.id !== id));
 }
 
 export async function loadStaff(): Promise<StaffMember[]> {
-  if (isSupabaseConfigured()) return loadStaffFromAuth();
+  if (useDatabase()) return loadStaffFromAuth();
   return readJson<StaffMember[]>("staff.json", []);
 }
 
 export async function upsertStaffMember(item: StaffMember) {
-  if (isSupabaseConfigured()) {
+  if (useDatabase()) {
     return updatePortalUser(item.id, {
       name: item.name,
       phone: item.phone,
@@ -281,13 +302,15 @@ export async function upsertStaffMember(item: StaffMember) {
   }
   const items = await loadStaff();
   const idx = items.findIndex((s) => s.id === item.id);
-  if (idx >= 0) items[idx] = item;
-  else items.push(item);
+  const saved = idx >= 0 ? { ...items[idx], ...item } : item;
+  if (idx >= 0) items[idx] = saved;
+  else items.push(saved);
   writeJson("staff.json", items);
+  return saved;
 }
 
 export async function deleteStaffMember(id: string) {
-  if (isSupabaseConfigured()) {
+  if (useDatabase()) {
     await deletePortalUser(id);
     return;
   }
@@ -297,16 +320,18 @@ export async function deleteStaffMember(id: string) {
 export { createPortalUser };
 
 export async function loadFleet(): Promise<FleetVehicle[]> {
-  if (isSupabaseConfigured()) {
-    const { data } = await getSupabaseAdmin()!.from("fleet").select("*").order("name");
+  if (useDatabase()) {
+    const { data, error } = await requireAdminClient().from("fleet").select("*").order("name");
+    throwOnError(error, "Could not load fleet");
     return (data ?? []).map(rowToFleet);
   }
   return readJson<FleetVehicle[]>("fleet.json", []);
 }
 
 export async function upsertFleetVehicle(item: FleetVehicle) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("fleet").upsert(fleetToRow(item));
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("fleet").upsert(fleetToRow(item));
+    throwOnError(error, "Could not save fleet vehicle");
     return;
   }
   const items = await loadFleet();
@@ -317,24 +342,30 @@ export async function upsertFleetVehicle(item: FleetVehicle) {
 }
 
 export async function deleteFleetVehicle(id: string) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("fleet").delete().eq("id", id);
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("fleet").delete().eq("id", id);
+    throwOnError(error, "Could not delete fleet vehicle");
     return;
   }
   writeJson("fleet.json", (await loadFleet()).filter((v) => v.id !== id));
 }
 
 export async function loadRoutes(): Promise<RoutePlan[]> {
-  if (isSupabaseConfigured()) {
-    const { data } = await getSupabaseAdmin()!.from("routes").select("*").order("date", { ascending: false });
+  if (useDatabase()) {
+    const { data, error } = await requireAdminClient()
+      .from("routes")
+      .select("*")
+      .order("date", { ascending: false });
+    throwOnError(error, "Could not load routes");
     return (data ?? []).map(rowToRoute);
   }
   return readJson("routes.json", []);
 }
 
 export async function upsertRoute(item: RoutePlan) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("routes").upsert(routeToRow(item));
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("routes").upsert(routeToRow(item));
+    throwOnError(error, "Could not save route");
     return;
   }
   const items = await loadRoutes();
@@ -345,8 +376,9 @@ export async function upsertRoute(item: RoutePlan) {
 }
 
 export async function deleteRoute(id: string) {
-  if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("routes").delete().eq("id", id);
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("routes").delete().eq("id", id);
+    throwOnError(error, "Could not delete route");
     return;
   }
   writeJson("routes.json", (await loadRoutes()).filter((r) => r.id !== id));

@@ -46,6 +46,18 @@ export type SiteContent = {
     howItWorks: { label: string; title: string; subtitle: string };
     testimonials: { label: string; title: string; subtitle: string };
   };
+  header: {
+    nav: { href: string; label: string }[];
+    callButtonText: string;
+    portalButtonText: string;
+    quoteButtonText: string;
+  };
+  footer: {
+    privacyLabel: string;
+    termsLabel: string;
+    contactLabel: string;
+    staffLoginLabel: string;
+  };
 };
 
 export const DEFAULT_CONTENT: SiteContent = {
@@ -155,6 +167,22 @@ export const DEFAULT_CONTENT: SiteContent = {
       title: "Reviews",
       subtitle: "Real feedback from drivers we've helped.",
     },
+  },
+  header: {
+    nav: [
+      { href: "/#services", label: "Services" },
+      { href: "/#about", label: "About" },
+      { href: "/#reviews", label: "Reviews" },
+    ],
+    callButtonText: "Call Now",
+    portalButtonText: "Portal",
+    quoteButtonText: "Request Quote",
+  },
+  footer: {
+    privacyLabel: "Privacy",
+    termsLabel: "Terms",
+    contactLabel: "Contact",
+    staffLoginLabel: "Staff login",
   },
 };
 

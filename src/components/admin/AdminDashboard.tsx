@@ -45,7 +45,7 @@ export type Tab =
   | "fleet"
   | "routes-manager"
   | "routes-today"
-  | "customizer"
+  | "site-contents"
   | "settings";
 
 type Props = { user: { id: string; name: string; role: StaffRole } };
@@ -82,7 +82,7 @@ const nav: NavItem[] = [
       { id: "routes-today", label: "My route today" },
     ],
   },
-  { id: "customizer", label: "Page Customizer", icon: Paintbrush },
+  { id: "site-contents", label: "Site Contents", icon: Paintbrush },
   { id: "settings", label: "Site Settings", icon: Settings },
 ];
 
@@ -90,8 +90,9 @@ const validTabs = new Set<Tab>(nav.flatMap((n) => [n.id, ...(n.children?.map((c)
 
 function readTabFromHash(): Tab {
   if (typeof window === "undefined") return "dashboard";
-  const hash = window.location.hash.replace("#", "") as Tab;
-  return validTabs.has(hash) ? hash : "dashboard";
+  const hash = window.location.hash.replace("#", "");
+  const normalized = hash === "customizer" ? "site-contents" : hash;
+  return validTabs.has(normalized as Tab) ? (normalized as Tab) : "dashboard";
 }
 
 export function AdminDashboard({ user }: Props) {
@@ -276,7 +277,7 @@ export function AdminDashboard({ user }: Props) {
             {tab === "fleet" && <FleetPanel />}
             {tab === "routes-manager" && <RoutesPanel />}
             {tab === "routes-today" && <RoutesPanel todayOnly userId={user.id} />}
-            {tab === "customizer" && canAccessTab(user.role, "customizer") && <ContentEditor />}
+            {tab === "site-contents" && canAccessTab(user.role, "site-contents") && <ContentEditor />}
             {tab === "settings" && <SettingsPanel name={user.name} />}
           </div>
         </main>
