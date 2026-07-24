@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Barcode, Minus, Package, Pencil, Plus, Trash2 } from "lucide-react";
-import type { InventoryItem } from "@/lib/shop-types";
+import type { FleetVehicle, InventoryItem } from "@/lib/shop-types";
+import {
+  formatFleetVehicleOption,
+  resolveInventoryVehicle,
+  sortFleetForSelect,
+  vehicleLocationLabel,
+} from "@/lib/inventory-fleet";
 import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { EmptyState, ErrorBanner, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
@@ -33,7 +39,7 @@ const emptyForm = {
   minStock: "1",
   unitCost: "0",
   supplier: "",
-  location: "",
+  vehicleId: "",
 };
 
 function categoryOptions(current?: string) {
@@ -123,6 +129,7 @@ function FormField({
 
 export function InventoryPanel({ lowStockOnly }: Props) {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [scanMessage, setScanMessage] = useState("");
@@ -137,9 +144,14 @@ export function InventoryPanel({ lowStockOnly }: Props) {
   async function load() {
     setLoading(true);
     setError("");
-    const { data, error: message } = await adminGet<InventoryItem[]>("/api/admin/inventory");
-    if (message) setError(message);
-    else setItems(data ?? []);
+    const [inventoryRes, fleetRes] = await Promise.all([
+      adminGet<InventoryItem[]>("/api/admin/inventory"),
+      adminGet<FleetVehicle[]>("/api/admin/fleet"),
+    ]);
+    if (inventoryRes.error) setError(inventoryRes.error);
+    else setItems(inventoryRes.data ?? []);
+    if (fleetRes.error) setError((prev) => prev || fleetRes.error || "");
+    else setFleet(fleetRes.data ?? []);
     setLoading(false);
   }
 
@@ -229,12 +241,16 @@ export function InventoryPanel({ lowStockOnly }: Props) {
 
   const filtered = lowStockOnly ? items.filter((item) => item.quantity <= item.minStock) : items;
   const grouped = groupByCategory(filtered);
+  const fleetOptions = sortFleetForSelect(fleet);
 
   async function saveItem(e: React.FormEvent) {
     e.preventDefault();
+    const location = form.vehicleId ? vehicleLocationLabel(form.vehicleId, fleet) : "";
     const payload = {
       ...(editingId ? { id: editingId } : {}),
       ...form,
+      vehicleId: form.vehicleId,
+      location,
       quantity: Number(form.quantity),
       minStock: Number(form.minStock),
       unitCost: Number(form.unitCost),
@@ -274,7 +290,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
       minStock: String(item.minStock),
       unitCost: String(item.unitCost),
       supplier: item.supplier ?? "",
-      location: item.location ?? "",
+      vehicleId: item.vehicleId ?? "",
     });
     setShowForm(true);
   }
@@ -459,15 +475,31 @@ export function InventoryPanel({ lowStockOnly }: Props) {
             </div>
           </FormSection>
 
-          <FormSection title="Storage" description="Where this part is kept in the shop.">
-            <FormField label="Shop location" htmlFor="inv-location" hint="Shelf, bin, van compartment, etc.">
-              <input
-                id="inv-location"
+          <FormSection title="Storage" description="Assign this part to a fleet vehicle from Fleet Manager.">
+            <FormField
+              label="Shop location / vehicle"
+              htmlFor="inv-vehicle"
+              hint={
+                fleetOptions.length
+                  ? "Parts are linked to fleet vehicles so you can track what is on each van or truck."
+                  : "Add vehicles in Fleet Manager first, then assign parts here."
+              }
+            >
+              <select
+                id="inv-vehicle"
                 className={inputClass}
-                placeholder="e.g. Van 1 — rear bin"
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-              />
+                value={form.vehicleId}
+                onChange={(e) => setForm({ ...form, vehicleId: e.target.value })}
+                disabled={!fleetOptions.length}
+              >
+                <option value="">Not assigned to a vehicle</option>
+                {fleetOptions.map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {formatFleetVehicleOption(vehicle)}
+                    {vehicle.status !== "active" ? ` — ${vehicle.status.replace("_", " ")}` : ""}
+                  </option>
+                ))}
+              </select>
             </FormField>
           </FormSection>
 
@@ -500,7 +532,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                       <th className="hidden px-4 py-3 sm:table-cell">SKU</th>
                       <th className="px-4 py-3">Qty</th>
                       <th className="hidden px-4 py-3 lg:table-cell">Supplier</th>
-                      <th className="hidden px-4 py-3 md:table-cell">Location</th>
+                      <th className="hidden px-4 py-3 md:table-cell">Vehicle</th>
                       <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
@@ -510,11 +542,13 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             {item.quantity <= item.minStock && <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />}
-                            <div>
+                            <div className="min-w-0">
                               <p className="font-medium text-white">{item.name}</p>
-                              {item.partNumber ? (
-                                <p className="text-xs text-slate-400">Part # {item.partNumber}</p>
-                              ) : null}
+                              <p className="text-xs text-slate-400">
+                                Part #{" "}
+                                <span className="font-mono text-slate-300">{item.partNumber?.trim() || "—"}</span>
+                              </p>
+                              <p className="text-xs text-slate-500 md:hidden">{resolveInventoryVehicle(item, fleet)}</p>
                               <p className="text-xs text-slate-500">${item.unitCost.toFixed(2)} each</p>
                             </div>
                           </div>
@@ -533,7 +567,9 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                           </div>
                         </td>
                         <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">{item.supplier || "—"}</td>
-                        <td className="hidden px-4 py-3 text-slate-400 md:table-cell">{item.location ?? "—"}</td>
+                        <td className="hidden px-4 py-3 text-slate-400 md:table-cell">
+                          {resolveInventoryVehicle(item, fleet)}
+                        </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2">
                             <button type="button" onClick={() => startEdit(item)} className={btnSecondary} aria-label={`Edit ${item.name}`}>

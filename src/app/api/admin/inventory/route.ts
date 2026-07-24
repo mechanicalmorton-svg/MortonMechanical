@@ -28,7 +28,8 @@ export async function POST(req: Request) {
       minStock: Number(body.minStock) || 1,
       unitCost: Number(body.unitCost) || 0,
       supplier: body.supplier,
-      location: body.location,
+      vehicleId: body.vehicleId || undefined,
+      location: body.location ?? "",
       updatedAt: new Date().toISOString(),
     };
     await upsertInventoryItem(item);

@@ -84,6 +84,7 @@ create table if not exists inventory (
   min_stock int not null default 1,
   unit_cost numeric not null default 0,
   supplier text,
+  vehicle_id text default '',
   location text,
   updated_at timestamptz not null default now()
 );
