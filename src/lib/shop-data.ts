@@ -1,5 +1,11 @@
 import { readJson, writeJson, newId } from "./store";
 import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase/server";
+import {
+  createPortalUser,
+  deletePortalUser,
+  loadStaffFromAuth,
+  updatePortalUser,
+} from "./staff-auth";
 import type {
   Booking,
   DashboardStats,
@@ -9,7 +15,6 @@ import type {
   StaffMember,
   WorkOrder,
 } from "./shop-types";
-import { DEFAULT_FLEET, DEFAULT_INVENTORY, DEFAULT_STAFF } from "./shop-types";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -117,30 +122,6 @@ function inventoryToRow(i: InventoryItem) {
     supplier: i.supplier,
     location: i.location,
     updated_at: i.updatedAt,
-  };
-}
-
-function rowToStaff(r: Record<string, unknown>): StaffMember {
-  return {
-    id: r.id as string,
-    name: r.name as string,
-    email: r.email as string,
-    phone: (r.phone as string) ?? "",
-    role: r.role as StaffMember["role"],
-    active: Boolean(r.active),
-    createdAt: r.created_at as string,
-  };
-}
-
-function staffToRow(s: StaffMember) {
-  return {
-    id: s.id,
-    name: s.name,
-    email: s.email,
-    phone: s.phone,
-    role: s.role,
-    active: s.active,
-    created_at: s.createdAt,
   };
 }
 
@@ -269,11 +250,9 @@ export async function deleteBooking(id: string) {
 export async function loadInventory(): Promise<InventoryItem[]> {
   if (isSupabaseConfigured()) {
     const { data } = await getSupabaseAdmin()!.from("inventory").select("*").order("name");
-    const items = (data ?? []).map(rowToInventory);
-    return items.length ? items : DEFAULT_INVENTORY;
+    return (data ?? []).map(rowToInventory);
   }
-  const items = readJson<InventoryItem[]>("inventory.json", []);
-  return items.length ? items : DEFAULT_INVENTORY;
+  return readJson<InventoryItem[]>("inventory.json", []);
 }
 
 export async function upsertInventoryItem(item: InventoryItem) {
@@ -297,19 +276,18 @@ export async function deleteInventoryItem(id: string) {
 }
 
 export async function loadStaff(): Promise<StaffMember[]> {
-  if (isSupabaseConfigured()) {
-    const { data } = await getSupabaseAdmin()!.from("staff").select("*").order("name");
-    const items = (data ?? []).map(rowToStaff);
-    return items.length ? items : DEFAULT_STAFF;
-  }
-  const items = readJson<StaffMember[]>("staff.json", []);
-  return items.length ? items : DEFAULT_STAFF;
+  if (isSupabaseConfigured()) return loadStaffFromAuth();
+  return readJson<StaffMember[]>("staff.json", []);
 }
 
 export async function upsertStaffMember(item: StaffMember) {
   if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("staff").upsert(staffToRow(item));
-    return;
+    return updatePortalUser(item.id, {
+      name: item.name,
+      phone: item.phone,
+      role: item.role,
+      active: item.active,
+    });
   }
   const items = await loadStaff();
   const idx = items.findIndex((s) => s.id === item.id);
@@ -320,20 +298,20 @@ export async function upsertStaffMember(item: StaffMember) {
 
 export async function deleteStaffMember(id: string) {
   if (isSupabaseConfigured()) {
-    await getSupabaseAdmin()!.from("staff").delete().eq("id", id);
+    await deletePortalUser(id);
     return;
   }
   writeJson("staff.json", (await loadStaff()).filter((s) => s.id !== id));
 }
 
+export { createPortalUser };
+
 export async function loadFleet(): Promise<FleetVehicle[]> {
   if (isSupabaseConfigured()) {
     const { data } = await getSupabaseAdmin()!.from("fleet").select("*").order("name");
-    const items = (data ?? []).map(rowToFleet);
-    return items.length ? items : DEFAULT_FLEET;
+    return (data ?? []).map(rowToFleet);
   }
-  const items = readJson<FleetVehicle[]>("fleet.json", []);
-  return items.length ? items : DEFAULT_FLEET;
+  return readJson<FleetVehicle[]>("fleet.json", []);
 }
 
 export async function upsertFleetVehicle(item: FleetVehicle) {

@@ -89,8 +89,9 @@ create table if not exists inventory (
 
 create table if not exists staff (
   id text primary key,
+  auth_user_id uuid unique,
   name text not null,
-  email text not null,
+  email text not null unique,
   phone text default '',
   role text not null default 'mechanic',
   active boolean not null default true,
@@ -120,29 +121,9 @@ create table if not exists routes (
   notes text
 );
 
--- Seed default inventory, staff, fleet (only if empty)
-insert into inventory (id, name, sku, category, quantity, min_stock, unit_cost, supplier, location)
-select * from (values
-  ('inv1', '5W-30 Full Synthetic Oil', 'OIL-5W30', 'Fluids', 24, 8, 12.5, 'AutoParts Co', 'Van 1'),
-  ('inv2', 'Ceramic Brake Pads (Front)', 'BRK-CP-F', 'Brakes', 6, 4, 45, 'BrakeMax', 'Warehouse'),
-  ('inv3', '12V AGM Battery', 'BAT-AGM12', 'Electrical', 3, 2, 89, 'PowerCell', 'Van 2'),
-  ('inv4', 'O2 Sensor (Universal)', 'SNS-O2-U', 'Diagnostics', 2, 3, 38, 'SensorPro', 'Warehouse')
-) as v(id, name, sku, category, quantity, min_stock, unit_cost, supplier, location)
-where not exists (select 1 from inventory limit 1);
-
-insert into staff (id, name, email, phone, role, active)
-select * from (values
-  ('st1', 'Morton Owner', 'owner@mortonsmechanicals.com', '(555) 123-4567', 'owner', true),
-  ('st2', 'Alex Rivera', 'alex@mortonsmechanicals.com', '(555) 234-5678', 'mechanic', true)
-) as v(id, name, email, phone, role, active)
-where not exists (select 1 from staff limit 1);
-
-insert into fleet (id, name, plate, type, make, model, year, status, mileage, last_service)
-select * from (values
-  ('fl1', 'Mobile Unit 1', 'MM-1001', 'Service Van', 'Ford', 'Transit', 2022, 'active', 48200, '2026-06-15'),
-  ('fl2', 'Mobile Unit 2', 'MM-1002', 'Service Van', 'Mercedes', 'Sprinter', 2021, 'active', 61500, '2026-05-28')
-) as v(id, name, plate, type, make, model, year, status, mileage, last_service)
-where not exists (select 1 from fleet limit 1);
+-- Link staff records to Supabase Auth users on existing databases
+alter table staff add column if not exists auth_user_id uuid unique;
+create unique index if not exists staff_email_idx on staff (email);
 
 -- Realtime: live website updates when owner saves content
 do $$
