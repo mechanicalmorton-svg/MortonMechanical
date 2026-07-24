@@ -122,3 +122,10 @@ export const btnSecondary =
 
 export const btnDanger =
   "inline-flex items-center justify-center gap-2 rounded-xl border border-red-900/50 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/10";
+
+export function ErrorBanner({ message }: { message: string }) {
+  if (!message) return null;
+  return (
+    <p className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{message}</p>
+  );
+}

@@ -55,7 +55,7 @@ export const DEFAULT_CONTENT: SiteContent = {
     description:
       "Professional mobile auto repair and maintenance. Upfront quotes, quality parts, and honest work at your home, office, or roadside.",
     phone: "(555) 123-4567",
-    email: "bookings@mortonsmechanicals.com",
+    email: "bookings@mortonsmechanical.com",
     address: "Greater Metro Area — mobile service",
     serviceArea: "We travel to you within a 40-mile radius.",
     hours: [

@@ -2,43 +2,95 @@
 
 import { useEffect, useState } from "react";
 import { ClipboardList, Plus, Trash2 } from "lucide-react";
-import type { WorkOrder } from "@/lib/shop-types";
-import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import type { StaffMember, WorkOrder } from "@/lib/shop-types";
+import { adminGet, adminSend } from "./admin-fetch";
+import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 export function WorkOrdersPanel() {
   const [items, setItems] = useState<WorkOrder[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
-    customerName: "", phone: "", vehicle: "", service: "", priority: "normal", notes: "",
+    customerName: "",
+    phone: "",
+    vehicle: "",
+    service: "",
+    priority: "normal",
+    notes: "",
+    assignedTo: "",
+    scheduledDate: "",
   });
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/admin/work-orders");
-    setItems(await res.json());
+    setError("");
+    const [orders, team] = await Promise.all([
+      adminGet<WorkOrder[]>("/api/admin/work-orders"),
+      adminGet<StaffMember[]>("/api/admin/staff"),
+    ]);
+    if (orders.error) setError(orders.error);
+    else setItems(orders.data ?? []);
+    if (!team.error) setStaff(team.data ?? []);
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    await fetch("/api/admin/work-orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    const { error: message } = await adminSend("/api/admin/work-orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    if (message) {
+      setError(message);
+      return;
+    }
     setShowForm(false);
-    setForm({ customerName: "", phone: "", vehicle: "", service: "", priority: "normal", notes: "" });
+    setForm({ customerName: "", phone: "", vehicle: "", service: "", priority: "normal", notes: "", assignedTo: "", scheduledDate: "" });
     load();
   }
 
-  async function setStatus(id: string, status: WorkOrder["status"]) {
-    await fetch("/api/admin/work-orders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status }) });
-    load();
+  async function patch(id: string, patch: Partial<WorkOrder>) {
+    const { error: message } = await adminSend("/api/admin/work-orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...patch }),
+    });
+    if (message) setError(message);
+    else load();
+  }
+
+  async function complete(id: string) {
+    const input = window.prompt("Revenue for this job ($)?", "0");
+    if (input === null) return;
+    const revenue = Number(input);
+    if (Number.isNaN(revenue) || revenue < 0) {
+      setError("Enter a valid revenue amount.");
+      return;
+    }
+    await patch(id, { status: "completed", revenue });
   }
 
   async function remove(id: string) {
     if (!confirm("Delete this work order?")) return;
-    await fetch("/api/admin/work-orders", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    load();
+    const { error: message } = await adminSend("/api/admin/work-orders", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (message) setError(message);
+    else load();
+  }
+
+  function staffName(id?: string) {
+    if (!id) return null;
+    return staff.find((member) => member.id === id)?.name ?? id;
   }
 
   return (
@@ -47,6 +99,7 @@ export function WorkOrdersPanel() {
         <PageHeader title="Work Orders" subtitle="Track jobs from open to completion." />
         <button type="button" onClick={() => setShowForm(!showForm)} className={btnPrimary}><Plus className="h-4 w-4" /> New Work Order</button>
       </div>
+      <ErrorBanner message={error} />
 
       {showForm && (
         <form onSubmit={add} className="mb-6 grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:grid-cols-2">
@@ -58,6 +111,13 @@ export function WorkOrdersPanel() {
             <option value="normal">Normal priority</option>
             <option value="urgent">Urgent</option>
           </select>
+          <select className={inputClass} value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}>
+            <option value="">Unassigned</option>
+            {staff.filter((member) => member.active).map((member) => (
+              <option key={member.id} value={member.id}>{member.name}</option>
+            ))}
+          </select>
+          <input className={inputClass} type="date" value={form.scheduledDate} onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })} />
           <textarea className={inputClass} placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           <div className="flex gap-2 sm:col-span-2">
             <button type="submit" className={btnPrimary}>Create work order</button>
@@ -82,14 +142,25 @@ export function WorkOrdersPanel() {
                     {w.priority === "urgent" && <StatusBadge status="urgent" />}
                   </div>
                   <p className="mt-1 text-sm text-slate-400">{w.service} · {w.vehicle || "No vehicle listed"}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{w.phone} · {new Date(w.createdAt).toLocaleString()}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {w.phone}
+                    {w.assignedTo ? ` · ${staffName(w.assignedTo)}` : ""}
+                    {w.scheduledDate ? ` · ${new Date(w.scheduledDate).toLocaleDateString()}` : ""}
+                    {w.revenue != null ? ` · $${w.revenue.toLocaleString()}` : ""}
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {w.status === "open" && (
-                    <button type="button" onClick={() => setStatus(w.id, "in_progress")} className={btnSecondary}>Start</button>
+                    <>
+                      <button type="button" onClick={() => patch(w.id, { status: "in_progress" })} className={btnSecondary}>Start</button>
+                      <button type="button" onClick={() => patch(w.id, { status: "cancelled" })} className={btnSecondary}>Cancel</button>
+                    </>
                   )}
                   {w.status === "in_progress" && (
-                    <button type="button" onClick={() => setStatus(w.id, "completed")} className={btnPrimary}>Complete</button>
+                    <>
+                      <button type="button" onClick={() => complete(w.id)} className={btnPrimary}>Complete</button>
+                      <button type="button" onClick={() => patch(w.id, { status: "cancelled" })} className={btnSecondary}>Cancel</button>
+                    </>
                   )}
                   <button type="button" onClick={() => remove(w.id)} className={btnDanger}><Trash2 className="h-3.5 w-3.5" /></button>
                 </div>

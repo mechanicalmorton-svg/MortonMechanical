@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { PageHeader, btnPrimary, inputClass } from "./admin-ui";
+import { ErrorBanner, PageHeader, btnPrimary, inputClass } from "./admin-ui";
 
-type Props = { username: string };
+type Props = { name: string };
 
-export function SettingsPanel({ username }: Props) {
+export function SettingsPanel({ name }: Props) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [message, setMessage] = useState("");
@@ -39,44 +39,26 @@ export function SettingsPanel({ username }: Props) {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <PageHeader title="Site Settings" subtitle="Manage your dashboard account and security." />
+      <PageHeader title="Site Settings" subtitle="Update your portal password." />
 
       <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
         <p className="text-sm text-slate-500">Signed in as</p>
-        <p className="font-medium text-white">{username}</p>
+        <p className="font-medium text-white">{name}</p>
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
         <h2 className="font-semibold text-white">Change password</h2>
-        {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+        <ErrorBanner message={error} />
         {message && <p className="mt-3 text-sm text-emerald-300">{message}</p>}
         <label className="mt-4 block text-sm text-slate-300">
           New password
-          <input
-            type="password"
-            className={inputClass}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
-            required
-          />
+          <input type="password" className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
         </label>
         <label className="mt-3 block text-sm text-slate-300">
           Confirm new password
-          <input
-            type="password"
-            className={inputClass}
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            minLength={8}
-            required
-          />
+          <input type="password" className={inputClass} value={confirm} onChange={(e) => setConfirm(e.target.value)} minLength={8} required />
         </label>
-        <button
-          type="submit"
-          disabled={loading}
-          className={btnPrimary}
-        >
+        <button type="submit" disabled={loading} className={`${btnPrimary} mt-4`}>
           {loading ? "Saving…" : "Update password"}
         </button>
       </form>

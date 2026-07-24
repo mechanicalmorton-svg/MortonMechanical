@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { readJson, writeJson } from "./store";
+import type { StaffRole } from "./shop-types";
 import { getSupabaseAdmin, isSupabaseAuthConfigured, isSupabaseConfigured } from "./supabase/server";
 
 const SESSION_TTL = 1000 * 60 * 60 * 24 * 7;

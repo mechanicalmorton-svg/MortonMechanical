@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/admin-api";
+import { requireAuth, requireOwnerOrAdmin } from "@/lib/admin-api";
 import { createPortalUser, deleteStaffMember, loadStaff, upsertStaffMember } from "@/lib/shop-data";
 import type { StaffRole } from "@/lib/shop-types";
 
@@ -10,7 +10,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { error } = await requireAuth();
+  const { error } = await requireOwnerOrAdmin();
   if (error) return error;
   try {
     const body = await req.json();
@@ -48,7 +48,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const { error } = await requireAuth();
+  const { error } = await requireOwnerOrAdmin();
   if (error) return error;
   try {
     const { id } = await req.json();

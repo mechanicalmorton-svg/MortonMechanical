@@ -2,33 +2,52 @@
 
 import { useEffect, useState } from "react";
 import { Archive, Inbox, Mail, Phone, Trash2 } from "lucide-react";
-import type { Quote } from "@/app/api/admin/quotes/route";
-import { EmptyState, PageHeader, StatusBadge, btnDanger, btnSecondary } from "./admin-ui";
+import type { Quote } from "@/lib/quotes";
+import { adminGet, adminSend } from "./admin-fetch";
+import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnSecondary } from "./admin-ui";
 
 export function QuotesPanel() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [filter, setFilter] = useState<"all" | Quote["status"]>("all");
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/admin/quotes");
-    const data = await res.json();
-    setQuotes(data.quotes ?? []);
+    setError("");
+    const { data, error: message } = await adminGet<{ quotes: Quote[] }>("/api/admin/quotes");
+    if (message) {
+      setError(message);
+      setQuotes([]);
+    } else {
+      setQuotes(data?.quotes ?? []);
+    }
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   async function updateStatus(id: string, status: Quote["status"]) {
-    await fetch("/api/admin/quotes", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status }) });
-    load();
+    const { error: message } = await adminSend("/api/admin/quotes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
+    if (message) setError(message);
+    else load();
   }
 
   async function remove(id: string) {
     if (!confirm("Delete this quote request permanently?")) return;
-    await fetch("/api/admin/quotes", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    load();
+    const { error: message } = await adminSend("/api/admin/quotes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (message) setError(message);
+    else load();
   }
 
   const filtered = filter === "all" ? quotes : quotes.filter((q) => q.status === filter);
@@ -36,6 +55,7 @@ export function QuotesPanel() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="Quote Requests" subtitle="Enquiries submitted through your website contact form." />
+      <ErrorBanner message={error} />
 
       <div className="mb-6 flex flex-wrap gap-2">
         {(["all", "new", "read", "archived"] as const).map((f) => (
@@ -92,6 +112,10 @@ export function QuotesPanel() {
                     <a href={`mailto:${q.email}`} className="hover:text-amber-400">{q.email}</a>
                   </div>
                 )}
+                {q.rego && (
+                  <div><dt className="text-xs text-slate-500">Rego</dt><dd className="text-slate-300">{q.rego}</dd></div>
+                )}
+                <div><dt className="text-xs text-slate-500">Preferred contact</dt><dd className="capitalize text-slate-300">{q.contactMethod}</dd></div>
               </dl>
               {q.message && (
                 <p className="mt-4 rounded-xl bg-slate-950/60 p-3 text-sm leading-relaxed text-slate-400">{q.message}</p>

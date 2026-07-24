@@ -79,22 +79,13 @@ export async function loadStaffFromAuth(): Promise<StaffMember[]> {
       name: existing?.name || (user.user_metadata?.full_name as string | undefined) || emailToDisplayName(email),
       email: user.email!,
       phone: existing?.phone || user.phone || "",
-      role: existing?.role || "owner",
+      role: existing?.role || "mechanic",
       active: existing?.active ?? !user.banned_until,
       createdAt: existing?.createdAt || user.created_at,
       lastSignIn: user.last_sign_in_at ?? null,
     };
 
-    if (
-      !existing ||
-      existing.authUserId !== user.id ||
-      existing.id !== user.id ||
-      existing.name !== member.name ||
-      existing.email !== member.email ||
-      existing.phone !== member.phone ||
-      existing.role !== member.role ||
-      existing.active !== member.active
-    ) {
+    if (!existing || existing.authUserId !== user.id || existing.id !== user.id) {
       await sb.from("staff").upsert(staffToRow(member));
     }
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Users } from "lucide-react";
 import type { StaffMember, StaffRole } from "@/lib/shop-types";
-import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 function formatWhen(value?: string | null) {
   if (!value) return "Never signed in";
@@ -104,9 +104,7 @@ export function StaffPanel() {
         </button>
       </div>
 
-      {error && (
-        <p className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p>
-      )}
+      <ErrorBanner message={error} />
 
       {showForm && (
         <form onSubmit={add} className="mb-6 grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:grid-cols-2">

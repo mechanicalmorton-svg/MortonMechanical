@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getContent, saveContent, validateContent } from "@/lib/content";
-import { requireAuth } from "@/lib/admin-api";
+import { requireAuth, requireOwnerOrAdmin } from "@/lib/admin-api";
 
 export async function GET() {
   const { error } = await requireAuth();
@@ -10,7 +10,7 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const { error } = await requireAuth();
+  const { error } = await requireOwnerOrAdmin();
   if (error) return error;
   try {
     const body = await req.json();

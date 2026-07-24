@@ -189,16 +189,6 @@ export async function loadWorkOrders(): Promise<WorkOrder[]> {
   return readJson("work-orders.json", []);
 }
 
-export async function saveWorkOrders(items: WorkOrder[]) {
-  if (isSupabaseConfigured()) {
-    const sb = getSupabaseAdmin()!;
-    await sb.from("work_orders").delete().neq("id", "");
-    if (items.length) await sb.from("work_orders").upsert(items.map(workOrderToRow));
-    return;
-  }
-  writeJson("work-orders.json", items);
-}
-
 export async function upsertWorkOrder(item: WorkOrder) {
   if (isSupabaseConfigured()) {
     await getSupabaseAdmin()!.from("work_orders").upsert(workOrderToRow(item));

@@ -50,7 +50,7 @@ export async function getSupabaseAuthUser(): Promise<AdminUser | null> {
   if (!user?.email || !isAllowedAdminEmail(user.email)) return null;
 
   let name = (user.user_metadata?.full_name as string | undefined) || emailToDisplayName(user.email);
-  let role: StaffRole = "owner";
+  let role: StaffRole = "mechanic";
 
   const admin = getSupabaseAdmin();
   if (admin) {
