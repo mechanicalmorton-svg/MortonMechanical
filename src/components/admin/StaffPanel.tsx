@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Users } from "lucide-react";
 import type { StaffMember, StaffRole } from "@/lib/shop-types";
+import { AdminModal } from "./AdminModal";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 function formatWhen(value?: string | null) {
@@ -99,15 +100,15 @@ export function StaffPanel() {
           title="User Management"
           subtitle="Portal users are synced with Supabase Authentication (@mortonsmechanical.com)."
         />
-        <button type="button" onClick={() => setShowForm(!showForm)} className={btnPrimary}>
+        <button type="button" onClick={() => setShowForm(true)} className={btnPrimary}>
           <Plus className="h-4 w-4" /> Add User
         </button>
       </div>
 
       <ErrorBanner message={error} />
 
-      {showForm && (
-        <form onSubmit={add} className="mb-6 grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:grid-cols-2">
+      <AdminModal open={showForm} onClose={() => setShowForm(false)} title="Add Portal User" wide>
+        <form onSubmit={add} className="grid gap-3 sm:grid-cols-2">
           <input className={inputClass} placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
           <input className={inputClass} placeholder="Email (@mortonsmechanical.com)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
           <input className={inputClass} placeholder="Temporary password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={8} required />
@@ -123,7 +124,7 @@ export function StaffPanel() {
             <button type="button" onClick={() => setShowForm(false)} className={btnSecondary}>Cancel</button>
           </div>
         </form>
-      )}
+      </AdminModal>
 
       {loading ? (
         <p className="text-slate-500">Loading…</p>

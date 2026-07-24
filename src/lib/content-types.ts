@@ -19,6 +19,7 @@ export type SiteContent = {
     bullets: string[];
     imageCaption: string;
     imageSubcaption: string;
+    imageAlt: string;
   };
   trustBar: { label: string; detail: string }[];
   services: { id: string; title: string; description: string; icon: ServiceIcon }[];
@@ -31,6 +32,18 @@ export type SiteContent = {
   pages: {
     contactTitle: string;
     contactSubtitle: string;
+    sidebarDetailsTitle: string;
+    sidebarWhyTitle: string;
+    phoneLabel: string;
+    emailLabel: string;
+    locationLabel: string;
+    hoursLabel: string;
+    form: {
+      submitText: string;
+      successTitle: string;
+      successMessage: string;
+      footerNote: string;
+    };
   };
   about: {
     label: string;
@@ -40,11 +53,13 @@ export type SiteContent = {
     paragraph2: string;
     badgeValue: string;
     badgeLabel: string;
+    imageAlt: string;
+    anchorId: string;
   };
   sections: {
-    services: { label: string; title: string; subtitle: string; bannerText: string };
-    howItWorks: { label: string; title: string; subtitle: string };
-    testimonials: { label: string; title: string; subtitle: string };
+    services: { label: string; title: string; subtitle: string; bannerText: string; anchorId: string };
+    howItWorks: { label: string; title: string; subtitle: string; anchorId: string };
+    testimonials: { label: string; title: string; subtitle: string; anchorId: string };
   };
   header: {
     nav: { href: string; label: string }[];
@@ -89,6 +104,7 @@ export const DEFAULT_CONTENT: SiteContent = {
     ],
     imageCaption: "Fully equipped mobile workshop",
     imageSubcaption: "We travel to you within a 40-mile radius.",
+    imageAlt: "Mechanic performing engine diagnostics on a vehicle",
   },
   trustBar: [
     { label: "Mobile service", detail: "We travel to you" },
@@ -138,6 +154,18 @@ export const DEFAULT_CONTENT: SiteContent = {
   pages: {
     contactTitle: "Request a Quote",
     contactSubtitle: "Fill out the form and our service advisor will contact you the same day.",
+    sidebarDetailsTitle: "Contact details",
+    sidebarWhyTitle: "Why book with us",
+    phoneLabel: "Phone",
+    emailLabel: "Email",
+    locationLabel: "Location",
+    hoursLabel: "Hours",
+    form: {
+      submitText: "Submit request",
+      successTitle: "Request received",
+      successMessage: "Thanks — we'll contact you the same business day to confirm details and provide a quote.",
+      footerNote: "We aim to confirm bookings within business hours the same day.",
+    },
   },
   about: {
     label: "Who we are",
@@ -149,6 +177,8 @@ export const DEFAULT_CONTENT: SiteContent = {
       "Whether it's a check-engine light, a brake job in your driveway, or an emergency breakdown — we treat every job like it matters, because it does.",
     badgeValue: "12 mo",
     badgeLabel: "Workmanship warranty",
+    imageAlt: "Mobile mechanic working on a vehicle at a customer's location",
+    anchorId: "about",
   },
   sections: {
     services: {
@@ -156,16 +186,19 @@ export const DEFAULT_CONTENT: SiteContent = {
       title: "Services",
       subtitle: "From routine maintenance to complex diagnostics — one team, one visit.",
       bannerText: "Quality parts, modern diagnostics, and experienced mechanics — delivered to your driveway.",
+      anchorId: "services",
     },
     howItWorks: {
       label: "Simple process",
       title: "How it works",
       subtitle: "Three steps. No workshop visit required.",
+      anchorId: "how-it-works",
     },
     testimonials: {
       label: "Customer stories",
       title: "Reviews",
       subtitle: "Real feedback from drivers we've helped.",
+      anchorId: "reviews",
     },
   },
   header: {

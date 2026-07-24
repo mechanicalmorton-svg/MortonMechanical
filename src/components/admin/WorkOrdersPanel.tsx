@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ClipboardList, Plus, Trash2 } from "lucide-react";
 import type { StaffMember, WorkOrder } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
+import { AdminModal } from "./AdminModal";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 export function WorkOrdersPanel() {
@@ -97,12 +98,12 @@ export function WorkOrdersPanel() {
     <div className="mx-auto max-w-6xl">
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <PageHeader title="Work Orders" subtitle="Track jobs from open to completion." />
-        <button type="button" onClick={() => setShowForm(!showForm)} className={btnPrimary}><Plus className="h-4 w-4" /> New Work Order</button>
+        <button type="button" onClick={() => setShowForm(true)} className={btnPrimary}><Plus className="h-4 w-4" /> New Work Order</button>
       </div>
       <ErrorBanner message={error} />
 
-      {showForm && (
-        <form onSubmit={add} className="mb-6 grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:grid-cols-2">
+      <AdminModal open={showForm} onClose={() => setShowForm(false)} title="New Work Order" wide>
+        <form onSubmit={add} className="grid gap-3 sm:grid-cols-2">
           <input className={inputClass} placeholder="Customer name" value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} required />
           <input className={inputClass} placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <input className={inputClass} placeholder="Vehicle" value={form.vehicle} onChange={(e) => setForm({ ...form, vehicle: e.target.value })} />
@@ -118,13 +119,13 @@ export function WorkOrdersPanel() {
             ))}
           </select>
           <input className={inputClass} type="date" value={form.scheduledDate} onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })} />
-          <textarea className={inputClass} placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          <textarea className={`${inputClass} sm:col-span-2`} placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           <div className="flex gap-2 sm:col-span-2">
             <button type="submit" className={btnPrimary}>Create work order</button>
             <button type="button" onClick={() => setShowForm(false)} className={btnSecondary}>Cancel</button>
           </div>
         </form>
-      )}
+      </AdminModal>
 
       {loading ? (
         <p className="text-slate-500">Loading…</p>

@@ -25,7 +25,7 @@ export async function Services() {
   const { services, images, sections } = await getContent();
 
   return (
-    <section id="services" className="scroll-mt-24 bg-slate-900/40 py-16 sm:py-20">
+    <section id={sections.services.anchorId} className="scroll-mt-24 bg-slate-900/40 py-16 sm:py-20">
       <div className="mx-auto max-w-screen-xl px-4 sm:px-6">
         <SectionLabel>{sections.services.label}</SectionLabel>
         <SectionTitle subtitle={sections.services.subtitle}>{sections.services.title}</SectionTitle>

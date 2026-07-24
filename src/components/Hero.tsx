@@ -5,7 +5,7 @@ import { getContent } from "@/lib/content";
 import { phoneHref } from "@/lib/content-types";
 
 export async function Hero() {
-  const { hero, site, images } = await getContent();
+  const { hero, site, images, header } = await getContent();
 
   return (
     <section className="relative overflow-hidden border-b border-slate-800/60 bg-slate-950">
@@ -36,7 +36,7 @@ export async function Hero() {
               href="/contact"
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-amber-500 to-pink-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-amber-400 hover:to-pink-500"
             >
-              Request a free quote
+              {header.quoteButtonText}
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             <a
@@ -44,7 +44,7 @@ export async function Hero() {
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-600 px-6 py-3 text-sm font-semibold text-slate-200 transition hover:border-amber-500/50 hover:text-amber-400"
             >
               <Phone className="h-4 w-4" aria-hidden />
-              {site.phone}
+              {header.callButtonText}
             </a>
           </div>
         </div>
@@ -53,7 +53,7 @@ export async function Hero() {
           <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-slate-800/80 shadow-2xl shadow-black/40">
             <Image
               src={images.hero}
-              alt="Mechanic performing engine diagnostics on a vehicle"
+              alt={hero.imageAlt}
               fill
               priority
               className="object-cover"

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Barcode, Minus, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import type { InventoryItem } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
+import { AdminModal } from "./AdminModal";
 import { EmptyState, ErrorBanner, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { SearchableSelect } from "./SearchableSelect";
 
@@ -21,7 +22,7 @@ const CATEGORIES = [
   "Tires",
   "Tools",
   "Other",
-];
+] as const;
 
 const emptyForm = {
   name: "",
@@ -33,6 +34,91 @@ const emptyForm = {
   supplier: "",
   location: "",
 };
+
+function categoryOptions(current?: string) {
+  const set = new Set<string>(CATEGORIES);
+  if (current?.trim()) set.add(current.trim());
+  return [...set].sort((a, b) => {
+    const ai = CATEGORIES.indexOf(a as (typeof CATEGORIES)[number]);
+    const bi = CATEGORIES.indexOf(b as (typeof CATEGORIES)[number]);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+function groupByCategory(items: InventoryItem[]) {
+  const map = new Map<string, InventoryItem[]>();
+  for (const item of items) {
+    const category = item.category?.trim() || "Uncategorized";
+    const list = map.get(category) ?? [];
+    list.push(item);
+    map.set(category, list);
+  }
+
+  const groups: { category: string; items: InventoryItem[] }[] = [];
+  for (const category of CATEGORIES) {
+    const list = map.get(category);
+    if (list?.length) {
+      groups.push({ category, items: list.sort((a, b) => a.name.localeCompare(b.name)) });
+      map.delete(category);
+    }
+  }
+
+  for (const [category, list] of [...map.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    groups.push({ category, items: list.sort((a, b) => a.name.localeCompare(b.name)) });
+  }
+
+  return groups;
+}
+
+function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-950/40">
+      <div className="border-b border-slate-800 px-4 py-3">
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        {description ? <p className="mt-0.5 text-xs text-slate-500">{description}</p> : null}
+      </div>
+      <div className="p-4">{children}</div>
+    </section>
+  );
+}
+
+function FormField({
+  label,
+  htmlFor,
+  hint,
+  required,
+  children,
+  className = "",
+}: {
+  label: string;
+  htmlFor?: string;
+  hint?: string;
+  required?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label htmlFor={htmlFor} className={`block text-sm text-slate-300 ${className}`}>
+      <span className="font-medium text-slate-200">
+        {label}
+        {required ? <span className="text-amber-400"> *</span> : null}
+      </span>
+      <div className="mt-1.5">{children}</div>
+      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+    </label>
+  );
+}
 
 export function InventoryPanel({ lowStockOnly }: Props) {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -135,6 +221,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
   }, [scanMode, handleScan]);
 
   const filtered = lowStockOnly ? items.filter((item) => item.quantity <= item.minStock) : items;
+  const grouped = groupByCategory(filtered);
 
   async function saveItem(e: React.FormEvent) {
     e.preventDefault();
@@ -152,11 +239,21 @@ export function InventoryPanel({ lowStockOnly }: Props) {
     });
     if (message) setError(message);
     else {
-      setShowForm(false);
-      setEditingId(null);
-      setForm(emptyForm);
+      closeModal();
       load();
     }
+  }
+
+  function closeModal() {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  }
+
+  function openAddModal() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowForm(true);
   }
 
   function startEdit(item: InventoryItem) {
@@ -164,7 +261,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
     setForm({
       name: item.name,
       sku: item.sku,
-      category: item.category,
+      category: item.category?.trim() || "General",
       quantity: String(item.quantity),
       minStock: String(item.minStock),
       unitCost: String(item.unitCost),
@@ -216,16 +313,8 @@ export function InventoryPanel({ lowStockOnly }: Props) {
               {scanMode ? "Scan mode on" : "Barcode scan"}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              setEditingId(null);
-              setForm(emptyForm);
-              setShowForm(!showForm);
-            }}
-            className={btnPrimary}
-          >
-            <Plus className="h-4 w-4" /> Add Inventory
+          <button type="button" onClick={openAddModal} className={btnPrimary}>
+            <Plus className="h-4 w-4" /> {lowStockOnly ? "Add Part" : "Add Inventory"}
           </button>
         </div>
       </div>
@@ -260,87 +349,186 @@ export function InventoryPanel({ lowStockOnly }: Props) {
         <p className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">{scanMessage}</p>
       )}
 
-      {showForm && (
-        <form onSubmit={saveItem} className="mb-6 grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:grid-cols-2 lg:grid-cols-3">
-          <input className={inputClass} placeholder="Part name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          <input className={inputClass} placeholder="SKU / barcode" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-          <label className="block text-sm text-slate-400">
-            Category
-            <SearchableSelect
-              value={form.category}
-              onChange={(category) => setForm({ ...form, category })}
-              options={CATEGORIES}
-              placeholder="Category"
-              closeSignal={closeDropdowns}
-              className={`${inputClass} mt-1`}
-            />
-          </label>
-          <input className={inputClass} type="number" placeholder="Quantity" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
-          <input className={inputClass} type="number" placeholder="Min stock" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} />
-          <input className={inputClass} type="number" step="0.01" placeholder="Unit cost" value={form.unitCost} onChange={(e) => setForm({ ...form, unitCost: e.target.value })} />
-          <input className={inputClass} placeholder="Supplier" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
-          <input className={inputClass} placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-          <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
-            <button type="submit" className={btnPrimary}>{editingId ? "Save changes" : "Save item"}</button>
-            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className={btnSecondary}>Cancel</button>
+      <AdminModal
+        open={showForm}
+        onClose={closeModal}
+        title={editingId ? `Edit Part${form.category ? ` · ${form.category}` : ""}` : "Add Part"}
+        wide
+      >
+        <form onSubmit={saveItem} className="space-y-5">
+          <FormSection title="Part identification" description="Name, barcode, and inventory category.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Part name" htmlFor="inv-name" required>
+                <input
+                  id="inv-name"
+                  className={inputClass}
+                  placeholder="e.g. Oil filter — 5W-30 compatible"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  required
+                />
+              </FormField>
+              <FormField label="SKU / barcode" htmlFor="inv-sku" hint="Used for barcode scanning and lookups.">
+                <input
+                  id="inv-sku"
+                  className={inputClass}
+                  placeholder="Scan or enter SKU"
+                  value={form.sku}
+                  onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Category" className="sm:col-span-2" hint="Groups this part under Inventory → All parts.">
+                <SearchableSelect
+                  value={form.category}
+                  onChange={(category) => setForm({ ...form, category })}
+                  options={categoryOptions(form.category)}
+                  placeholder="Select category"
+                  closeSignal={closeDropdowns}
+                  className={inputClass}
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="Stock levels" description="Current quantity and reorder threshold.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Current quantity" htmlFor="inv-qty">
+                <input
+                  id="inv-qty"
+                  className={inputClass}
+                  type="number"
+                  min="0"
+                  value={form.quantity}
+                  onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Minimum stock" htmlFor="inv-min" hint="Low-stock alerts trigger at or below this level.">
+                <input
+                  id="inv-min"
+                  className={inputClass}
+                  type="number"
+                  min="0"
+                  value={form.minStock}
+                  onChange={(e) => setForm({ ...form, minStock: e.target.value })}
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="Pricing & supplier" description="Unit cost and vendor information.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Unit cost ($)" htmlFor="inv-cost">
+                <input
+                  id="inv-cost"
+                  className={inputClass}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.unitCost}
+                  onChange={(e) => setForm({ ...form, unitCost: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Supplier / vendor" htmlFor="inv-supplier">
+                <input
+                  id="inv-supplier"
+                  className={inputClass}
+                  placeholder="e.g. NAPA, AutoZone"
+                  value={form.supplier}
+                  onChange={(e) => setForm({ ...form, supplier: e.target.value })}
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="Storage" description="Where this part is kept in the shop.">
+            <FormField label="Shop location" htmlFor="inv-location" hint="Shelf, bin, van compartment, etc.">
+              <input
+                id="inv-location"
+                className={inputClass}
+                placeholder="e.g. Van 1 — rear bin"
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+              />
+            </FormField>
+          </FormSection>
+
+          <div className="flex flex-wrap gap-2 border-t border-slate-800 pt-4">
+            <button type="submit" className={btnPrimary}>{editingId ? "Save changes" : "Save part"}</button>
+            <button type="button" onClick={closeModal} className={btnSecondary}>Cancel</button>
           </div>
         </form>
-      )}
+      </AdminModal>
 
       {loading ? (
         <p className="text-slate-500">Loading inventory…</p>
       ) : !filtered.length ? (
         <EmptyState icon={Package} title={lowStockOnly ? "All stocked up" : "No inventory yet"} text="Add your first part to get started." />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-800/80">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-800 bg-slate-900/60 text-xs uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Part</th>
-                <th className="hidden px-4 py-3 sm:table-cell">SKU</th>
-                <th className="px-4 py-3">Qty</th>
-                <th className="hidden px-4 py-3 md:table-cell">Category</th>
-                <th className="hidden px-4 py-3 lg:table-cell">Location</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80">
-              {filtered.map((item) => (
-                <tr key={item.id} className="bg-slate-950/20 transition hover:bg-slate-900/40">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {item.quantity <= item.minStock && <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />}
-                      <div>
-                        <p className="font-medium text-white">{item.name}</p>
-                        <p className="text-xs text-slate-500">${item.unitCost.toFixed(2)} each</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="hidden px-4 py-3 font-mono text-slate-400 sm:table-cell">{item.sku || "—"}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => adjustStock(item, -1)} className={btnSecondary} aria-label="Decrease stock">
-                        <Minus className="h-3.5 w-3.5" />
-                      </button>
-                      <span className={item.quantity <= item.minStock ? "font-semibold text-amber-300" : "text-slate-300"}>{item.quantity}</span>
-                      <button type="button" onClick={() => adjustStock(item, 1)} className={btnSecondary} aria-label="Increase stock">
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                      <span className="text-slate-600">/ {item.minStock}</span>
-                    </div>
-                  </td>
-                  <td className="hidden px-4 py-3 text-slate-400 md:table-cell">{item.category}</td>
-                  <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">{item.location ?? "—"}</td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button type="button" onClick={() => startEdit(item)} className={btnSecondary}><Pencil className="h-3.5 w-3.5" /></button>
-                      <button type="button" onClick={() => remove(item.id)} className={btnDanger}><Trash2 className="h-3.5 w-3.5" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-6">
+          {grouped.map(({ category, items: categoryItems }) => (
+            <section key={category} className="overflow-hidden rounded-2xl border border-slate-800/80">
+              <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/60 px-4 py-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-white">{category}</h2>
+                  <p className="text-xs text-slate-500">{categoryItems.length} part{categoryItems.length === 1 ? "" : "s"}</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-slate-800 bg-slate-950/40 text-xs uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Part</th>
+                      <th className="hidden px-4 py-3 sm:table-cell">SKU</th>
+                      <th className="px-4 py-3">Qty</th>
+                      <th className="hidden px-4 py-3 lg:table-cell">Supplier</th>
+                      <th className="hidden px-4 py-3 md:table-cell">Location</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80">
+                    {categoryItems.map((item) => (
+                      <tr key={item.id} className="bg-slate-950/20 transition hover:bg-slate-900/40">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {item.quantity <= item.minStock && <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />}
+                            <div>
+                              <p className="font-medium text-white">{item.name}</p>
+                              <p className="text-xs text-slate-500">${item.unitCost.toFixed(2)} each</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="hidden px-4 py-3 font-mono text-slate-400 sm:table-cell">{item.sku || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => adjustStock(item, -1)} className={btnSecondary} aria-label="Decrease stock">
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                            <span className={item.quantity <= item.minStock ? "font-semibold text-amber-300" : "text-slate-300"}>{item.quantity}</span>
+                            <button type="button" onClick={() => adjustStock(item, 1)} className={btnSecondary} aria-label="Increase stock">
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                            <span className="text-slate-600">/ {item.minStock}</span>
+                          </div>
+                        </td>
+                        <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">{item.supplier || "—"}</td>
+                        <td className="hidden px-4 py-3 text-slate-400 md:table-cell">{item.location ?? "—"}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button type="button" onClick={() => startEdit(item)} className={btnSecondary} aria-label={`Edit ${item.name}`}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button type="button" onClick={() => remove(item.id)} className={btnDanger} aria-label={`Remove ${item.name}`}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </div>

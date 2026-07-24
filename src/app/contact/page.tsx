@@ -45,17 +45,17 @@ export default async function ContactPage() {
 
         <div className="mx-auto grid max-w-screen-xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-3">
           <div className="rounded-xl border border-slate-800/60 bg-slate-900/20 p-6 sm:p-8 lg:col-span-2">
-            <ContactForm serviceOptions={serviceOptions} />
+            <ContactForm serviceOptions={serviceOptions} form={pages.form} />
           </div>
 
           <aside className="space-y-5">
             <div className="rounded-xl border border-slate-800/60 bg-slate-900/30 p-5">
-              <h2 className="text-lg font-semibold text-slate-100">Contact details</h2>
+              <h2 className="text-lg font-semibold text-slate-100">{pages.sidebarDetailsTitle}</h2>
               <ul className="mt-4 space-y-4 text-sm">
                 <li className="flex gap-3">
                   <Phone className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" aria-hidden />
                   <div>
-                    <p className="font-medium text-slate-300">Phone</p>
+                    <p className="font-medium text-slate-300">{pages.phoneLabel}</p>
                     <a href={phoneHref(site.phone)} className="text-slate-100 transition hover:text-amber-400">
                       {site.phone}
                     </a>
@@ -64,7 +64,7 @@ export default async function ContactPage() {
                 <li className="flex gap-3">
                   <Mail className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" aria-hidden />
                   <div>
-                    <p className="font-medium text-slate-300">Email</p>
+                    <p className="font-medium text-slate-300">{pages.emailLabel}</p>
                     <a href={emailHref(site.email)} className="text-slate-100 transition hover:text-amber-400">
                       {site.email}
                     </a>
@@ -73,14 +73,14 @@ export default async function ContactPage() {
                 <li className="flex gap-3">
                   <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" aria-hidden />
                   <div>
-                    <p className="font-medium text-slate-300">Location</p>
+                    <p className="font-medium text-slate-300">{pages.locationLabel}</p>
                     <p className="text-slate-400">{site.address}</p>
                   </div>
                 </li>
                 <li className="flex gap-3">
                   <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" aria-hidden />
                   <div>
-                    <p className="font-medium text-slate-300">Hours</p>
+                    <p className="font-medium text-slate-300">{pages.hoursLabel}</p>
                     <ul className="mt-1 space-y-0.5 text-slate-400">
                       {site.hours.map((h) => (
                         <li key={h.days}>
@@ -94,7 +94,7 @@ export default async function ContactPage() {
             </div>
 
             <div className="rounded-xl border border-slate-800/60 bg-slate-900/30 p-5">
-              <h2 className="text-lg font-semibold text-slate-100">Why book with us</h2>
+              <h2 className="text-lg font-semibold text-slate-100">{pages.sidebarWhyTitle}</h2>
               <ul className="mt-4 space-y-3">
                 {whyUs.map((item) => (
                   <li key={item.title} className="text-sm">

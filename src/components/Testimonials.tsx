@@ -15,7 +15,7 @@ export async function Testimonials() {
   const { testimonials, sections } = await getContent();
 
   return (
-    <section id="reviews" className="scroll-mt-24 bg-slate-900/40 py-16 sm:py-20">
+    <section id={sections.testimonials.anchorId} className="scroll-mt-24 bg-slate-900/40 py-16 sm:py-20">
       <div className="mx-auto max-w-screen-xl px-4 sm:px-6">
         <SectionLabel>{sections.testimonials.label}</SectionLabel>
         <SectionTitle subtitle={sections.testimonials.subtitle}>{sections.testimonials.title}</SectionTitle>

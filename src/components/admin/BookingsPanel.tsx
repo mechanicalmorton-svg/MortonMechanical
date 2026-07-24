@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Calendar, Plus, Trash2 } from "lucide-react";
 import type { Booking } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
+import { AdminModal } from "./AdminModal";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 export function BookingsPanel() {
@@ -74,12 +75,12 @@ export function BookingsPanel() {
     <div className="mx-auto max-w-6xl">
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <PageHeader title="Bookings" subtitle="Schedule and manage customer appointments." />
-        <button type="button" onClick={() => setShowForm(!showForm)} className={btnPrimary}><Plus className="h-4 w-4" /> New Booking</button>
+        <button type="button" onClick={() => setShowForm(true)} className={btnPrimary}><Plus className="h-4 w-4" /> New Booking</button>
       </div>
       <ErrorBanner message={error} />
 
-      {showForm && (
-        <form onSubmit={add} className="mb-6 grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:grid-cols-2">
+      <AdminModal open={showForm} onClose={() => setShowForm(false)} title="New Booking" wide>
+        <form onSubmit={add} className="grid gap-3 sm:grid-cols-2">
           <input className={inputClass} placeholder="Customer name" value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} required />
           <input className={inputClass} placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
           <input className={inputClass} placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
@@ -87,13 +88,13 @@ export function BookingsPanel() {
           <input className={inputClass} type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           <input className={inputClass} type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
           <input className={inputClass} placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-          <textarea className={inputClass} placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          <textarea className={`${inputClass} sm:col-span-2`} placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           <div className="flex gap-2 sm:col-span-2">
             <button type="submit" className={btnPrimary}>Create booking</button>
             <button type="button" onClick={() => setShowForm(false)} className={btnSecondary}>Cancel</button>
           </div>
         </form>
-      )}
+      </AdminModal>
 
       {loading ? (
         <p className="text-slate-500">Loading…</p>

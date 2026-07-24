@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, Truck } from "lucide-react";
 import type { FleetStatus, FleetVehicle } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
+import { AdminModal } from "./AdminModal";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
-import { SearchableSelect } from "./SearchableSelect";
+import { VehicleMakeModelFields } from "./VehicleMakeModelFields";
+
+type MakeOption = { id: number; name: string };
 
 const VEHICLE_TYPES = ["Service Van", "Pickup Truck", "Box Truck", "SUV", "Car", "Trailer", "Other"];
 const YEARS = Array.from({ length: new Date().getFullYear() - 1979 }, (_, i) => String(new Date().getFullYear() - i));
@@ -15,6 +18,7 @@ const emptyForm = {
   plate: "",
   type: "Service Van",
   make: "",
+  makeId: null as number | null,
   model: "",
   year: "",
   mileage: "",
@@ -29,7 +33,7 @@ export function FleetPanel() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [makes, setMakes] = useState<string[]>([]);
+  const [makes, setMakes] = useState<MakeOption[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [loadingMakes, setLoadingMakes] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -49,7 +53,7 @@ export function FleetPanel() {
 
   useEffect(() => {
     setLoadingMakes(true);
-    adminGet<string[]>("/api/admin/vehicles/makes")
+    adminGet<MakeOption[]>("/api/admin/vehicles/makes")
       .then(({ data, error: message }) => {
         if (message) setError(message);
         else setMakes(data ?? []);
@@ -64,6 +68,7 @@ export function FleetPanel() {
     }
     setLoadingModels(true);
     const params = new URLSearchParams({ make: form.make });
+    if (form.makeId) params.set("makeId", String(form.makeId));
     if (form.year) params.set("year", form.year);
     adminGet<string[]>(`/api/admin/vehicles/models?${params}`)
       .then(({ data, error: message }) => {
@@ -71,15 +76,21 @@ export function FleetPanel() {
         else setModels(data ?? []);
       })
       .finally(() => setLoadingModels(false));
-  }, [form.make, form.year]);
+  }, [form.make, form.makeId, form.year]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const payload = {
       ...(editingId ? { id: editingId } : {}),
-      ...form,
+      name: form.name,
+      plate: form.plate,
+      type: form.type,
+      make: form.make,
+      model: form.model,
       year: form.year ? Number(form.year) : undefined,
       mileage: form.mileage ? Number(form.mileage) : undefined,
+      lastService: form.lastService,
+      status: form.status,
     };
     const { error: message } = await adminSend("/api/admin/fleet", {
       method: editingId ? "PATCH" : "POST",
@@ -96,12 +107,14 @@ export function FleetPanel() {
   }
 
   function startEdit(vehicle: FleetVehicle) {
+    const matchedMake = makes.find((m) => m.name.toLowerCase() === (vehicle.make ?? "").toLowerCase());
     setEditingId(vehicle.id);
     setForm({
       name: vehicle.name,
       plate: vehicle.plate,
       type: vehicle.type,
       make: vehicle.make ?? "",
+      makeId: matchedMake?.id ?? null,
       model: vehicle.model ?? "",
       year: vehicle.year ? String(vehicle.year) : "",
       mileage: vehicle.mileage ? String(vehicle.mileage) : "",
@@ -121,6 +134,18 @@ export function FleetPanel() {
     else load();
   }
 
+  function closeModal() {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  }
+
+  function openAddModal() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowForm(true);
+  }
+
   async function remove(id: string) {
     if (!confirm("Remove this vehicle?")) return;
     const { error: message } = await adminSend("/api/admin/fleet", {
@@ -135,23 +160,23 @@ export function FleetPanel() {
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-        <PageHeader title="Fleet Management" subtitle="Track mobile service vans and vehicle maintenance." />
-        <button
-          type="button"
-          onClick={() => {
-            setEditingId(null);
-            setForm(emptyForm);
-            setShowForm(!showForm);
-          }}
-          className={btnPrimary}
-        >
+        <PageHeader
+          title="Fleet Management"
+          subtitle="Full NHTSA vehicle database — every make and model. Use the filter box to search, or scroll the dropdown."
+        />
+        <button type="button" onClick={openAddModal} className={btnPrimary}>
           <Plus className="h-4 w-4" /> Add Vehicle
         </button>
       </div>
       <ErrorBanner message={error} />
 
-      {showForm && (
-        <form onSubmit={save} className="mb-6 grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:grid-cols-2 lg:grid-cols-3">
+      <AdminModal
+        open={showForm}
+        onClose={closeModal}
+        title={editingId ? "Edit Vehicle" : "Add Vehicle"}
+        wide
+      >
+        <form onSubmit={save} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <input className={inputClass} placeholder="Vehicle name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
           <input className={inputClass} placeholder="Plate" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} required />
           <select className={inputClass} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
@@ -159,31 +184,19 @@ export function FleetPanel() {
               <option key={type} value={type}>{type}</option>
             ))}
           </select>
-          <label className="block text-sm text-slate-400">
-            Make
-            <SearchableSelect
-              value={form.make}
-              onChange={(make) => setForm({ ...form, make, model: "" })}
-              options={makes}
-              loading={loadingMakes}
-              placeholder="Search make…"
-              className={`${inputClass} mt-1`}
-            />
-          </label>
-          <label className="block text-sm text-slate-400">
-            Model
-            <SearchableSelect
-              value={form.model}
-              onChange={(model) => setForm({ ...form, model })}
-              options={models}
-              loading={loadingModels}
-              disabled={!form.make.trim()}
-              placeholder={form.make ? "Search model…" : "Select make first"}
-              className={`${inputClass} mt-1`}
-            />
-          </label>
-          <select className={inputClass} value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value, model: "" })}>
-            <option value="">Year</option>
+          <VehicleMakeModelFields
+            make={form.make}
+            makeId={form.makeId}
+            model={form.model}
+            makes={makes}
+            models={models}
+            loadingMakes={loadingMakes}
+            loadingModels={loadingModels}
+            onMakeChange={(make, makeId) => setForm({ ...form, make, makeId, model: "" })}
+            onModelChange={(model) => setForm({ ...form, model })}
+          />
+          <select className={inputClass} value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })}>
+            <option value="">Year (optional — narrows models)</option>
             {YEARS.map((year) => (
               <option key={year} value={year}>{year}</option>
             ))}
@@ -197,10 +210,10 @@ export function FleetPanel() {
           </select>
           <div className="flex gap-2 lg:col-span-3">
             <button type="submit" className={btnPrimary}>{editingId ? "Save changes" : "Add vehicle"}</button>
-            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className={btnSecondary}>Cancel</button>
+            <button type="button" onClick={closeModal} className={btnSecondary}>Cancel</button>
           </div>
         </form>
-      )}
+      </AdminModal>
 
       {loading ? (
         <p className="text-slate-500">Loading…</p>

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import type { SiteContent } from "@/lib/content-types";
+
 type FormState = {
   name: string;
   phone: string;
@@ -13,9 +15,12 @@ type FormState = {
   consent: boolean;
 };
 
-type Props = { serviceOptions: string[] };
+type Props = {
+  serviceOptions: string[];
+  form: SiteContent["pages"]["form"];
+};
 
-export function ContactForm({ serviceOptions }: Props) {
+export function ContactForm({ serviceOptions, form: formCopy }: Props) {
   const initial: FormState = {
     name: "",
     phone: "",
@@ -55,10 +60,8 @@ export function ContactForm({ serviceOptions }: Props) {
   if (status === "success") {
     return (
       <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-8 text-center">
-        <h3 className="text-xl font-bold text-white">Request received</h3>
-        <p className="mt-2 text-slate-300">
-          Thanks — we&apos;ll contact you the same business day to confirm details and provide a quote.
-        </p>
+        <h3 className="text-xl font-bold text-white">{formCopy.successTitle}</h3>
+        <p className="mt-2 text-slate-300">{formCopy.successMessage}</p>
         <button
           type="button"
           className="mt-6 text-sm font-semibold text-amber-400 hover:text-amber-300"
@@ -220,9 +223,9 @@ export function ContactForm({ serviceOptions }: Props) {
         disabled={status === "loading"}
         className="w-full rounded-lg bg-gradient-to-r from-amber-500 to-pink-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-amber-400 hover:to-pink-500 disabled:opacity-60 sm:w-auto"
       >
-        {status === "loading" ? "Sending…" : "Submit request"}
+        {status === "loading" ? "Sending…" : formCopy.submitText}
       </button>
-      <p className="text-xs text-slate-500">We aim to confirm bookings within business hours the same day.</p>
+      <p className="text-xs text-slate-500">{formCopy.footerNote}</p>
     </form>
   );
 }

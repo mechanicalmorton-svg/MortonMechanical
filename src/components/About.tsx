@@ -6,14 +6,14 @@ export async function About() {
   const { about, whyUs, images } = await getContent();
 
   return (
-    <section id="about" className="scroll-mt-24 border-y border-slate-800/60 bg-slate-950 py-16 sm:py-20">
+    <section id={about.anchorId} className="scroll-mt-24 border-y border-slate-800/60 bg-slate-950 py-16 sm:py-20">
       <div className="mx-auto max-w-screen-xl px-4 sm:px-6">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           <div className="relative order-2 lg:order-1">
             <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-slate-800/80 sm:aspect-[5/4]">
               <Image
                 src={images.about}
-                alt="Mobile mechanic working on a vehicle at a customer's location"
+                alt={about.imageAlt}
                 fill
                 className="object-cover"
                 sizes="(max-width: 1024px) 100vw, 50vw"

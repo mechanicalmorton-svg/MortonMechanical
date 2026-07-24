@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import type { ServiceIcon, SiteContent } from "@/lib/content-types";
+import { normalizeContent } from "@/lib/content-normalize";
 import { PageHeader, btnPrimary, inputClass } from "./admin-ui";
 
 const input = `${inputClass} mt-1`;
@@ -54,7 +55,7 @@ export function ContentEditor() {
   useEffect(() => {
     fetch("/api/admin/content")
       .then((r) => r.json())
-      .then(setContent)
+      .then((data) => setContent(normalizeContent(data)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -78,7 +79,7 @@ export function ContentEditor() {
       setError(data.error ?? "Could not save.");
       return;
     }
-    setContent(data.content);
+    setContent(normalizeContent(data.content ?? data));
     setMessage("Site contents saved. Changes are live on your website.");
   }
 
@@ -158,6 +159,9 @@ export function ContentEditor() {
         </Panel>
 
         <Panel title="Header & navigation">
+          <p className="text-xs text-slate-500">
+            Nav links like <code className="text-amber-400">/#services</code> must match each section&apos;s anchor ID below.
+          </p>
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Call button text" value={content.header.callButtonText} onChange={(v) => patch((c) => { c.header.callButtonText = v; return c; })} />
             <Field label="Portal button text" value={content.header.portalButtonText} onChange={(v) => patch((c) => { c.header.portalButtonText = v; return c; })} />
@@ -185,6 +189,9 @@ export function ContentEditor() {
         </Panel>
 
         <Panel title="Hero section">
+          <p className="text-xs text-slate-500">
+            Primary and call buttons use the same text as Header &amp; navigation (Quote / Call buttons).
+          </p>
           <Field label="Eyebrow" value={content.hero.eyebrow} onChange={(v) => patch((c) => { c.hero.eyebrow = v; return c; })} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Title line 1" value={content.hero.title} onChange={(v) => patch((c) => { c.hero.title = v; return c; })} />
@@ -220,6 +227,7 @@ export function ContentEditor() {
           </div>
           <Field label="Image caption" value={content.hero.imageCaption} onChange={(v) => patch((c) => { c.hero.imageCaption = v; return c; })} />
           <Field label="Image subcaption" value={content.hero.imageSubcaption} onChange={(v) => patch((c) => { c.hero.imageSubcaption = v; return c; })} />
+          <Field label="Hero image alt text" value={content.hero.imageAlt} onChange={(v) => patch((c) => { c.hero.imageAlt = v; return c; })} />
         </Panel>
 
         <Panel title="Trust bar">
@@ -262,6 +270,7 @@ export function ContentEditor() {
         </Panel>
 
         <Panel title="Services section">
+          <Field label="Section anchor ID" value={content.sections.services.anchorId} onChange={(v) => patch((c) => { c.sections.services.anchorId = v; return c; })} />
           <Field label="Section label" value={content.sections.services.label} onChange={(v) => patch((c) => { c.sections.services.label = v; return c; })} />
           <Field label="Section title" value={content.sections.services.title} onChange={(v) => patch((c) => { c.sections.services.title = v; return c; })} />
           <Field label="Section subtitle" value={content.sections.services.subtitle} onChange={(v) => patch((c) => { c.sections.services.subtitle = v; return c; })} />
@@ -328,6 +337,7 @@ export function ContentEditor() {
         </Panel>
 
         <Panel title="How it works">
+          <Field label="Section anchor ID" value={content.sections.howItWorks.anchorId} onChange={(v) => patch((c) => { c.sections.howItWorks.anchorId = v; return c; })} />
           <Field label="Section label" value={content.sections.howItWorks.label} onChange={(v) => patch((c) => { c.sections.howItWorks.label = v; return c; })} />
           <Field label="Section title" value={content.sections.howItWorks.title} onChange={(v) => patch((c) => { c.sections.howItWorks.title = v; return c; })} />
           <Field label="Section subtitle" value={content.sections.howItWorks.subtitle} onChange={(v) => patch((c) => { c.sections.howItWorks.subtitle = v; return c; })} />
@@ -361,6 +371,7 @@ export function ContentEditor() {
         </Panel>
 
         <Panel title="About section">
+          <Field label="Section anchor ID" value={content.about.anchorId} onChange={(v) => patch((c) => { c.about.anchorId = v; return c; })} />
           <Field label="Section label" value={content.about.label} onChange={(v) => patch((c) => { c.about.label = v; return c; })} />
           <Field label="Section title" value={content.about.title} onChange={(v) => patch((c) => { c.about.title = v; return c; })} />
           <Field label="Section subtitle" value={content.about.subtitle} onChange={(v) => patch((c) => { c.about.subtitle = v; return c; })} />
@@ -370,6 +381,7 @@ export function ContentEditor() {
             <Field label="Badge value" value={content.about.badgeValue} onChange={(v) => patch((c) => { c.about.badgeValue = v; return c; })} />
             <Field label="Badge label" value={content.about.badgeLabel} onChange={(v) => patch((c) => { c.about.badgeLabel = v; return c; })} />
           </div>
+          <Field label="About image alt text" value={content.about.imageAlt} onChange={(v) => patch((c) => { c.about.imageAlt = v; return c; })} />
           <div className="space-y-3">
             <p className="text-sm font-medium text-slate-300">Why choose us cards</p>
             {content.whyUs.map((item, i) => (
@@ -392,6 +404,7 @@ export function ContentEditor() {
         </Panel>
 
         <Panel title="Reviews / testimonials">
+          <Field label="Section anchor ID" value={content.sections.testimonials.anchorId} onChange={(v) => patch((c) => { c.sections.testimonials.anchorId = v; return c; })} />
           <Field label="Section label" value={content.sections.testimonials.label} onChange={(v) => patch((c) => { c.sections.testimonials.label = v; return c; })} />
           <Field label="Section title" value={content.sections.testimonials.title} onChange={(v) => patch((c) => { c.sections.testimonials.title = v; return c; })} />
           <Field label="Section subtitle" value={content.sections.testimonials.subtitle} onChange={(v) => patch((c) => { c.sections.testimonials.subtitle = v; return c; })} />
@@ -434,6 +447,20 @@ export function ContentEditor() {
         <Panel title="Contact page">
           <Field label="Page title" value={content.pages.contactTitle} onChange={(v) => patch((c) => { c.pages.contactTitle = v; return c; })} />
           <Field label="Page subtitle" value={content.pages.contactSubtitle} onChange={(v) => patch((c) => { c.pages.contactSubtitle = v; return c; })} multiline />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Sidebar: details heading" value={content.pages.sidebarDetailsTitle} onChange={(v) => patch((c) => { c.pages.sidebarDetailsTitle = v; return c; })} />
+            <Field label="Sidebar: why book heading" value={content.pages.sidebarWhyTitle} onChange={(v) => patch((c) => { c.pages.sidebarWhyTitle = v; return c; })} />
+            <Field label="Phone label" value={content.pages.phoneLabel} onChange={(v) => patch((c) => { c.pages.phoneLabel = v; return c; })} />
+            <Field label="Email label" value={content.pages.emailLabel} onChange={(v) => patch((c) => { c.pages.emailLabel = v; return c; })} />
+            <Field label="Location label" value={content.pages.locationLabel} onChange={(v) => patch((c) => { c.pages.locationLabel = v; return c; })} />
+            <Field label="Hours label" value={content.pages.hoursLabel} onChange={(v) => patch((c) => { c.pages.hoursLabel = v; return c; })} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Form submit button" value={content.pages.form.submitText} onChange={(v) => patch((c) => { c.pages.form.submitText = v; return c; })} />
+            <Field label="Form success title" value={content.pages.form.successTitle} onChange={(v) => patch((c) => { c.pages.form.successTitle = v; return c; })} />
+          </div>
+          <Field label="Form success message" value={content.pages.form.successMessage} onChange={(v) => patch((c) => { c.pages.form.successMessage = v; return c; })} multiline />
+          <Field label="Form footer note" value={content.pages.form.footerNote} onChange={(v) => patch((c) => { c.pages.form.footerNote = v; return c; })} />
           <div className="space-y-2">
             <p className="text-sm text-slate-300">Quote form service options</p>
             {content.serviceOptions.map((opt, i) => (

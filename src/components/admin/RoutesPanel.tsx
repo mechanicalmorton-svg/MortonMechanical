@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, MapPin, Plus, Route, Trash2 } from "lucide-react";
 import type { FleetVehicle, RoutePlan, RouteStop, StaffMember } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
+import { AdminModal } from "./AdminModal";
 import { EmptyState, ErrorBanner, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 type Props = { todayOnly?: boolean; userId?: string };
@@ -124,13 +125,13 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
           subtitle={todayOnly ? "Routes assigned to you for today." : "Plan daily mobile service routes and assign drivers."}
         />
         {!todayOnly && (
-          <button type="button" onClick={() => setShowForm(!showForm)} className={btnPrimary}><Plus className="h-4 w-4" /> New Route</button>
+          <button type="button" onClick={() => setShowForm(true)} className={btnPrimary}><Plus className="h-4 w-4" /> New Route</button>
         )}
       </div>
       <ErrorBanner message={error} />
 
-      {showForm && (
-        <form onSubmit={createRoute} className="mb-6 grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:grid-cols-2">
+      <AdminModal open={showForm} onClose={() => setShowForm(false)} title="New Route" wide>
+        <form onSubmit={createRoute} className="grid gap-3 sm:grid-cols-2">
           <input className={inputClass} type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           <select className={inputClass} value={form.driverId} onChange={(e) => setForm({ ...form, driverId: e.target.value })}>
             <option value="">Assign driver</option>
@@ -153,7 +154,7 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
             <button type="button" onClick={() => setShowForm(false)} className={btnSecondary}>Cancel</button>
           </div>
         </form>
-      )}
+      </AdminModal>
 
       {loading ? (
         <p className="text-slate-500">Loading routes…</p>

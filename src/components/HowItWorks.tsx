@@ -5,7 +5,7 @@ export async function HowItWorks() {
   const { howItWorks, sections } = await getContent();
 
   return (
-    <section className="border-y border-slate-800/60 bg-slate-950 py-16 sm:py-20">
+    <section id={sections.howItWorks.anchorId} className="scroll-mt-24 border-y border-slate-800/60 bg-slate-950 py-16 sm:py-20">
       <div className="mx-auto max-w-screen-xl px-4 sm:px-6">
         <SectionLabel>{sections.howItWorks.label}</SectionLabel>
         <SectionTitle subtitle={sections.howItWorks.subtitle}>{sections.howItWorks.title}</SectionTitle>
