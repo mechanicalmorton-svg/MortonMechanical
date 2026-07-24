@@ -91,6 +91,8 @@ create table if not exists customer_vehicles (
 
 create table if not exists bookings (
   id text primary key,
+  customer_id text,
+  quote_id text,
   customer_name text not null,
   phone text not null,
   email text,
