@@ -55,6 +55,8 @@ export type WorkOrder = {
 
 export type Booking = {
   id: string;
+  customerId?: string;
+  quoteId?: string;
   customerName: string;
   phone: string;
   email?: string;
