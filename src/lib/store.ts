@@ -4,8 +4,18 @@ import path from "node:path";
 export const DATA_DIR = path.join(process.cwd(), "data");
 export const LOGS_DIR = path.join(DATA_DIR, "logs");
 
-for (const dir of [DATA_DIR, LOGS_DIR]) {
-  fs.mkdirSync(dir, { recursive: true });
+let dataDirsReady = false;
+
+function ensureDataDirs() {
+  if (dataDirsReady) return;
+  dataDirsReady = true;
+  for (const dir of [DATA_DIR, LOGS_DIR]) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch {
+      /* Read-only filesystem (e.g. Vercel) — JSON fallback writes will fail gracefully. */
+    }
+  }
 }
 
 export function readJson<T>(name: string, fallback: T): T {
@@ -18,6 +28,7 @@ export function readJson<T>(name: string, fallback: T): T {
 }
 
 export function writeJson(name: string, value: unknown) {
+  ensureDataDirs();
   const file = path.join(DATA_DIR, name);
   const tmp = file + ".tmp";
   fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
@@ -25,6 +36,7 @@ export function writeJson(name: string, value: unknown) {
 }
 
 export function appendLog(name: string, entry: unknown) {
+  ensureDataDirs();
   fs.appendFileSync(path.join(LOGS_DIR, name), JSON.stringify(entry) + "\n");
 }
 

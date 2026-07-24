@@ -1,9 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { getPublishableKey, getSupabaseUrl, isSupabaseConfigured } from "./server";
+import { getPublishableKey, getSupabaseUrl, isSupabaseAuthConfigured } from "./server";
 
 export async function createAuthServerClient() {
-  if (!isSupabaseConfigured()) return null;
+  if (!isSupabaseAuthConfigured()) return null;
   const cookieStore = await cookies();
 
   return createServerClient(getSupabaseUrl()!, getPublishableKey()!, {
