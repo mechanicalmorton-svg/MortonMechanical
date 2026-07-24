@@ -15,12 +15,16 @@ export function StatCard({
   hint,
   icon: Icon,
   accent = "amber",
+  onClick,
+  active,
 }: {
   label: string;
   value: string | number;
   hint?: string;
   icon: LucideIcon;
   accent?: "amber" | "pink" | "emerald" | "purple" | "red";
+  onClick?: () => void;
+  active?: boolean;
 }) {
   const accents = {
     amber: "from-amber-500/20 to-amber-600/5 text-amber-400 ring-amber-500/20",
@@ -30,8 +34,14 @@ export function StatCard({
     red: "from-red-500/20 to-red-600/5 text-red-400 ring-red-500/20",
   };
 
-  return (
-    <div className="group relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/50 p-5 transition hover:border-slate-700/80 hover:shadow-lg hover:shadow-black/20">
+  const className = `group relative w-full overflow-hidden rounded-2xl border p-5 text-left transition ${
+    active
+      ? "border-amber-500/40 bg-amber-500/10 ring-1 ring-amber-500/30"
+      : "border-slate-800/80 bg-slate-900/50 hover:border-slate-700/80 hover:shadow-lg hover:shadow-black/20"
+  } ${onClick ? "cursor-pointer" : ""}`;
+
+  const content = (
+    <>
       <div className="pointer-events-none absolute -right-4 -top-4 h-24 w-24 rounded-full bg-gradient-to-br from-amber-500/5 to-pink-500/5 blur-2xl transition group-hover:from-amber-500/10 group-hover:to-pink-500/10" />
       <div className="relative flex items-start justify-between gap-3">
         <div>
@@ -43,8 +53,18 @@ export function StatCard({
           <Icon className="h-5 w-5" />
         </span>
       </div>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
 export function Panel({

@@ -55,7 +55,7 @@ export function VehicleMakeModelFields({
     <>
       <label className="block text-sm text-slate-400 sm:col-span-2 lg:col-span-1">
         Make{required ? <span className="text-amber-400"> *</span> : null}
-        <p className="mt-0.5 text-xs font-normal text-slate-500">From NHTSA catalog, or type any make.</p>
+        <p className="mt-0.5 text-xs font-normal text-slate-500">Pick from catalog or type any make below.</p>
         <div className="mt-1 space-y-2">
           <input
             className={inputClass}
@@ -89,8 +89,18 @@ export function VehicleMakeModelFields({
             )}
           </div>
           {make && !makeId && (
-            <p className="text-xs text-amber-300">Using saved make: {make}</p>
+            <p className="text-xs text-amber-300">Using manual make: {make}</p>
           )}
+          <input
+            className={inputClass}
+            placeholder="Or type make manually"
+            value={make}
+            onChange={(e) => {
+              onMakeChange(e.target.value, null);
+              setMakeFilter("");
+            }}
+            disabled={disabled}
+          />
         </div>
       </label>
 
