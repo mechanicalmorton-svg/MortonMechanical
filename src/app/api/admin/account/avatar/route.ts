@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/admin-api";
 import { removeAccountAvatar, uploadAccountAvatar } from "@/lib/account-profile";
+import { sanitizeAuthError } from "@/lib/auth-errors";
+
+function errorJson(err: unknown, fallback: string) {
+  const message = err instanceof Error ? err.message : fallback;
+  return NextResponse.json({ error: sanitizeAuthError(message, fallback) }, { status: 400 });
+}
 
 export async function POST(req: Request) {
   const { user, error } = await requireAuth();
@@ -16,7 +22,7 @@ export async function POST(req: Request) {
     const avatarUrl = await uploadAccountAvatar(user.id, file, file.type || "image/jpeg");
     return NextResponse.json({ avatarUrl });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not upload photo." }, { status: 400 });
+    return errorJson(err, "Could not upload photo.");
   }
 }
 
@@ -28,6 +34,6 @@ export async function DELETE() {
     await removeAccountAvatar(user.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not remove photo." }, { status: 400 });
+    return errorJson(err, "Could not remove photo.");
   }
 }

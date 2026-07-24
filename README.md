@@ -72,7 +72,7 @@ git push -u origin main
 
 4. Click **Deploy**
 
-Your live site will be at `https://your-project.vercel.app`
+Your live site will be at `https://morton-mechanical.vercel.app`
 
 ---
 

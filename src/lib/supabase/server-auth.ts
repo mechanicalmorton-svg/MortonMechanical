@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import type { User } from "@supabase/supabase-js";
+import { isJwtKeyError } from "../auth-errors";
 import { getPublishableKey, getSupabaseUrl, getSupabaseAdmin, isSupabaseAuthConfigured } from "./server";
 import type { StaffRole } from "../shop-types";
 
@@ -21,6 +23,30 @@ export async function createAuthServerClient() {
         } catch {
           /* ignored in Server Components */
         }
+      },
+    },
+  });
+}
+
+/** Route-handler client that writes auth cookies onto the outgoing NextResponse. */
+export async function createAuthRouteClient(response: NextResponse) {
+  if (!isSupabaseAuthConfigured()) return null;
+  const cookieStore = await cookies();
+
+  return createServerClient(getSupabaseUrl()!, getPublishableKey()!, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          try {
+            cookieStore.set(name, value, options);
+          } catch {
+            /* cookie store may be read-only in some contexts */
+          }
+          response.cookies.set(name, value, options);
+        });
       },
     },
   });
@@ -52,35 +78,103 @@ function emailToDisplayName(email: string) {
     .join(" ");
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
+function decodeJwtPart(part: string): Record<string, unknown> | null {
   try {
-    const payload = token.split(".")[1];
-    if (!payload) return null;
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const json = Buffer.from(normalized, "base64").toString("utf8");
+    const normalized = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const json = Buffer.from(padded, "base64").toString("utf8");
     return JSON.parse(json) as Record<string, unknown>;
   } catch {
     return null;
   }
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  return decodeJwtPart(payload);
+}
+
+function isJwtExpired(payload: Record<string, unknown>) {
+  const exp = typeof payload.exp === "number" ? payload.exp : null;
+  if (!exp) return false;
+  // 30s clock skew buffer
+  return exp * 1000 <= Date.now() - 30_000;
+}
+
+function metadataFromClaims(payload: Record<string, unknown>) {
+  const meta = payload.user_metadata;
+  if (meta && typeof meta === "object") return meta as Record<string, unknown>;
+  return undefined;
+}
+
+/**
+ * Read access token from auth cookies only.
+ * Do not call getSession()/getUser()/getClaims() — those re-verify ES256 tokens
+ * that may lack a JWT `kid` and break the session.
+ */
+async function getAccessTokenFromSession() {
+  try {
+    const cookieStore = await cookies();
+    const all = cookieStore.getAll();
+    const basenames = new Set<string>();
+    for (const cookie of all) {
+      const match = cookie.name.match(/^(sb-.*-auth-token)(?:\.\d+)?$/);
+      if (match?.[1]) basenames.add(match[1]);
+    }
+
+    for (const base of basenames) {
+      const chunks = all
+        .filter((cookie) => cookie.name === base || cookie.name.startsWith(`${base}.`))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      if (!chunks.length) continue;
+
+      let raw = chunks.map((chunk) => chunk.value).join("");
+      if (raw.startsWith("base64-")) raw = raw.slice("base64-".length);
+      try {
+        const json = Buffer.from(raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+        const parsed = JSON.parse(json) as { access_token?: string; currentSession?: { access_token?: string } };
+        const token = parsed.access_token ?? parsed.currentSession?.access_token;
+        if (token) return token;
+      } catch {
+        try {
+          const parsed = JSON.parse(raw) as { access_token?: string; currentSession?: { access_token?: string } };
+          const token = parsed.access_token ?? parsed.currentSession?.access_token;
+          if (token) return token;
+        } catch {
+          /* try next cookie group */
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 async function loadStaffProfile(userId: string) {
   const admin = getSupabaseAdmin();
   if (!admin) return null;
 
-  const { data: staffById } = await admin
-    .from("staff")
-    .select("name, role, phone, avatar_url")
-    .eq("id", userId)
-    .maybeSingle();
-  if (staffById) return staffById;
+  try {
+    const { data: staffById, error: byIdError } = await admin
+      .from("staff")
+      .select("name, role, phone, avatar_url")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!byIdError && staffById) return staffById;
 
-  const { data: staffByAuth } = await admin
-    .from("staff")
-    .select("name, role, phone, avatar_url")
-    .eq("auth_user_id", userId)
-    .maybeSingle();
-  return staffByAuth;
+    const { data: staffByAuth, error: byAuthError } = await admin
+      .from("staff")
+      .select("name, role, phone, avatar_url")
+      .eq("auth_user_id", userId)
+      .maybeSingle();
+    if (!byAuthError && staffByAuth) return staffByAuth;
+  } catch {
+    /* admin key may be unverifiable — continue without staff row */
+  }
+  return null;
 }
 
 function buildAdminUser(
@@ -112,24 +206,6 @@ function buildAdminUser(
   };
 }
 
-function adminUserFromClaims(claims: Record<string, unknown>, staff?: { name?: string | null; role?: string | null } | null) {
-  const email = typeof claims.email === "string" ? claims.email : undefined;
-  const userId = typeof claims.sub === "string" ? claims.sub : undefined;
-  if (!email || !userId) return null;
-
-  return buildAdminUser(
-    {
-      id: userId,
-      email,
-      user_metadata:
-        typeof claims.user_metadata === "object" && claims.user_metadata
-          ? (claims.user_metadata as Record<string, unknown>)
-          : undefined,
-    },
-    staff,
-  );
-}
-
 async function adminUserFromAuthUser(user: User) {
   if (!user.email) return null;
   const staff = await loadStaffProfile(user.id);
@@ -137,33 +213,45 @@ async function adminUserFromAuthUser(user: User) {
 }
 
 export async function getSupabaseAuthUser(): Promise<AdminUser | null> {
-  const supabase = await createAuthServerClient();
-  if (!supabase) return null;
-
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
-  if (!claimsError && claimsData?.claims) {
-    const userId = typeof claimsData.claims.sub === "string" ? claimsData.claims.sub : null;
-    const staff = userId ? await loadStaffProfile(userId) : null;
-    return adminUserFromClaims(claimsData.claims as Record<string, unknown>, staff);
-  }
-
-  // Some ES256 session tokens lack a JWT `kid` header and fail Auth `/user` verification.
-  // Confirm the cookie session via service role instead of local JWT verification.
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
+  const token = await getAccessTokenFromSession();
   if (!token) return null;
 
   const payload = decodeJwtPayload(token);
   const userId = typeof payload?.sub === "string" ? payload.sub : null;
-  if (!userId) return null;
+  const email = typeof payload?.email === "string" ? payload.email : null;
+  if (!userId || !payload || isJwtExpired(payload)) return null;
 
   const admin = getSupabaseAdmin();
-  if (!admin) return null;
+  if (admin) {
+    try {
+      const {
+        data: { user },
+        error,
+      } = await admin.auth.admin.getUserById(userId);
+      if (!error && user) {
+        const resolved = await adminUserFromAuthUser(user);
+        if (resolved) return resolved;
+      }
+      if (error && isJwtKeyError(error.message)) {
+        console.warn("[server-auth] Auth admin API JWT key error; using session claims.");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (isJwtKeyError(message)) {
+        console.warn("[server-auth] Auth admin API JWT key error; using session claims.");
+      }
+    }
+  }
 
-  const { data: { user }, error } = await admin.auth.admin.getUserById(userId);
-  if (error || !user) return null;
-
-  return adminUserFromAuthUser(user);
+  // Prefer session JWT claims when Admin API is unavailable (common with ES256 kid issues).
+  if (!email) return null;
+  const staff = await loadStaffProfile(userId);
+  return buildAdminUser(
+    {
+      id: userId,
+      email,
+      user_metadata: metadataFromClaims(payload),
+    },
+    staff,
+  );
 }
