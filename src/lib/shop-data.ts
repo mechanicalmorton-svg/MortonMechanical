@@ -110,6 +110,7 @@ function rowToCustomerVehicle(r: Record<string, unknown>): CustomerVehicle {
   return {
     id: r.id as string,
     customerId: r.customer_id as string,
+    vehicleConfigurationId: r.vehicle_configuration_id != null ? Number(r.vehicle_configuration_id) : undefined,
     year: r.year != null ? Number(r.year) : undefined,
     make: (r.make as string) || undefined,
     model: (r.model as string) || undefined,
@@ -117,6 +118,8 @@ function rowToCustomerVehicle(r: Record<string, unknown>): CustomerVehicle {
     vin: (r.vin as string) || undefined,
     plate: (r.plate as string) || undefined,
     powertrain: (r.powertrain as string) || undefined,
+    mileage: r.mileage != null ? Number(r.mileage) : undefined,
+    color: (r.color as string) || undefined,
     notes: (r.notes as string) || undefined,
     createdAt: r.created_at as string,
   };
@@ -126,6 +129,7 @@ function customerVehicleToRow(v: CustomerVehicle) {
   return {
     id: v.id,
     customer_id: v.customerId,
+    vehicle_configuration_id: v.vehicleConfigurationId ?? null,
     year: v.year,
     make: v.make,
     model: v.model,
@@ -133,6 +137,8 @@ function customerVehicleToRow(v: CustomerVehicle) {
     vin: v.vin,
     plate: v.plate,
     powertrain: v.powertrain,
+    mileage: v.mileage,
+    color: v.color,
     notes: v.notes,
     created_at: v.createdAt,
   };

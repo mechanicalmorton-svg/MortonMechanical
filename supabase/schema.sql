@@ -256,3 +256,5 @@ create index if not exists customers_name_idx on customers (lower(name));
 create index if not exists customers_phone_idx on customers (phone) where phone <> '';
 create index if not exists customer_vehicles_customer_idx on customer_vehicles (customer_id);
 create index if not exists work_orders_customer_idx on work_orders (customer_id) where customer_id <> '';
+
+-- Vehicle/service catalog: run supabase/mechanic-database-structure.sql for makes, models, trims, etc.

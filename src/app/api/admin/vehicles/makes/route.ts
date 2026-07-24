@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/admin-route";
+import { loadCatalogMakes } from "@/lib/vehicle-catalog";
 
 export type VehicleMakeOption = { id: number; name: string };
 
@@ -20,6 +21,11 @@ async function fetchMakesForType(type: string) {
 
 export async function GET() {
   return withAdminAuth(async () => {
+    const catalogMakes = await loadCatalogMakes();
+    if (catalogMakes.length) {
+      return NextResponse.json(catalogMakes);
+    }
+
     if (cache && Date.now() - cache.at < TTL_MS) {
       return NextResponse.json(cache.makes);
     }

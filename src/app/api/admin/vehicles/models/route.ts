@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/admin-route";
+import { loadCatalogModels } from "@/lib/vehicle-catalog";
 
 const modelCache = new Map<string, { models: string[]; at: number }>();
 const TTL_MS = 24 * 60 * 60 * 1000;
@@ -26,6 +27,16 @@ export async function GET(req: Request) {
     const cached = modelCache.get(cacheKey);
     if (cached && Date.now() - cached.at < TTL_MS) {
       return NextResponse.json(cached.models);
+    }
+
+    const catalogModels = await loadCatalogModels(
+      makeId ? Number(makeId) : undefined,
+      make ?? undefined,
+      year ? Number(year) : undefined,
+    );
+    if (catalogModels.length) {
+      modelCache.set(cacheKey, { models: catalogModels, at: Date.now() });
+      return NextResponse.json(catalogModels);
     }
 
     const urls: string[] = [];

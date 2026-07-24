@@ -19,6 +19,7 @@ export type Customer = {
 export type CustomerVehicle = {
   id: string;
   customerId: string;
+  vehicleConfigurationId?: number;
   year?: number;
   make?: string;
   model?: string;
@@ -26,6 +27,8 @@ export type CustomerVehicle = {
   vin?: string;
   plate?: string;
   powertrain?: string;
+  mileage?: number;
+  color?: string;
   notes?: string;
   createdAt: string;
 };
