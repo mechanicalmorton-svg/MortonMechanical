@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 type Props = {
@@ -8,10 +9,17 @@ type Props = {
   onClose: () => void;
   title: string;
   wide?: boolean;
+  stacked?: boolean;
   children: React.ReactNode;
 };
 
-export function AdminModal({ open, onClose, title, wide, children }: Props) {
+export function AdminModal({ open, onClose, title, wide, stacked, children }: Props) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -26,10 +34,12 @@ export function AdminModal({ open, onClose, title, wide, children }: Props) {
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
+  return createPortal(
+    <div
+      className={`fixed inset-0 flex items-end justify-center p-0 sm:items-center sm:p-4 ${stacked ? "z-[160]" : "z-[150]"}`}
+    >
       <button
         type="button"
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -57,6 +67,7 @@ export function AdminModal({ open, onClose, title, wide, children }: Props) {
         </div>
         <div className="overflow-y-auto p-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

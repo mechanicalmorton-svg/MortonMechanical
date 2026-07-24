@@ -5,16 +5,45 @@ export type StaffRole = "owner" | "mechanic" | "dispatcher" | "admin";
 export type FleetStatus = "active" | "maintenance" | "retired";
 export type RouteStatus = "planned" | "in_progress" | "completed";
 
+export type Customer = {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CustomerVehicle = {
+  id: string;
+  customerId: string;
+  year?: number;
+  make?: string;
+  model?: string;
+  trim?: string;
+  vin?: string;
+  plate?: string;
+  powertrain?: string;
+  notes?: string;
+  createdAt: string;
+};
+
 export type WorkOrder = {
   id: string;
+  customerId?: string;
+  customerVehicleId?: string;
   customerName: string;
   phone: string;
   vehicle: string;
+  customerConcern?: string;
   service: string;
   status: WorkOrderStatus;
   priority: Priority;
   assignedTo?: string;
   notes?: string;
+  internalNotes?: string;
   revenue?: number;
   scheduledDate?: string;
   createdAt: string;

@@ -46,18 +46,47 @@ create index if not exists quotes_created_idx on quotes(created_at desc);
 -- Shop operations
 create table if not exists work_orders (
   id text primary key,
+  customer_id text,
+  customer_vehicle_id text,
   customer_name text not null,
   phone text default '',
   vehicle text default '',
+  customer_concern text default '',
   service text not null,
   status text not null default 'open',
   priority text not null default 'normal',
   assigned_to text,
   notes text,
+  internal_notes text default '',
   revenue numeric,
   scheduled_date text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table if not exists customers (
+  id text primary key,
+  name text not null,
+  phone text default '',
+  email text default '',
+  address text default '',
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists customer_vehicles (
+  id text primary key,
+  customer_id text not null references customers(id) on delete cascade,
+  year int,
+  make text,
+  model text,
+  trim text,
+  vin text default '',
+  plate text default '',
+  powertrain text,
+  notes text,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists bookings (
@@ -200,6 +229,8 @@ alter table inventory enable row level security;
 alter table staff enable row level security;
 alter table fleet enable row level security;
 alter table routes enable row level security;
+alter table customers enable row level security;
+alter table customer_vehicles enable row level security;
 
 -- Allow anon to read site content only (public website)
 drop policy if exists "Public can read site content" on site_content;
@@ -221,3 +252,7 @@ create index if not exists fleet_status_idx on fleet (status);
 create index if not exists routes_date_idx on routes (date desc);
 create index if not exists staff_auth_user_idx on staff (auth_user_id);
 create index if not exists staff_role_idx on staff (role);
+create index if not exists customers_name_idx on customers (lower(name));
+create index if not exists customers_phone_idx on customers (phone) where phone <> '';
+create index if not exists customer_vehicles_customer_idx on customer_vehicles (customer_id);
+create index if not exists work_orders_customer_idx on work_orders (customer_id) where customer_id <> '';

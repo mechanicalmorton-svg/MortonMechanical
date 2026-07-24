@@ -15,6 +15,7 @@ type Props = {
   loadingMakes?: boolean;
   loadingModels?: boolean;
   disabled?: boolean;
+  required?: boolean;
   onMakeChange: (make: string, makeId: number | null) => void;
   onModelChange: (model: string) => void;
 };
@@ -28,6 +29,7 @@ export function VehicleMakeModelFields({
   loadingMakes = false,
   loadingModels = false,
   disabled = false,
+  required = false,
   onMakeChange,
   onModelChange,
 }: Props) {
@@ -52,7 +54,8 @@ export function VehicleMakeModelFields({
   return (
     <>
       <label className="block text-sm text-slate-400 sm:col-span-2 lg:col-span-1">
-        Make
+        Make{required ? <span className="text-amber-400"> *</span> : null}
+        <p className="mt-0.5 text-xs font-normal text-slate-500">From NHTSA catalog, or type any make.</p>
         <div className="mt-1 space-y-2">
           <input
             className={inputClass}
@@ -92,7 +95,8 @@ export function VehicleMakeModelFields({
       </label>
 
       <label className="block text-sm text-slate-400 sm:col-span-2 lg:col-span-1">
-        Model
+        Model{required ? <span className="text-amber-400"> *</span> : null}
+        <p className="mt-0.5 text-xs font-normal text-slate-500">Pick from catalog or type any model.</p>
         <div className="mt-1 space-y-2">
           <input
             className={inputClass}

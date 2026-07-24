@@ -90,6 +90,8 @@ export function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: "bg-amber-500/15 text-amber-300 ring-amber-500/25",
     open: "bg-blue-500/15 text-blue-300 ring-blue-500/25",
+    normal: "bg-blue-500/15 text-blue-300 ring-blue-500/25",
+    overdue: "bg-red-500/15 text-red-300 ring-red-500/25",
     in_progress: "bg-purple-500/15 text-purple-300 ring-purple-500/25",
     confirmed: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/25",
     completed: "bg-slate-700/80 text-slate-300 ring-slate-600/40",

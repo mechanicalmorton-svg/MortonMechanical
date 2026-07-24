@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/admin-route";
-import { createId, deleteWorkOrder, loadWorkOrders, upsertWorkOrder } from "@/lib/shop-data";
-import type { WorkOrder } from "@/lib/shop-types";
+import { createId, deleteWorkOrder, loadWorkOrders, resolveWorkOrderLinks, upsertWorkOrder } from "@/lib/shop-data";
+import type { Priority, WorkOrder, WorkOrderStatus } from "@/lib/shop-types";
+
+function parseStatus(value: unknown): WorkOrderStatus {
+  if (value === "in_progress" || value === "completed" || value === "cancelled" || value === "open") return value;
+  return "open";
+}
+
+function parsePriority(value: unknown): Priority {
+  return value === "urgent" ? "urgent" : "normal";
+}
 
 export async function GET() {
   return withAdminAuth(async () => {
@@ -12,37 +21,83 @@ export async function GET() {
 
 export async function POST(req: Request) {
   return withAdminAuth(async () => {
-    const body = await req.json();
-    const now = new Date().toISOString();
-    const order: WorkOrder = {
-      id: createId(),
-      customerName: body.customerName ?? "Unknown",
-      phone: body.phone ?? "",
-      vehicle: body.vehicle ?? "",
-      service: body.service ?? "General repair",
-      status: body.status ?? "open",
-      priority: body.priority ?? "normal",
-      assignedTo: body.assignedTo,
-      notes: body.notes,
-      revenue: body.revenue,
-      scheduledDate: body.scheduledDate,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await upsertWorkOrder(order);
-    return NextResponse.json(order);
+    try {
+      const body = await req.json();
+      const now = new Date().toISOString();
+      const links = await resolveWorkOrderLinks({
+        customerId: body.customerId,
+        customerVehicleId: body.customerVehicleId,
+        customerName: body.customerName,
+        phone: body.phone,
+        vehicle: body.vehicle,
+        saveVehicleToFile: body.saveVehicleToFile,
+      });
+
+      if (!links.customerId) {
+        return NextResponse.json({ error: "Select a customer for this work order." }, { status: 400 });
+      }
+
+      const order: WorkOrder = {
+        id: createId(),
+        customerId: links.customerId,
+        customerVehicleId: links.customerVehicleId,
+        customerName: links.customerName,
+        phone: links.phone,
+        vehicle: links.vehicle,
+        customerConcern: body.customerConcern ?? "",
+        service: body.service ?? "General repair",
+        status: parseStatus(body.status),
+        priority: parsePriority(body.priority),
+        assignedTo: body.assignedTo || undefined,
+        notes: body.notes,
+        internalNotes: body.internalNotes ?? "",
+        revenue: body.revenue,
+        scheduledDate: body.scheduledDate,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await upsertWorkOrder(order);
+      return NextResponse.json(order);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create work order." }, { status: 400 });
+    }
   });
 }
 
 export async function PATCH(req: Request) {
   return withAdminAuth(async () => {
-    const body = await req.json();
-    const items = await loadWorkOrders();
-    const item = items.find((w) => w.id === body.id);
-    if (!item) return NextResponse.json({ error: "Not found." }, { status: 404 });
-    const updated = { ...item, ...body, updatedAt: new Date().toISOString() };
-    await upsertWorkOrder(updated);
-    return NextResponse.json(updated);
+    try {
+      const body = await req.json();
+      const items = await loadWorkOrders();
+      const item = items.find((w) => w.id === body.id);
+      if (!item) return NextResponse.json({ error: "Not found." }, { status: 404 });
+
+      const links = await resolveWorkOrderLinks({
+        customerId: body.customerId ?? item.customerId,
+        customerVehicleId: body.customerVehicleId ?? item.customerVehicleId,
+        customerName: body.customerName ?? item.customerName,
+        phone: body.phone ?? item.phone,
+        vehicle: body.vehicle,
+        saveVehicleToFile: body.saveVehicleToFile,
+      });
+
+      const updated: WorkOrder = {
+        ...item,
+        ...body,
+        customerId: links.customerId ?? item.customerId,
+        customerVehicleId: links.customerVehicleId ?? item.customerVehicleId,
+        customerName: links.customerName || item.customerName,
+        phone: links.phone || item.phone,
+        vehicle: links.vehicle || item.vehicle,
+        status: body.status ? parseStatus(body.status) : item.status,
+        priority: body.priority ? parsePriority(body.priority) : item.priority,
+        updatedAt: new Date().toISOString(),
+      };
+      await upsertWorkOrder(updated);
+      return NextResponse.json(updated);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update work order." }, { status: 400 });
+    }
   });
 }
 

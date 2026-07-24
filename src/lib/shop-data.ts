@@ -9,6 +9,8 @@ import {
 } from "./staff-auth";
 import type {
   Booking,
+  Customer,
+  CustomerVehicle,
   DashboardStats,
   FleetVehicle,
   InventoryItem,
@@ -16,6 +18,7 @@ import type {
   StaffMember,
   WorkOrder,
 } from "./shop-types";
+import { formatCustomerVehicleLabel } from "./customer-vehicles";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -36,14 +39,18 @@ function useDatabase() {
 function rowToWorkOrder(r: Record<string, unknown>): WorkOrder {
   return {
     id: r.id as string,
+    customerId: (r.customer_id as string) || undefined,
+    customerVehicleId: (r.customer_vehicle_id as string) || undefined,
     customerName: r.customer_name as string,
     phone: (r.phone as string) ?? "",
     vehicle: (r.vehicle as string) ?? "",
+    customerConcern: (r.customer_concern as string) || undefined,
     service: r.service as string,
     status: r.status as WorkOrder["status"],
     priority: r.priority as WorkOrder["priority"],
     assignedTo: r.assigned_to as string | undefined,
     notes: r.notes as string | undefined,
+    internalNotes: (r.internal_notes as string) || undefined,
     revenue: r.revenue != null ? Number(r.revenue) : undefined,
     scheduledDate: r.scheduled_date as string | undefined,
     createdAt: r.created_at as string,
@@ -54,18 +61,80 @@ function rowToWorkOrder(r: Record<string, unknown>): WorkOrder {
 function workOrderToRow(w: WorkOrder) {
   return {
     id: w.id,
+    customer_id: w.customerId ?? "",
+    customer_vehicle_id: w.customerVehicleId ?? "",
     customer_name: w.customerName,
     phone: w.phone,
     vehicle: w.vehicle,
+    customer_concern: w.customerConcern ?? "",
     service: w.service,
     status: w.status,
     priority: w.priority,
     assigned_to: w.assignedTo,
     notes: w.notes,
+    internal_notes: w.internalNotes ?? "",
     revenue: w.revenue,
     scheduled_date: w.scheduledDate,
     created_at: w.createdAt,
     updated_at: w.updatedAt,
+  };
+}
+
+function rowToCustomer(r: Record<string, unknown>): Customer {
+  return {
+    id: r.id as string,
+    name: r.name as string,
+    phone: (r.phone as string) ?? "",
+    email: (r.email as string) || undefined,
+    address: (r.address as string) || undefined,
+    notes: (r.notes as string) || undefined,
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+  };
+}
+
+function customerToRow(c: Customer) {
+  return {
+    id: c.id,
+    name: c.name,
+    phone: c.phone,
+    email: c.email ?? "",
+    address: c.address ?? "",
+    notes: c.notes ?? "",
+    created_at: c.createdAt,
+    updated_at: c.updatedAt,
+  };
+}
+
+function rowToCustomerVehicle(r: Record<string, unknown>): CustomerVehicle {
+  return {
+    id: r.id as string,
+    customerId: r.customer_id as string,
+    year: r.year != null ? Number(r.year) : undefined,
+    make: (r.make as string) || undefined,
+    model: (r.model as string) || undefined,
+    trim: (r.trim as string) || undefined,
+    vin: (r.vin as string) || undefined,
+    plate: (r.plate as string) || undefined,
+    powertrain: (r.powertrain as string) || undefined,
+    notes: (r.notes as string) || undefined,
+    createdAt: r.created_at as string,
+  };
+}
+
+function customerVehicleToRow(v: CustomerVehicle) {
+  return {
+    id: v.id,
+    customer_id: v.customerId,
+    year: v.year,
+    make: v.make,
+    model: v.model,
+    trim: v.trim,
+    vin: v.vin,
+    plate: v.plate,
+    powertrain: v.powertrain,
+    notes: v.notes,
+    created_at: v.createdAt,
   };
 }
 
@@ -227,6 +296,195 @@ export async function deleteWorkOrder(id: string) {
     return;
   }
   writeJson("work-orders.json", (await loadWorkOrders()).filter((w) => w.id !== id));
+}
+
+export async function loadCustomers(query?: string): Promise<Customer[]> {
+  if (useDatabase()) {
+    let request = requireAdminClient().from("customers").select("*").order("name");
+    const { data, error } = await request;
+    throwOnError(error, "Could not load customers");
+    let customers = (data ?? []).map(rowToCustomer);
+    const q = query?.trim().toLowerCase();
+    if (q) {
+      customers = customers.filter((customer) =>
+        [customer.name, customer.phone, customer.email ?? "", customer.address ?? ""].join(" ").toLowerCase().includes(q),
+      );
+    }
+    return customers;
+  }
+  const q = query?.trim().toLowerCase();
+  const customers = readJson<Customer[]>("customers.json", []);
+  if (!q) return customers.sort((a, b) => a.name.localeCompare(b.name));
+  return customers
+    .filter((customer) =>
+      [customer.name, customer.phone, customer.email ?? "", customer.address ?? ""].join(" ").toLowerCase().includes(q),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function upsertCustomer(item: Customer) {
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("customers").upsert(customerToRow(item));
+    throwOnError(error, "Could not save customer");
+    return;
+  }
+  const items = await loadCustomers();
+  const idx = items.findIndex((c) => c.id === item.id);
+  if (idx >= 0) items[idx] = item;
+  else items.push(item);
+  writeJson("customers.json", items);
+}
+
+export async function deleteCustomer(id: string) {
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("customers").delete().eq("id", id);
+    throwOnError(error, "Could not delete customer");
+    return;
+  }
+  writeJson("customers.json", (await loadCustomers()).filter((c) => c.id !== id));
+  writeJson(
+    "customer-vehicles.json",
+    (await loadCustomerVehicles()).filter((v) => v.customerId !== id),
+  );
+}
+
+export async function loadCustomerVehicles(customerId?: string): Promise<CustomerVehicle[]> {
+  if (useDatabase()) {
+    let request = requireAdminClient().from("customer_vehicles").select("*").order("created_at", { ascending: false });
+    if (customerId) request = request.eq("customer_id", customerId);
+    const { data, error } = await request;
+    throwOnError(error, "Could not load customer vehicles");
+    return (data ?? []).map(rowToCustomerVehicle);
+  }
+  const vehicles = readJson<CustomerVehicle[]>("customer-vehicles.json", []);
+  const filtered = customerId ? vehicles.filter((v) => v.customerId === customerId) : vehicles;
+  return filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function upsertCustomerVehicle(item: CustomerVehicle) {
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("customer_vehicles").upsert(customerVehicleToRow(item));
+    throwOnError(error, "Could not save customer vehicle");
+    return;
+  }
+  const items = await loadCustomerVehicles();
+  const idx = items.findIndex((v) => v.id === item.id);
+  if (idx >= 0) items[idx] = item;
+  else items.unshift(item);
+  writeJson("customer-vehicles.json", items);
+}
+
+export async function deleteCustomerVehicle(id: string) {
+  if (useDatabase()) {
+    const { error } = await requireAdminClient().from("customer_vehicles").delete().eq("id", id);
+    throwOnError(error, "Could not delete customer vehicle");
+    return;
+  }
+  writeJson("customer-vehicles.json", (await loadCustomerVehicles()).filter((v) => v.id !== id));
+}
+
+export async function getCustomerById(id: string) {
+  const customers = await loadCustomers();
+  return customers.find((customer) => customer.id === id) ?? null;
+}
+
+export async function getCustomerVehicleById(id: string) {
+  const vehicles = await loadCustomerVehicles();
+  return vehicles.find((vehicle) => vehicle.id === id) ?? null;
+}
+
+type WorkOrderVehicleInput = {
+  id?: string;
+  year?: number;
+  make?: string;
+  model?: string;
+  trim?: string;
+  vin?: string;
+  plate?: string;
+  powertrain?: string;
+  notes?: string;
+};
+
+export async function resolveWorkOrderLinks(input: {
+  customerId?: string;
+  customerVehicleId?: string;
+  customerName?: string;
+  phone?: string;
+  vehicle?: WorkOrderVehicleInput;
+  saveVehicleToFile?: boolean;
+}) {
+  let customer: Customer | null = null;
+  if (input.customerId) {
+    customer = await getCustomerById(input.customerId);
+    if (!customer) throw new Error("Selected customer was not found.");
+  }
+
+  let vehicle: CustomerVehicle | null = null;
+  if (input.customerVehicleId) {
+    vehicle = await getCustomerVehicleById(input.customerVehicleId);
+    if (!vehicle) throw new Error("Selected vehicle was not found.");
+    if (customer && vehicle.customerId !== customer.id) throw new Error("Vehicle does not belong to this customer.");
+    if (!customer) customer = await getCustomerById(vehicle.customerId);
+  } else if (customer && input.vehicle && hasVehicleDetails(input.vehicle) && input.saveVehicleToFile !== false) {
+    const now = new Date().toISOString();
+    if (input.vehicle.id) {
+      const existing = await getCustomerVehicleById(input.vehicle.id);
+      if (existing && existing.customerId === customer.id) {
+        vehicle = {
+          ...existing,
+          year: input.vehicle.year ?? existing.year,
+          make: input.vehicle.make ?? existing.make,
+          model: input.vehicle.model ?? existing.model,
+          trim: input.vehicle.trim ?? existing.trim,
+          vin: input.vehicle.vin ?? existing.vin,
+          plate: input.vehicle.plate ?? existing.plate,
+          powertrain: input.vehicle.powertrain ?? existing.powertrain,
+          notes: input.vehicle.notes ?? existing.notes,
+        };
+        await upsertCustomerVehicle(vehicle);
+      }
+    }
+    if (!vehicle) {
+      vehicle = {
+        id: createId(),
+        customerId: customer.id,
+        year: input.vehicle.year,
+        make: input.vehicle.make,
+        model: input.vehicle.model,
+        trim: input.vehicle.trim,
+        vin: input.vehicle.vin,
+        plate: input.vehicle.plate,
+        powertrain: input.vehicle.powertrain,
+        notes: input.vehicle.notes,
+        createdAt: now,
+      };
+      await upsertCustomerVehicle(vehicle);
+    }
+  }
+
+  const customerName = customer?.name ?? input.customerName?.trim() ?? "Unknown";
+  const phone = customer?.phone ?? input.phone ?? "";
+  const vehicleLabel = vehicle ? formatCustomerVehicleLabel(vehicle) : input.vehicle ? formatCustomerVehicleLabel(input.vehicle) : "";
+
+  return {
+    customerId: customer?.id,
+    customerVehicleId: vehicle?.id,
+    customerName,
+    phone,
+    vehicle: vehicleLabel,
+  };
+}
+
+function hasVehicleDetails(vehicle: WorkOrderVehicleInput) {
+  return Boolean(
+    vehicle.year ||
+      vehicle.make?.trim() ||
+      vehicle.model?.trim() ||
+      vehicle.trim?.trim() ||
+      vehicle.vin?.trim() ||
+      vehicle.plate?.trim() ||
+      vehicle.powertrain?.trim(),
+  );
 }
 
 export async function loadBookings(): Promise<Booking[]> {
