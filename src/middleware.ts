@@ -22,7 +22,8 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getUser();
+  // Refresh the session cookie. Avoid getUser() — ES256 tokens can fail legacy JWT verification.
+  await supabase.auth.getSession();
   return response;
 }
 

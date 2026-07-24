@@ -27,7 +27,11 @@ export async function POST(req: Request) {
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.user?.email) {
-      return NextResponse.json({ error: "Wrong email or password." }, { status: 401 });
+      const message =
+        error?.message?.includes("JWT") || error?.message?.includes("kid")
+          ? "Sign-in failed due to an auth configuration issue. Try again, or contact support if it persists."
+          : "Wrong email or password.";
+      return NextResponse.json({ error: message }, { status: 401 });
     }
 
     return NextResponse.json({
