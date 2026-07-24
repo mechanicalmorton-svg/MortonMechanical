@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { requireAuth, requireOwnerOrAdmin, type AuthUser } from "./admin-api";
+import { sanitizeAuthError } from "./auth-errors";
 import { DatabaseError, isDatabaseConfigured } from "./supabase/db";
+
+function sanitizeErrorMessage(message: string) {
+  return sanitizeAuthError(message, message);
+}
 
 function errorResponse(err: unknown) {
   if (err instanceof DatabaseError) {
     const status = err.message.toLowerCase().includes("not connected") ? 503 : 500;
-    return NextResponse.json({ error: err.message }, { status });
+    return NextResponse.json({ error: sanitizeErrorMessage(err.message) }, { status });
   }
   const message = err instanceof Error ? err.message : "Something went wrong.";
-  return NextResponse.json({ error: message }, { status: 500 });
+  return NextResponse.json({ error: sanitizeErrorMessage(message) }, { status: 500 });
 }
 
 function databaseGuard() {
