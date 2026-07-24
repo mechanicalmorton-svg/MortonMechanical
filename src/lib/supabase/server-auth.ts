@@ -33,7 +33,15 @@ export function isAllowedAdminEmail(email: string | undefined) {
   return email.toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`);
 }
 
-export type AdminUser = { id: string; username: string; email: string; name: string; role: StaffRole };
+export type AdminUser = {
+  id: string;
+  username: string;
+  email: string;
+  name: string;
+  role: StaffRole;
+  phone?: string;
+  avatarUrl?: string;
+};
 
 function emailToDisplayName(email: string) {
   return email
@@ -60,12 +68,16 @@ async function loadStaffProfile(userId: string) {
   const admin = getSupabaseAdmin();
   if (!admin) return null;
 
-  const { data: staffById } = await admin.from("staff").select("name, role").eq("id", userId).maybeSingle();
+  const { data: staffById } = await admin
+    .from("staff")
+    .select("name, role, phone, avatar_url")
+    .eq("id", userId)
+    .maybeSingle();
   if (staffById) return staffById;
 
   const { data: staffByAuth } = await admin
     .from("staff")
-    .select("name, role")
+    .select("name, role, phone, avatar_url")
     .eq("auth_user_id", userId)
     .maybeSingle();
   return staffByAuth;
@@ -73,7 +85,7 @@ async function loadStaffProfile(userId: string) {
 
 function buildAdminUser(
   user: { id: string; email: string; user_metadata?: Record<string, unknown> },
-  staff?: { name?: string | null; role?: string | null } | null,
+  staff?: { name?: string | null; role?: string | null; phone?: string | null; avatar_url?: string | null } | null,
 ): AdminUser | null {
   if (!isAllowedAdminEmail(user.email)) return null;
 
@@ -81,6 +93,10 @@ function buildAdminUser(
     (typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : undefined) ||
     emailToDisplayName(user.email);
   let role: StaffRole = "mechanic";
+  let phone = typeof staff?.phone === "string" ? staff.phone : "";
+  let avatarUrl =
+    (typeof staff?.avatar_url === "string" ? staff.avatar_url : undefined) ||
+    (typeof user.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : undefined);
 
   if (staff?.name) name = staff.name;
   if (staff?.role) role = staff.role as StaffRole;
@@ -91,6 +107,8 @@ function buildAdminUser(
     username: user.email.split("@")[0],
     name,
     role,
+    phone,
+    avatarUrl,
   };
 }
 

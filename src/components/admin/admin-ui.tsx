@@ -1,4 +1,16 @@
 import type { LucideIcon } from "lucide-react";
+import { roleBadgeClass, roleLabels } from "@/lib/admin-roles";
+import type { StaffRole } from "@/lib/shop-types";
+
+export function RoleBadge({ role, className = "" }: { role: StaffRole; className?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${roleBadgeClass[role]} ${className}`}
+    >
+      {roleLabels[role]}
+    </span>
+  );
+}
 
 export function PageHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (

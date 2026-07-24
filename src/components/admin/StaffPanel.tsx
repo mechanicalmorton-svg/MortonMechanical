@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Users } from "lucide-react";
+import { roleLabels } from "@/lib/admin-roles";
 import type { StaffMember, StaffRole } from "@/lib/shop-types";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
@@ -111,10 +112,11 @@ export function StaffPanel() {
           <input className={inputClass} placeholder="Temporary password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={8} required />
           <input className={inputClass} placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <select className={inputClass} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as StaffRole })}>
-            <option value="owner">Owner</option>
-            <option value="admin">Admin</option>
-            <option value="mechanic">Mechanic</option>
-            <option value="dispatcher">Dispatcher</option>
+            {(Object.keys(roleLabels) as StaffRole[]).map((role) => (
+              <option key={role} value={role}>
+                {roleLabels[role]}
+              </option>
+            ))}
           </select>
           <div className="flex gap-2 sm:col-span-2">
             <button type="submit" className={btnPrimary}>Create Supabase user</button>
@@ -154,10 +156,11 @@ export function StaffPanel() {
                   value={s.role}
                   onChange={(e) => updateMember(s.id, { role: e.target.value as StaffRole })}
                 >
-                  <option value="owner">Owner</option>
-                  <option value="admin">Admin</option>
-                  <option value="mechanic">Mechanic</option>
-                  <option value="dispatcher">Dispatcher</option>
+                  {(Object.keys(roleLabels) as StaffRole[]).map((role) => (
+                    <option key={role} value={role}>
+                      {roleLabels[role]}
+                    </option>
+                  ))}
                 </select>
                 <button type="button" onClick={() => updateMember(s.id, { active: !s.active })} className={btnSecondary}>
                   {s.active ? "Deactivate" : "Activate"}

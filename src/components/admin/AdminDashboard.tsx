@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Calendar,
@@ -15,14 +15,15 @@ import {
   Menu,
   Package,
   Paintbrush,
-  Settings,
+  UserCircle,
   Truck,
   Users,
   X,
 } from "lucide-react";
 import { SiteLogo } from "@/components/SiteLogo";
-import { canAccessTab, canManageUsers, roleLabels } from "@/lib/admin-roles";
+import { canAccessTab, canManageUsers } from "@/lib/admin-roles";
 import type { StaffRole } from "@/lib/shop-types";
+import { RoleBadge } from "./admin-ui";
 import { BookingsPanel } from "./BookingsPanel";
 import { ContentEditor } from "./ContentEditor";
 import { DashboardHome } from "./DashboardHome";
@@ -49,7 +50,16 @@ export type Tab =
   | "site-contents"
   | "settings";
 
-type Props = { user: { id: string; name: string; role: StaffRole } };
+type Props = {
+  user: {
+    id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    role: StaffRole;
+    avatarUrl?: string;
+  };
+};
 
 type NavItem = {
   id: Tab;
@@ -84,10 +94,14 @@ const nav: NavItem[] = [
     ],
   },
   { id: "site-contents", label: "Site Contents", icon: Paintbrush },
-  { id: "settings", label: "Site Settings", icon: Settings },
 ];
 
-const validTabs = new Set<Tab>(nav.flatMap((n) => [n.id, ...(n.children?.map((c) => c.id) ?? [])]));
+const accountTab: Tab = "settings";
+
+const validTabs = new Set<Tab>([
+  ...nav.flatMap((n) => [n.id, ...(n.children?.map((c) => c.id) ?? [])]),
+  accountTab,
+]);
 
 function readTabFromHash(): Tab {
   if (typeof window === "undefined") return "dashboard";
@@ -100,6 +114,8 @@ export function AdminDashboard({ user }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ "inventory-all": true, "routes-manager": true });
 
   const visibleNav = useMemo(
@@ -127,17 +143,124 @@ export function AdminDashboard({ user }: Props) {
     return () => window.removeEventListener("hashchange", syncTab);
   }, [user.role]);
 
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function closeMenu(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", closeMenu);
+    return () => document.removeEventListener("mousedown", closeMenu);
+  }, [userMenuOpen]);
+
   function selectTab(id: Tab) {
     if (!canAccessTab(user.role, id)) return;
     setTab(id);
     window.location.hash = id;
     setMobileOpen(false);
+    setUserMenuOpen(false);
   }
 
   async function logout() {
+    setUserMenuOpen(false);
     await fetch("/api/admin/login", { method: "DELETE" });
     router.push("/admin/login");
     router.refresh();
+  }
+
+  function userInitials(name: string) {
+    return name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("");
+  }
+
+  function UserCard() {
+    const founderRing = user.role === "owner" ? "ring-sky-400/40" : "ring-slate-700";
+
+    return (
+      <div ref={userMenuRef} className="relative">
+        {userMenuOpen ? (
+          <div className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/40 ring-1 ring-black/20">
+            <div className="border-b border-slate-800 px-4 py-3">
+              <p className="truncate text-sm font-medium text-white">{user.name}</p>
+              <p className="truncate text-xs text-slate-500">{user.email}</p>
+              <div className="mt-2">
+                <RoleBadge role={user.role} />
+              </div>
+            </div>
+            <div className="p-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  selectTab(accountTab);
+                  setUserMenuOpen(false);
+                }}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-slate-800"
+              >
+                <UserCircle className="h-4 w-4 text-sky-400" />
+                Account settings
+              </button>
+              <Link
+                href="/"
+                target="_blank"
+                onClick={() => setUserMenuOpen(false)}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-200 transition hover:bg-slate-800"
+              >
+                <ExternalLink className="h-4 w-4 text-slate-400" />
+                View website
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => setUserMenuOpen((open) => !open)}
+          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
+            userMenuOpen
+              ? "border-sky-500/30 bg-sky-500/10 ring-1 ring-sky-400/20"
+              : "border-slate-800/80 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-900/70"
+          }`}
+          aria-expanded={userMenuOpen}
+          aria-haspopup="menu"
+        >
+          {user.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt=""
+              className={`h-10 w-10 shrink-0 rounded-full object-cover ring-2 ${founderRing}`}
+            />
+          ) : (
+            <span
+              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ring-2 ${
+                user.role === "owner" ? "bg-sky-500/15 text-sky-200 ring-sky-400/40" : "bg-slate-800 text-amber-200 ring-slate-700"
+              }`}
+            >
+              {userInitials(user.name)}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-slate-200">{user.name}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <RoleBadge role={user.role} />
+            </div>
+          </div>
+          <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition ${userMenuOpen ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+    );
   }
 
   function NavButton({ item, nested }: { item: { id: Tab; label: string; icon?: typeof LayoutDashboard }; nested?: boolean }) {
@@ -203,27 +326,7 @@ export function AdminDashboard({ user }: Props) {
       </nav>
 
       <div className="border-t border-slate-800/80 p-3">
-        <div className="mb-3 rounded-xl border border-slate-800/80 bg-slate-950/50 px-3 py-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Signed in</p>
-          <p className="mt-0.5 truncate text-sm font-medium text-slate-200">{user.name}</p>
-          <p className="text-xs text-slate-500">{roleLabels[user.role]}</p>
-        </div>
-        <Link
-          href="/"
-          target="_blank"
-          className="mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-400 transition hover:bg-slate-800/50 hover:text-slate-200"
-        >
-          <ExternalLink className="h-4 w-4" />
-          View website
-        </Link>
-        <button
-          type="button"
-          onClick={logout}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-red-400/80 transition hover:bg-red-500/10 hover:text-red-300"
-        >
-          <LogOut className="h-4 w-4" />
-          Logout
-        </button>
+        <UserCard />
       </div>
     </>
   );
@@ -259,11 +362,12 @@ export function AdminDashboard({ user }: Props) {
           </button>
           <div className="text-center">
             <p className="font-semibold text-white">Staff Portal</p>
-            <p className="text-xs text-slate-500">{user.name} · {roleLabels[user.role]}</p>
+            <div className="mt-0.5 flex items-center justify-center gap-2">
+              <p className="text-xs text-slate-500">{user.name}</p>
+              <RoleBadge role={user.role} />
+            </div>
           </div>
-          <button type="button" onClick={logout} className="rounded-lg p-2 text-slate-400 hover:text-red-300">
-            <LogOut className="h-5 w-5" />
-          </button>
+          <div className="w-9" aria-hidden />
         </header>
 
         <main className="relative flex-1 overflow-auto">
@@ -280,7 +384,7 @@ export function AdminDashboard({ user }: Props) {
             {tab === "routes-manager" && <RoutesPanel />}
             {tab === "routes-today" && <RoutesPanel todayOnly userId={user.id} />}
             {tab === "site-contents" && canAccessTab(user.role, "site-contents") && <ContentEditor />}
-            {tab === "settings" && <SettingsPanel name={user.name} />}
+            {tab === "settings" && <SettingsPanel user={user} />}
           </div>
         </main>
       </div>
