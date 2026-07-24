@@ -147,15 +147,17 @@ function customerVehicleToRow(v: CustomerVehicle) {
 function rowToBooking(r: Record<string, unknown>): Booking {
   return {
     id: r.id as string,
+    customerId: (r.customer_id as string) || undefined,
+    quoteId: (r.quote_id as string) || undefined,
     customerName: r.customer_name as string,
-    phone: r.phone as string,
-    email: r.email as string | undefined,
+    phone: (r.phone as string) ?? "",
+    email: (r.email as string) || undefined,
     service: r.service as string,
     date: r.date as string,
     time: r.time as string,
-    address: r.address as string | undefined,
+    address: (r.address as string) || undefined,
     status: r.status as Booking["status"],
-    notes: r.notes as string | undefined,
+    notes: (r.notes as string) || undefined,
     createdAt: r.created_at as string,
   };
 }
@@ -163,15 +165,17 @@ function rowToBooking(r: Record<string, unknown>): Booking {
 function bookingToRow(b: Booking) {
   return {
     id: b.id,
+    customer_id: b.customerId?.trim() || null,
+    quote_id: b.quoteId?.trim() || null,
     customer_name: b.customerName,
     phone: b.phone,
-    email: b.email,
+    email: b.email ?? "",
     service: b.service,
     date: b.date,
     time: b.time,
-    address: b.address,
+    address: b.address ?? "",
     status: b.status,
-    notes: b.notes,
+    notes: b.notes ?? "",
     created_at: b.createdAt,
   };
 }
@@ -392,6 +396,53 @@ export async function deleteCustomerVehicle(id: string) {
 export async function getCustomerById(id: string) {
   const customers = await loadCustomers();
   return customers.find((customer) => customer.id === id) ?? null;
+}
+
+/** Find an existing customer by phone/email, or create one from contact details. */
+export async function findOrCreateCustomer(input: {
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+}): Promise<Customer> {
+  const name = input.name.trim();
+  const phone = input.phone.trim();
+  const email = input.email?.trim().toLowerCase() || undefined;
+  const address = input.address?.trim() || undefined;
+  if (!name) throw new Error("Customer name is required.");
+
+  const customers = await loadCustomers();
+  const byPhone = phone
+    ? customers.find((customer) => customer.phone.replace(/\D/g, "") && customer.phone.replace(/\D/g, "") === phone.replace(/\D/g, ""))
+    : undefined;
+  const byEmail = email
+    ? customers.find((customer) => customer.email?.trim().toLowerCase() === email)
+    : undefined;
+  const existing = byPhone ?? byEmail;
+  if (existing) {
+    const updated: Customer = {
+      ...existing,
+      name: name || existing.name,
+      phone: phone || existing.phone,
+      email: email ?? existing.email,
+      address: address ?? existing.address,
+      updatedAt: new Date().toISOString(),
+    };
+    await upsertCustomer(updated);
+    return updated;
+  }
+
+  const customer: Customer = {
+    id: createId(),
+    name,
+    phone,
+    email,
+    address,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await upsertCustomer(customer);
+  return customer;
 }
 
 export async function getCustomerVehicleById(id: string) {
