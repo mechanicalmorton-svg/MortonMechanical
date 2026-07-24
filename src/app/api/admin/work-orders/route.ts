@@ -12,6 +12,11 @@ function parsePriority(value: unknown): Priority {
   return value === "urgent" ? "urgent" : "normal";
 }
 
+function optionalId(value: unknown) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed || undefined;
+}
+
 export async function GET() {
   return withAdminAuth(async () => {
     const items = await loadWorkOrders();
@@ -39,8 +44,8 @@ export async function POST(req: Request) {
 
       const order: WorkOrder = {
         id: createId(),
-        customerId: links.customerId,
-        customerVehicleId: links.customerVehicleId,
+        customerId: optionalId(links.customerId),
+        customerVehicleId: optionalId(links.customerVehicleId),
         customerName: links.customerName,
         phone: links.phone,
         vehicle: links.vehicle,
@@ -84,8 +89,11 @@ export async function PATCH(req: Request) {
       const updated: WorkOrder = {
         ...item,
         ...body,
-        customerId: links.customerId ?? item.customerId,
-        customerVehicleId: links.customerVehicleId ?? item.customerVehicleId,
+        customerId: optionalId(links.customerId ?? item.customerId),
+        customerVehicleId:
+          body.saveVehicleToFile === false && !optionalId(body.customerVehicleId)
+            ? undefined
+            : optionalId(links.customerVehicleId ?? body.customerVehicleId ?? item.customerVehicleId),
         customerName: links.customerName || item.customerName,
         phone: links.phone || item.phone,
         vehicle: links.vehicle || item.vehicle,

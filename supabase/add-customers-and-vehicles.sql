@@ -35,3 +35,7 @@ create index if not exists work_orders_customer_idx on work_orders (customer_id)
 
 alter table customers enable row level security;
 alter table customer_vehicles enable row level security;
+
+-- Fix empty-string FK values that violate constraints (safe to re-run)
+update work_orders set customer_id = null where customer_id = '';
+update work_orders set customer_vehicle_id = null where customer_vehicle_id = '';

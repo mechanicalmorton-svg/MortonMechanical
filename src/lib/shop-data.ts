@@ -61,8 +61,8 @@ function rowToWorkOrder(r: Record<string, unknown>): WorkOrder {
 function workOrderToRow(w: WorkOrder) {
   return {
     id: w.id,
-    customer_id: w.customerId ?? "",
-    customer_vehicle_id: w.customerVehicleId ?? "",
+    customer_id: w.customerId?.trim() || null,
+    customer_vehicle_id: w.customerVehicleId?.trim() || null,
     customer_name: w.customerName,
     phone: w.phone,
     vehicle: w.vehicle,
