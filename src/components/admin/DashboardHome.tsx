@@ -8,7 +8,7 @@ import { adminGet } from "./admin-fetch";
 import type { Tab } from "./AdminDashboard";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
-import { EmptyState, PageHeader, Panel, StatCard, StatusBadge, btnPrimary, btnSecondary } from "./admin-ui";
+import { EmptyState, PageHeader, Panel, StatCard, StatusBadge, btnSecondary } from "./admin-ui";
 
 type Props = {
   name: string;
@@ -59,47 +59,62 @@ export function DashboardHome({ name, role, onNavigate }: Props) {
 
   const mtdTotal = data?.mtdCompletedJobs.reduce((sum, job) => sum + (job.revenue ?? 0), 0) ?? 0;
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
   return (
     <div className="mx-auto max-w-7xl">
-      <PageHeader title="Dashboard Overview" subtitle={`Welcome back, ${name}!`} />
+      <PageHeader
+        title={`${greeting}, ${name.split(" ")[0] || name}`}
+        subtitle="Here’s what’s happening across the shop today — work orders, bookings, and the jobs that need attention."
+        eyebrow="Operations dashboard"
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Open Work Orders"
-          value={loading ? "—" : stats?.openWorkOrders ?? 0}
-          hint={`${stats?.inProgressWorkOrders ?? 0} in progress`}
-          icon={ClipboardList}
-          accent="amber"
-          active={statModal === "open-work-orders"}
-          onClick={() => setStatModal((current) => (current === "open-work-orders" ? null : "open-work-orders"))}
-        />
-        <StatCard
-          label="Today's Bookings"
-          value={loading ? "—" : stats?.todayBookings ?? 0}
-          hint={`${stats?.pendingBookings ?? 0} pending confirmation`}
-          icon={Calendar}
-          accent="purple"
-          active={statModal === "today-bookings"}
-          onClick={() => setStatModal((current) => (current === "today-bookings" ? null : "today-bookings"))}
-        />
-        <StatCard
-          label="Urgent Items"
-          value={loading ? "—" : stats?.urgentItems ?? 0}
-          hint="Work orders & low stock"
-          icon={AlertTriangle}
-          accent="red"
-          active={statModal === "urgent"}
-          onClick={() => setStatModal((current) => (current === "urgent" ? null : "urgent"))}
-        />
-        <StatCard
-          label="MTD Revenue"
-          value={loading ? "—" : `$${(stats?.mtdRevenue ?? 0).toLocaleString()}`}
-          hint="Completed jobs this month"
-          icon={DollarSign}
-          accent="emerald"
-          active={statModal === "mtd-revenue"}
-          onClick={() => setStatModal((current) => (current === "mtd-revenue" ? null : "mtd-revenue"))}
-        />
+        <div className="admin-rise admin-rise-delay-1">
+          <StatCard
+            label="Open Work Orders"
+            value={loading ? "—" : stats?.openWorkOrders ?? 0}
+            hint={`${stats?.inProgressWorkOrders ?? 0} in progress`}
+            icon={ClipboardList}
+            accent="amber"
+            active={statModal === "open-work-orders"}
+            onClick={() => setStatModal((current) => (current === "open-work-orders" ? null : "open-work-orders"))}
+          />
+        </div>
+        <div className="admin-rise admin-rise-delay-2">
+          <StatCard
+            label="Today's Bookings"
+            value={loading ? "—" : stats?.todayBookings ?? 0}
+            hint={`${stats?.pendingBookings ?? 0} pending confirmation`}
+            icon={Calendar}
+            accent="purple"
+            active={statModal === "today-bookings"}
+            onClick={() => setStatModal((current) => (current === "today-bookings" ? null : "today-bookings"))}
+          />
+        </div>
+        <div className="admin-rise admin-rise-delay-3">
+          <StatCard
+            label="Urgent Items"
+            value={loading ? "—" : stats?.urgentItems ?? 0}
+            hint="Work orders & low stock"
+            icon={AlertTriangle}
+            accent="red"
+            active={statModal === "urgent"}
+            onClick={() => setStatModal((current) => (current === "urgent" ? null : "urgent"))}
+          />
+        </div>
+        <div className="admin-rise admin-rise-delay-4">
+          <StatCard
+            label="MTD Revenue"
+            value={loading ? "—" : `$${(stats?.mtdRevenue ?? 0).toLocaleString()}`}
+            hint="Completed jobs this month"
+            icon={DollarSign}
+            accent="emerald"
+            active={statModal === "mtd-revenue"}
+            onClick={() => setStatModal((current) => (current === "mtd-revenue" ? null : "mtd-revenue"))}
+          />
+        </div>
       </div>
 
       <AdminModal
@@ -279,22 +294,40 @@ export function DashboardHome({ name, role, onNavigate }: Props) {
       </AdminModal>
 
       <div className="mt-8">
-        <div className="mb-4 flex items-center gap-2">
-          <Plus className="h-4 w-4 text-amber-400" />
-          <h2 className="font-semibold text-white">Quick Actions</h2>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Shortcuts</p>
+            <h2 className="admin-display mt-1 text-xl font-semibold text-white">Quick actions</h2>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {quickActions.map(({ label, tab, primary }) => (
-            <button key={tab} type="button" onClick={() => onNavigate(tab)} className={primary ? btnPrimary : btnSecondary}>
-              {primary && <Plus className="h-4 w-4" />}
-              {label}
+            <button
+              key={tab}
+              type="button"
+              onClick={() => onNavigate(tab)}
+              className={`group rounded-2xl border px-4 py-4 text-left transition duration-200 hover:-translate-y-0.5 ${
+                primary
+                  ? "border-amber-500/30 bg-gradient-to-br from-amber-500/20 via-amber-500/10 to-pink-600/10 shadow-lg shadow-amber-950/20"
+                  : "border-slate-800/70 bg-slate-900/40 hover:border-slate-700 hover:bg-slate-900/70"
+              }`}
+            >
+              <span
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ring-1 ${
+                  primary ? "bg-amber-500/20 text-amber-200 ring-amber-400/30" : "bg-slate-800 text-slate-300 ring-slate-700"
+                }`}
+              >
+                <Plus className="h-4 w-4" />
+              </span>
+              <p className={`mt-3 text-sm font-semibold ${primary ? "text-amber-50" : "text-white"}`}>{label}</p>
+              <p className="mt-1 text-xs text-slate-500 transition group-hover:text-slate-400">Open workspace</p>
             </button>
           ))}
         </div>
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Panel title="Pending Bookings" badge={data?.pendingBookings.length ?? 0}>
+        <Panel title="Pending Bookings" badge={data?.pendingBookings.length ?? 0} description="Appointments waiting on confirmation">
           {loading ? (
             <p className="text-sm text-slate-500">Loading…</p>
           ) : !data?.pendingBookings.length ? (
@@ -316,7 +349,7 @@ export function DashboardHome({ name, role, onNavigate }: Props) {
           )}
         </Panel>
 
-        <Panel title="In Progress" badge={data?.inProgressWorkOrders.length ?? 0}>
+        <Panel title="In Progress" badge={data?.inProgressWorkOrders.length ?? 0} description="Jobs currently on the floor">
           {loading ? (
             <p className="text-sm text-slate-500">Loading…</p>
           ) : !data?.inProgressWorkOrders.length ? (
@@ -336,7 +369,7 @@ export function DashboardHome({ name, role, onNavigate }: Props) {
       </div>
 
       <div className="mt-6">
-        <Panel title="Today's Schedule" badge={data?.todaySchedule.length ?? 0}>
+        <Panel title="Today's Schedule" badge={data?.todaySchedule.length ?? 0} description="Confirmed visits for today">
           {loading ? (
             <p className="text-sm text-slate-500">Loading…</p>
           ) : !data?.todaySchedule.length ? (
@@ -344,11 +377,19 @@ export function DashboardHome({ name, role, onNavigate }: Props) {
           ) : (
             <ul className="space-y-3">
               {data.todaySchedule.map((b) => (
-                <li key={b.id} className="flex items-center gap-4 rounded-xl border border-slate-800/80 bg-slate-950/40 px-4 py-3">
-                  <span className="shrink-0 rounded-lg bg-amber-500/10 px-3 py-1.5 text-sm font-semibold text-amber-300">{b.time}</span>
+                <li
+                  key={b.id}
+                  className="flex items-center gap-4 rounded-xl border border-slate-800/70 bg-gradient-to-r from-slate-950/60 to-slate-900/30 px-4 py-3.5"
+                >
+                  <span className="shrink-0 rounded-xl bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-300 ring-1 ring-amber-500/20">
+                    {b.time}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-white">{b.customerName}</p>
-                    <p className="truncate text-sm text-slate-400">{b.service}{b.address ? ` · ${b.address}` : ""}</p>
+                    <p className="truncate text-sm text-slate-400">
+                      {b.service}
+                      {b.address ? ` · ${b.address}` : ""}
+                    </p>
                   </div>
                 </li>
               ))}

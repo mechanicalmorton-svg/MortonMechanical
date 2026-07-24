@@ -215,7 +215,7 @@ export const DEFAULT_CONTENT: SiteContent = {
     privacyLabel: "Privacy",
     termsLabel: "Terms",
     contactLabel: "Contact",
-    staffLoginLabel: "Staff login",
+    staffLoginLabel: "Portal",
   },
 };
 

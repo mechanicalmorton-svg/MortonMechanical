@@ -7,25 +7,26 @@ export async function CTA() {
   const { cta, images } = await getContent();
 
   return (
-    <section className="relative overflow-hidden border-t border-slate-800/60">
-      <div className="relative min-h-[280px]">
+    <section className="relative overflow-hidden">
+      <div className="relative min-h-[340px] sm:min-h-[380px]">
         <Image
           src={images.contact}
           alt=""
           fill
-          className="object-cover opacity-25"
+          className="object-cover"
           sizes="100vw"
           aria-hidden
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/90 to-slate-950/70" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-slate-950/55" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_50%,rgba(245,158,11,0.12),transparent_50%)]" />
 
-        <div className="relative mx-auto max-w-screen-xl px-4 py-16 text-center sm:px-6 sm:py-20">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-100 sm:text-4xl">{cta.title}</h2>
-          <p className="mx-auto mt-3 max-w-lg text-slate-400">{cta.description}</p>
-          <Link
-            href="/contact"
-            className="mt-8 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-amber-500 to-pink-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-amber-400 hover:to-pink-500"
-          >
+        <div className="relative mx-auto flex min-h-[340px] max-w-screen-xl flex-col items-start justify-center px-4 py-20 sm:min-h-[380px] sm:px-6 sm:py-24">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-400/90">Next step</p>
+          <h2 className="site-display mt-4 max-w-2xl text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+            {cta.title}
+          </h2>
+          <p className="mt-4 max-w-lg text-base leading-relaxed text-slate-300">{cta.description}</p>
+          <Link href="/contact" className="site-btn-primary mt-9">
             {cta.buttonText}
             <ArrowRight className="h-4 w-4" aria-hidden />
           </Link>

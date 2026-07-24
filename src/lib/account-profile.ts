@@ -1,8 +1,13 @@
 import { updatePassword } from "./auth";
+import { isJwtKeyError, sanitizeAuthError } from "./auth-errors";
 import { getPublishableKey, getSupabaseAdmin, getSupabaseUrl, isSupabaseAuthConfigured } from "./supabase/server";
 import { createAuthServerClient, isAllowedAdminEmail } from "./supabase/server-auth";
 import { createClient } from "@supabase/supabase-js";
 import type { StaffRole } from "./shop-types";
+
+function friendlyAuthAdminError(message: string | undefined, fallback: string) {
+  return sanitizeAuthError(message, fallback);
+}
 
 export type AccountProfile = {
   id: string;
@@ -80,11 +85,31 @@ export async function getAccountProfile(userId: string, fallback?: Partial<Accou
   const admin = getSupabaseAdmin();
   if (!admin) throw new Error("Database is not configured.");
 
-  const { data: authUser, error } = await admin.auth.admin.getUserById(userId);
-  if (error || !authUser.user?.email) throw new Error(error?.message ?? "User not found.");
-
   const staff = await loadStaffRow(userId);
-  const metadata = authUser.user.user_metadata ?? {};
+  let authEmail: string | undefined;
+  let authPhone = "";
+  let metadata: Record<string, unknown> = {};
+
+  try {
+    const { data: authUser, error } = await admin.auth.admin.getUserById(userId);
+    if (error) throw new Error(error.message);
+    authEmail = authUser.user?.email;
+    authPhone = authUser.user?.phone || "";
+    metadata = authUser.user?.user_metadata ?? {};
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    // Staff-table fallback when Auth Admin JWT signing keys are misconfigured.
+    if (!isJwtKeyError(message)) {
+      throw new Error(friendlyAuthAdminError(message, "User not found."));
+    }
+  }
+
+  const email =
+    authEmail ||
+    (typeof staff?.email === "string" ? staff.email : undefined) ||
+    fallback?.email ||
+    "";
+  if (!email) throw new Error(friendlyAuthAdminError(undefined, "User not found."));
 
   return {
     id: userId,
@@ -92,9 +117,9 @@ export async function getAccountProfile(userId: string, fallback?: Partial<Accou
       (staff?.name as string | undefined) ||
       (typeof metadata.full_name === "string" ? metadata.full_name : undefined) ||
       fallback?.name ||
-      authUser.user.email.split("@")[0],
-    email: authUser.user.email,
-    phone: (staff?.phone as string | undefined) || authUser.user.phone || "",
+      email.split("@")[0],
+    email,
+    phone: (staff?.phone as string | undefined) || authPhone || "",
     role: ((staff?.role as StaffRole | undefined) || fallback?.role || "mechanic") as StaffRole,
     avatarUrl:
       (staff?.avatar_url as string | undefined) ||
@@ -124,7 +149,9 @@ export async function updateAccountProfile(
   }
 
   const { data: authUser, error: loadError } = await admin.auth.admin.getUserById(userId);
-  if (loadError || !authUser.user) throw new Error(loadError?.message ?? "User not found.");
+  if (loadError || !authUser.user) {
+    throw new Error(friendlyAuthAdminError(loadError?.message, "User not found."));
+  }
 
   const authPatch: {
     email?: string;
@@ -146,7 +173,7 @@ export async function updateAccountProfile(
     ...authPatch,
     email_confirm: true,
   });
-  if (authError) throw new Error(authError.message);
+  if (authError) throw new Error(friendlyAuthAdminError(authError.message, "Could not update profile."));
 
   await upsertStaffProfile(userId, {
     name: nextName,
@@ -180,7 +207,7 @@ export async function changeAccountPassword(userId: string, password: string, cu
     const admin = getSupabaseAdmin();
     if (!admin) throw new Error("Auth is not configured.");
     const { error } = await admin.auth.admin.updateUserById(userId, { password });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(friendlyAuthAdminError(error.message, "Could not update password."));
     return;
   }
 
@@ -234,7 +261,9 @@ export async function uploadAccountAvatar(userId: string, file: File | Blob, con
   const avatarUrl = `${publicUrl.publicUrl}?v=${Date.now()}`;
 
   const { data: authUser, error: loadError } = await admin.auth.admin.getUserById(userId);
-  if (loadError || !authUser.user) throw new Error(loadError?.message ?? "User not found.");
+  if (loadError || !authUser.user) {
+    throw new Error(friendlyAuthAdminError(loadError?.message, "User not found."));
+  }
 
   const { error: authError } = await admin.auth.admin.updateUserById(userId, {
     user_metadata: {
@@ -242,7 +271,7 @@ export async function uploadAccountAvatar(userId: string, file: File | Blob, con
       avatar_url: avatarUrl,
     },
   });
-  if (authError) throw new Error(authError.message);
+  if (authError) throw new Error(friendlyAuthAdminError(authError.message, "Could not save avatar."));
 
   await upsertStaffProfile(userId, { avatar_url: avatarUrl });
 
@@ -265,7 +294,9 @@ export async function removeAccountAvatar(userId: string) {
 
   const profile = await getAccountProfile(userId);
   const { data: authUser, error: loadError } = await admin.auth.admin.getUserById(userId);
-  if (loadError || !authUser.user) throw new Error(loadError?.message ?? "User not found.");
+  if (loadError || !authUser.user) {
+    throw new Error(friendlyAuthAdminError(loadError?.message, "User not found."));
+  }
 
   const { error: authError } = await admin.auth.admin.updateUserById(userId, {
     user_metadata: {
@@ -274,7 +305,7 @@ export async function removeAccountAvatar(userId: string) {
       avatar_url: null,
     },
   });
-  if (authError) throw new Error(authError.message);
+  if (authError) throw new Error(friendlyAuthAdminError(authError.message, "Could not remove avatar."));
 
   await upsertStaffProfile(userId, { avatar_url: null });
 }

@@ -13,6 +13,21 @@ function deepMerge<T extends Record<string, unknown>>(base: T, patch: Partial<T>
   return out;
 }
 
+/** Public brand name — drop legal suffixes like LLC from display. */
+function cleanBusinessName(name: string) {
+  return name
+    .replace(/,?\s*\bL\.?L\.?C\.?\b\.?/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function normalizeContent(stored: Partial<SiteContent> = {}): SiteContent {
-  return deepMerge(DEFAULT_CONTENT, stored);
+  const content = deepMerge(DEFAULT_CONTENT, stored);
+  const cleaned = cleanBusinessName(content.site.name);
+  content.site.name = cleaned || DEFAULT_CONTENT.site.name;
+  // Prefer the updated public label even if older content still says "Staff login".
+  if (/^staff\s*login$/i.test(content.footer.staffLoginLabel.trim())) {
+    content.footer.staffLoginLabel = DEFAULT_CONTENT.footer.staffLoginLabel;
+  }
+  return content;
 }

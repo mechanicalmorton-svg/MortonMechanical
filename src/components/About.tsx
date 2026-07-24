@@ -6,11 +6,11 @@ export async function About() {
   const { about, whyUs, images } = await getContent();
 
   return (
-    <section id={about.anchorId} className="scroll-mt-24 border-y border-slate-800/60 bg-slate-950 py-16 sm:py-20">
+    <section id={about.anchorId} className="scroll-mt-24 py-20 sm:py-28">
       <div className="mx-auto max-w-screen-xl px-4 sm:px-6">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+        <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-20">
           <div className="relative order-2 lg:order-1">
-            <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-slate-800/80 sm:aspect-[5/4]">
+            <div className="relative aspect-[4/5] overflow-hidden rounded-[1.75rem] border border-slate-800/70 sm:aspect-[5/4]">
               <Image
                 src={images.about}
                 alt={about.imageAlt}
@@ -18,28 +18,27 @@ export async function About() {
                 className="object-cover"
                 sizes="(max-width: 1024px) 100vw, 50vw"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/50 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-slate-950/10" />
             </div>
-            <div className="absolute -bottom-5 -left-2 rounded-xl border border-slate-800/80 bg-slate-900/95 px-4 py-3 shadow-xl backdrop-blur sm:-left-5">
-              <p className="text-2xl font-bold text-amber-400">{about.badgeValue}</p>
-              <p className="text-xs text-slate-400">{about.badgeLabel}</p>
+            <div className="mt-6 flex items-end gap-3 border-l border-amber-500/40 pl-4">
+              <p className="site-display text-4xl font-semibold tracking-tight text-amber-400">
+                {about.badgeValue}
+              </p>
+              <p className="pb-1 text-xs uppercase tracking-[0.18em] text-slate-500">{about.badgeLabel}</p>
             </div>
           </div>
 
           <div className="order-1 lg:order-2">
             <SectionLabel>{about.label}</SectionLabel>
             <SectionTitle subtitle={about.subtitle}>{about.title}</SectionTitle>
-            <p className="mt-6 leading-relaxed text-slate-300">{about.paragraph1}</p>
+            <p className="mt-8 leading-relaxed text-slate-300">{about.paragraph1}</p>
             <p className="mt-4 leading-relaxed text-slate-400">{about.paragraph2}</p>
 
-            <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+            <ul className="mt-10 grid gap-5 sm:grid-cols-2">
               {whyUs.map((item) => (
-                <li
-                  key={item.title}
-                  className="rounded-xl border border-slate-800/50 bg-slate-900/30 px-4 py-3"
-                >
-                  <p className="text-sm font-semibold text-slate-200">{item.title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{item.text}</p>
+                <li key={item.title} className="border-t border-slate-800/70 pt-4">
+                  <p className="site-display text-sm font-semibold tracking-tight text-slate-100">{item.title}</p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{item.text}</p>
                 </li>
               ))}
             </ul>

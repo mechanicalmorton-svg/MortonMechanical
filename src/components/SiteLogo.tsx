@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 export const SITE_LOGO = "/logo.png";
-export const SITE_NAME = "Morton's Mechanical LLC";
+export const SITE_NAME = "Morton's Mechanicals";
 
 type Props = {
   size?: number;
@@ -30,7 +30,7 @@ export function SiteLogo({
       />
       {showName && (
         <span className="min-w-0">
-          <span className="block truncate font-bold text-slate-100">{name}</span>
+          <span className="block truncate font-bold text-amber-400">{name}</span>
           {subtitle ? <span className="block truncate text-xs text-slate-500">{subtitle}</span> : null}
         </span>
       )}

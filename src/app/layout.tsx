@@ -1,18 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { PhoneFAB } from "@/components/PhoneFAB";
+import { Outfit, Syne } from "next/font/google";
 import { ContentLiveRefresh } from "@/components/ContentLiveRefresh";
 import { getContent } from "@/lib/content";
 import "./globals.css";
 
-const geistSans = Geist({
+const siteSans = Outfit({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const siteDisplay = Syne({
+  variable: "--font-site-display",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -26,10 +27,9 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full scroll-smooth`}>
-      <body className="flex min-h-full flex-col bg-slate-950 font-sans text-slate-100 antialiased">
+    <html lang="en" className={`${siteSans.variable} ${siteDisplay.variable} h-full scroll-smooth`}>
+      <body className="site-shell flex min-h-full flex-col font-sans text-slate-100 antialiased">
         {children}
-        <PhoneFAB />
         <ContentLiveRefresh />
       </body>
     </html>

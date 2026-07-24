@@ -7,18 +7,21 @@ export async function TrustBar() {
   const { trustBar } = await getContent();
 
   return (
-    <section className="border-b border-slate-800/60 bg-slate-900/30">
-      <div className="mx-auto grid max-w-screen-xl grid-cols-2 gap-px bg-slate-800/40 sm:grid-cols-4">
+    <section className="border-b border-slate-800/50 bg-slate-950/80">
+      <div className="mx-auto grid max-w-screen-xl gap-px sm:grid-cols-2 lg:grid-cols-4">
         {trustBar.map(({ label, detail }, i) => {
           const Icon = icons[i % icons.length];
           return (
-            <div key={label} className="flex items-center gap-3 bg-slate-950 px-4 py-5 sm:px-6">
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
+            <div
+              key={label}
+              className="group flex items-start gap-4 px-5 py-7 transition sm:px-6 sm:py-8"
+            >
+              <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-400 transition group-hover:border-amber-400/35 group-hover:bg-amber-500/15">
                 <Icon className="h-4 w-4" aria-hidden />
               </span>
               <div>
-                <p className="text-sm font-semibold text-slate-200">{label}</p>
-                <p className="text-xs text-slate-500">{detail}</p>
+                <p className="site-display text-sm font-semibold tracking-tight text-slate-100">{label}</p>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">{detail}</p>
               </div>
             </div>
           );

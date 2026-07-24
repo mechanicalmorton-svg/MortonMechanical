@@ -6,6 +6,12 @@ import {
   sendAccountPasswordReset,
   updateAccountProfile,
 } from "@/lib/account-profile";
+import { sanitizeAuthError } from "@/lib/auth-errors";
+
+function errorJson(err: unknown, fallback: string, status = 400) {
+  const message = err instanceof Error ? err.message : fallback;
+  return NextResponse.json({ error: sanitizeAuthError(message, fallback) }, { status });
+}
 
 export async function GET() {
   const { user, error } = await requireAuth();
@@ -15,7 +21,7 @@ export async function GET() {
     const profile = await getAccountProfile(user.id, user);
     return NextResponse.json(profile);
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not load account." }, { status: 400 });
+    return errorJson(err, "Could not load account.");
   }
 }
 
@@ -32,7 +38,7 @@ export async function PATCH(req: Request) {
     });
     return NextResponse.json(profile);
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not update account." }, { status: 400 });
+    return errorJson(err, "Could not update account.");
   }
 }
 
@@ -61,6 +67,6 @@ export async function POST(req: Request) {
     await changeAccountPassword(user.id, password, currentPassword);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not update password." }, { status: 400 });
+    return errorJson(err, "Could not update password.");
   }
 }

@@ -1,4 +1,17 @@
 import type { Metadata } from "next";
+import { Outfit, Syne } from "next/font/google";
+
+const adminSans = Outfit({
+  subsets: ["latin"],
+  variable: "--font-admin-sans",
+  display: "swap",
+});
+
+const adminDisplay = Syne({
+  subsets: ["latin"],
+  variable: "--font-admin-display",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Staff Portal",
@@ -7,7 +20,7 @@ export const metadata: Metadata = {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 antialiased">
+    <div className={`${adminSans.variable} ${adminDisplay.variable} admin-shell min-h-screen text-slate-100 antialiased`}>
       {children}
     </div>
   );
