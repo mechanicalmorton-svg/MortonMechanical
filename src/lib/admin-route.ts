@@ -14,7 +14,7 @@ function errorResponse(err: unknown) {
 function databaseGuard() {
   if (!isDatabaseConfigured()) {
     return NextResponse.json(
-      { error: "Database not connected. Configure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
+      { error: "Database not connected. Configure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY)." },
       { status: 503 },
     );
   }

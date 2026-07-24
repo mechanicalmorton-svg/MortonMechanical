@@ -9,14 +9,14 @@ export function getSupabaseUrl() {
 /** Publishable key (new `sb_publishable_...` or legacy anon JWT). */
 export function getPublishableKey() {
   return (
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
 }
 
 /** Secret key (new `sb_secret_...` or legacy service_role JWT). Server only. */
 export function getSecretKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+  return process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
 export function isSupabaseConfigured() {
