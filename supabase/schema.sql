@@ -77,6 +77,7 @@ create table if not exists bookings (
 create table if not exists inventory (
   id text primary key,
   name text not null,
+  part_number text default '',
   sku text default '',
   category text default 'General',
   quantity int not null default 0,

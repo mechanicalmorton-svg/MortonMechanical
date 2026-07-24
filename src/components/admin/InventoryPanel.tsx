@@ -26,6 +26,7 @@ const CATEGORIES = [
 
 const emptyForm = {
   name: "",
+  partNumber: "",
   sku: "",
   category: "General",
   quantity: "0",
@@ -176,20 +177,26 @@ export function InventoryPanel({ lowStockOnly }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sku, adjust: 1 }),
         });
-        if (adjustError) setError(adjustError);
-        else {
-          setScanMessage(`Added 1 to ${updated?.name ?? item.name} (${sku}). Stock: ${updated?.quantity ?? item.quantity + 1}`);
-          load();
+        if (adjustError) {
+          setError(adjustError);
+          return;
         }
+
+        const nextItem = updated ?? { ...item, quantity: item.quantity + 1 };
+        setItems((prev) => prev.map((row) => (row.id === nextItem.id ? nextItem : row)));
+        setScanMessage(`+1 ${nextItem.name} (${sku}) — stock now ${nextItem.quantity}`);
         return;
       }
 
-      setScanMessage(`SKU "${sku}" not found — opening add form.`);
-      setEditingId(null);
-      setForm({ ...emptyForm, sku });
-      setShowForm(true);
+      if (showForm && !editingId) {
+        setForm((prev) => ({ ...prev, sku }));
+        setScanMessage(`Barcode ${sku} added to the form — complete details and click Save part.`);
+        return;
+      }
+
+      setScanMessage(`SKU "${sku}" not found. Click Add Part to create a new inventory item.`);
     },
-    [closeAllDropdowns],
+    [closeAllDropdowns, showForm, editingId],
   );
 
   useEffect(() => {
@@ -260,6 +267,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
     setEditingId(item.id);
     setForm({
       name: item.name,
+      partNumber: item.partNumber ?? "",
       sku: item.sku,
       category: item.category?.trim() || "General",
       quantity: String(item.quantity),
@@ -300,47 +308,49 @@ export function InventoryPanel({ lowStockOnly }: Props) {
           subtitle={lowStockOnly ? "Parts at or below minimum stock levels." : "Manage parts, fluids, and shop supplies."}
         />
         <div className="flex flex-wrap gap-2">
-          {!lowStockOnly && (
-            <button
-              type="button"
-              onClick={() => {
-                setScanMode((v) => !v);
-                setScanMessage("");
-              }}
-              className={scanMode ? `${btnPrimary} ring-2 ring-emerald-400/40` : btnSecondary}
-            >
-              <Barcode className="h-4 w-4" />
-              {scanMode ? "Scan mode on" : "Barcode scan"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setScanMode((v) => !v);
+              setScanMessage("");
+            }}
+            className={scanMode ? `${btnPrimary} ring-2 ring-emerald-400/40` : btnSecondary}
+          >
+            <Barcode className="h-4 w-4" />
+            {scanMode ? "Scan mode on" : "Barcode scan"}
+          </button>
           <button type="button" onClick={openAddModal} className={btnPrimary}>
             <Plus className="h-4 w-4" /> {lowStockOnly ? "Add Part" : "Add Inventory"}
           </button>
         </div>
       </div>
 
-      {scanMode && !lowStockOnly && (
+      {scanMode && (
         <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
           <p className="text-sm font-medium text-emerald-200">Barcode scan mode active</p>
           <p className="mt-1 text-xs text-emerald-100/80">
-            Scan a barcode to add 1 to stock. Unknown SKUs open the add form. Dropdowns close automatically after each scan.
+            Scan a known barcode to add 1 to stock instantly. Unknown barcodes fill the Add Part form if it&apos;s open — they never auto-save or close your form.
           </p>
-          <input
-            ref={scanInputRef}
-            className="sr-only"
-            aria-label="Barcode scanner input"
-            onChange={(e) => {
-              scanBufferRef.current = e.target.value;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleScan(e.currentTarget.value);
-                e.currentTarget.value = "";
-                scanBufferRef.current = "";
-              }
-            }}
-          />
+          <label className="mt-3 block text-xs font-medium text-emerald-100/90">
+            Scan or type barcode
+            <input
+              ref={scanInputRef}
+              className={`${inputClass} mt-1.5 font-mono`}
+              placeholder="Point scanner here or type SKU and press Enter"
+              aria-label="Barcode scanner input"
+              onChange={(e) => {
+                scanBufferRef.current = e.target.value;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleScan(e.currentTarget.value);
+                  e.currentTarget.value = "";
+                  scanBufferRef.current = "";
+                }
+              }}
+            />
+          </label>
         </div>
       )}
 
@@ -358,7 +368,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
         <form onSubmit={saveItem} className="space-y-5">
           <FormSection title="Part identification" description="Name, barcode, and inventory category.">
             <div className="grid gap-4 sm:grid-cols-2">
-              <FormField label="Part name" htmlFor="inv-name" required>
+              <FormField label="Part name" htmlFor="inv-name" required className="sm:col-span-2">
                 <input
                   id="inv-name"
                   className={inputClass}
@@ -366,6 +376,15 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   required
+                />
+              </FormField>
+              <FormField label="Part number" htmlFor="inv-part-number" hint="Manufacturer or internal part number." className="sm:col-span-2">
+                <input
+                  id="inv-part-number"
+                  className={inputClass}
+                  placeholder="e.g. OF-1234"
+                  value={form.partNumber}
+                  onChange={(e) => setForm({ ...form, partNumber: e.target.value })}
                 />
               </FormField>
               <FormField label="SKU / barcode" htmlFor="inv-sku" hint="Used for barcode scanning and lookups.">
@@ -493,6 +512,9 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                             {item.quantity <= item.minStock && <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />}
                             <div>
                               <p className="font-medium text-white">{item.name}</p>
+                              {item.partNumber ? (
+                                <p className="text-xs text-slate-400">Part # {item.partNumber}</p>
+                              ) : null}
                               <p className="text-xs text-slate-500">${item.unitCost.toFixed(2)} each</p>
                             </div>
                           </div>

@@ -21,6 +21,7 @@ export async function POST(req: Request) {
     const item: InventoryItem = {
       id: createId(),
       name: body.name ?? "New part",
+      partNumber: body.partNumber ?? "",
       sku: body.sku ?? "",
       category: body.category ?? "General",
       quantity: Number(body.quantity) || 0,

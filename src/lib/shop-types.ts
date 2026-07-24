@@ -38,6 +38,7 @@ export type Booking = {
 export type InventoryItem = {
   id: string;
   name: string;
+  partNumber: string;
   sku: string;
   category: string;
   quantity: number;

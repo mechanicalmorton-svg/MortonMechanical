@@ -105,6 +105,7 @@ function rowToInventory(r: Record<string, unknown>): InventoryItem {
   return {
     id: r.id as string,
     name: r.name as string,
+    partNumber: (r.part_number as string) ?? "",
     sku: (r.sku as string) ?? "",
     category: (r.category as string) ?? "General",
     quantity: Number(r.quantity),
@@ -120,6 +121,7 @@ function inventoryToRow(i: InventoryItem) {
   return {
     id: i.id,
     name: i.name,
+    part_number: i.partNumber,
     sku: i.sku,
     category: i.category,
     quantity: i.quantity,
@@ -261,7 +263,10 @@ export async function loadInventory(): Promise<InventoryItem[]> {
     throwOnError(error, "Could not load inventory");
     return (data ?? []).map(rowToInventory);
   }
-  return readJson<InventoryItem[]>("inventory.json", []);
+  return readJson<InventoryItem[]>("inventory.json", []).map((item) => ({
+    ...item,
+    partNumber: item.partNumber ?? "",
+  }));
 }
 
 export async function upsertInventoryItem(item: InventoryItem) {
