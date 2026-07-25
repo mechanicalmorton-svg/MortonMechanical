@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 export const SITE_LOGO = "/logo.png";
-export const SITE_NAME = "Morton's Mechanicals";
+export const SITE_NAME = "Morton's Mechanical";
 
 type Props = {
   size?: number;

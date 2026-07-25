@@ -60,6 +60,7 @@ create table if not exists work_orders (
   internal_notes text default '',
   revenue numeric,
   scheduled_date text,
+  document_data jsonb default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

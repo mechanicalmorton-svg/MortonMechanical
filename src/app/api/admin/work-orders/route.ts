@@ -124,6 +124,10 @@ export async function PATCH(req: Request) {
           typeof body.internalNotes === "string" ? body.internalNotes : item.internalNotes ?? "",
         revenue: body.revenue ?? item.revenue,
         scheduledDate: optionalId(body.scheduledDate) ?? item.scheduledDate,
+        documentData:
+          body.documentData && typeof body.documentData === "object"
+            ? body.documentData
+            : item.documentData,
         createdAt: item.createdAt,
         updatedAt: new Date().toISOString(),
       };

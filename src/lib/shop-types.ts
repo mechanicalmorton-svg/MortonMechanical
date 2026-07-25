@@ -33,6 +33,64 @@ export type CustomerVehicle = {
   createdAt: string;
 };
 
+export type WorkOrderDocumentKind = "work-order" | "estimate" | "invoice";
+
+export type WorkOrderServiceLine = {
+  description: string;
+  estLabor: number | null;
+};
+
+export type WorkOrderPartLine = {
+  qty: number | null;
+  description: string;
+  partNumber: string;
+  unitPrice: number | null;
+};
+
+export type WorkOrderDocumentFields = {
+  workOrderNumber: string;
+  date: string;
+  promisedDate: string;
+  advisor: string;
+  customer: {
+    name: string;
+    phone: string;
+    email: string;
+    address: string;
+  };
+  vehicle: {
+    make: string;
+    year: string;
+    plate: string;
+    color: string;
+    model: string;
+    vin: string;
+    mileage: string;
+    engine: string;
+  };
+  services: WorkOrderServiceLine[];
+  technicianNotes: string;
+  parts: WorkOrderPartLine[];
+  workDescription: string;
+  authorization: {
+    customerSignature: string;
+    date: string;
+    textEmailUpdates: boolean;
+    paymentSignature: string;
+    paymentDate: string;
+  };
+  summary: {
+    taxPercent: number;
+    excise: number;
+  };
+  notes: string;
+};
+
+export type WorkOrderDocumentData = {
+  viewToken?: string;
+  documents?: Partial<Record<WorkOrderDocumentKind, WorkOrderDocumentFields>>;
+};
+
 export type WorkOrder = {
   id: string;
   customerId?: string;
@@ -49,6 +107,7 @@ export type WorkOrder = {
   internalNotes?: string;
   revenue?: number;
   scheduledDate?: string;
+  documentData?: WorkOrderDocumentData;
   createdAt: string;
   updatedAt: string;
 };

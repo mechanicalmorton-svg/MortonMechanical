@@ -135,7 +135,7 @@ export const DEFAULT_CONTENT: SiteContent = {
   },
   customBlocks: [],
   site: {
-    name: "Morton's Mechanicals",
+    name: "Morton's Mechanical",
     tagline: "Mobile mechanic services — we come to you.",
     description:
       "Professional mobile auto repair and maintenance. Upfront quotes, quality parts, and honest work at your home, office, or roadside.",

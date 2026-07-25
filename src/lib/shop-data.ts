@@ -37,6 +37,12 @@ function useDatabase() {
 // --- mappers ---
 
 function rowToWorkOrder(r: Record<string, unknown>): WorkOrder {
+  const rawDocument = r.document_data;
+  const documentData =
+    rawDocument && typeof rawDocument === "object" && !Array.isArray(rawDocument)
+      ? (rawDocument as WorkOrder["documentData"])
+      : undefined;
+
   return {
     id: r.id as string,
     customerId: (r.customer_id as string) || undefined,
@@ -53,6 +59,7 @@ function rowToWorkOrder(r: Record<string, unknown>): WorkOrder {
     internalNotes: (r.internal_notes as string) || undefined,
     revenue: r.revenue != null ? Number(r.revenue) : undefined,
     scheduledDate: r.scheduled_date as string | undefined,
+    documentData,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
   };
@@ -75,6 +82,7 @@ function workOrderToRow(w: WorkOrder) {
     internal_notes: w.internalNotes ?? "",
     revenue: w.revenue,
     scheduled_date: w.scheduledDate,
+    document_data: w.documentData ?? {},
     created_at: w.createdAt,
     updated_at: w.updatedAt,
   };
