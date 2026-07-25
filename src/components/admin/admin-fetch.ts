@@ -1,3 +1,12 @@
+/** Normalize `/api/admin/staff` which may return an array or `{ staff: [...] }`. */
+export function asStaffList<T = unknown>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === "object" && Array.isArray((data as { staff?: unknown }).staff)) {
+    return (data as { staff: T[] }).staff;
+  }
+  return [];
+}
+
 function normalizeAdminError(status: number, payload: { error?: string } | null) {
   const raw = payload?.error?.trim() || "";
   const lower = raw.toLowerCase();

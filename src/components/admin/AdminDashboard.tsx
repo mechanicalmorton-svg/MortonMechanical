@@ -231,9 +231,9 @@ export function AdminDashboard({ user }: Props) {
             <div className="border-b border-slate-800/80 px-4 py-3.5">
               <p className="truncate text-sm font-semibold text-white">{user.name}</p>
               <p className="mt-0.5 truncate text-xs text-slate-500">{user.email}</p>
-              <div className="mt-2.5 flex flex-wrap gap-1.5">
+              <div className="mt-2 flex flex-wrap gap-1">
                 {roleBadges.map((role) => (
-                  <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} />
+                  <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} size="sm" />
                 ))}
               </div>
             </div>
@@ -300,9 +300,9 @@ export function AdminDashboard({ user }: Props) {
           )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-slate-100">{user.name}</p>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <div className="mt-1 flex flex-wrap items-center gap-1">
               {roleBadges.map((role) => (
-                <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} />
+                <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} size="sm" />
               ))}
             </div>
           </div>
@@ -337,7 +337,7 @@ export function AdminDashboard({ user }: Props) {
     <>
       <div className="relative border-b border-slate-800/70 px-5 py-6">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
-        <SiteLogo size={44} showName subtitle="Staff Portal" />
+        <SiteLogo size={44} showName subtitle="Dashboard" />
         <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200/90">
           <Sparkles className="h-3 w-3" />
           Operations

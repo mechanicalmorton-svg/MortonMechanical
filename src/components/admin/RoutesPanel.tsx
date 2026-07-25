@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, MapPin, Plus, Route, Trash2 } from "lucide-react";
 import type { FleetVehicle, RoutePlan, RouteStop, StaffMember } from "@/lib/shop-types";
-import { adminGet, adminSend } from "./admin-fetch";
+import { adminGet, adminSend, asStaffList } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
@@ -31,13 +31,13 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
     setLoading(true);
     const [routeRes, staffRes, fleetRes] = await Promise.all([
       adminGet<RoutePlan[]>("/api/admin/routes"),
-      adminGet<StaffMember[]>("/api/admin/staff"),
+      adminGet<StaffMember[] | { staff: StaffMember[] }>("/api/admin/staff"),
       adminGet<FleetVehicle[]>("/api/admin/fleet"),
     ]);
     if (routeRes.error) toast.error(routeRes.error);
     else setRoutes(routeRes.data ?? []);
     if (staffRes.error) toast.error(staffRes.error);
-    else setStaff(staffRes.data ?? []);
+    else setStaff(asStaffList<StaffMember>(staffRes.data));
     if (fleetRes.error) toast.error(fleetRes.error);
     else setFleet(fleetRes.data ?? []);
     setLoading(false);

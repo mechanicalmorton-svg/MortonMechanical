@@ -19,7 +19,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { StaffMember, WorkOrder, WorkOrderDocumentKind, WorkOrderStatus } from "@/lib/shop-types";
-import { adminGet, adminSend } from "./admin-fetch";
+import { adminGet, adminSend, asStaffList } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { WorkOrderDocumentEditor } from "./WorkOrderDocumentEditor";
@@ -125,12 +125,12 @@ export function WorkOrdersPanel() {
     setLoading(true);
     const [orders, team] = await Promise.all([
       adminGet<WorkOrder[]>("/api/admin/work-orders"),
-      adminGet<StaffMember[]>("/api/admin/staff"),
+      adminGet<StaffMember[] | { staff: StaffMember[] }>("/api/admin/staff"),
     ]);
     if (orders.error) toast.error(orders.error);
     else setItems(orders.data ?? []);
     if (team.error) toast.error(team.error);
-    else setStaff(team.data ?? []);
+    else setStaff(asStaffList<StaffMember>(team.data));
     setLoading(false);
   }
 

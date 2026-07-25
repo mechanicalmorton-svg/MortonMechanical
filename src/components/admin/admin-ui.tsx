@@ -13,11 +13,13 @@ export function RoleBadge({
   role,
   roleName,
   roleColor,
+  size = "md",
   className = "",
 }: {
   role: StaffRole;
   roleName?: string;
   roleColor?: string;
+  size?: "sm" | "md";
   className?: string;
 }) {
   const label = roleName || getRoleLabel(role);
@@ -31,13 +33,16 @@ export function RoleBadge({
   const hex = color ? resolveRoleColorHex(color) : undefined;
   const customStyle = isCustom && hex
     ? {
-        background: `linear-gradient(180deg, ${hex}99, ${hex}33)`,
-        borderColor: `${hex}88`,
+        background: `linear-gradient(180deg, ${hex}66, ${hex}22)`,
+        borderColor: `${hex}66`,
       }
     : undefined;
 
   return (
-    <span className={`admin-glass-chip ${chip} ${className}`} style={customStyle}>
+    <span
+      className={`admin-glass-chip ${size === "sm" ? "admin-glass-chip--sm" : ""} ${chip} ${className}`}
+      style={customStyle}
+    >
       <span className="admin-glass-chip__sheen" aria-hidden />
       <span className="relative z-[1]">{label}</span>
     </span>
