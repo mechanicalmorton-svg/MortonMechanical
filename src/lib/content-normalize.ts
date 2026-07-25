@@ -1,4 +1,5 @@
 import { DEFAULT_CONTENT, type SiteContent } from "./content-types";
+import { normalizePageLayout } from "./page-layout";
 
 function deepMerge<T extends Record<string, unknown>>(base: T, patch: Partial<T>): T {
   const out = { ...base };
@@ -22,12 +23,20 @@ function cleanBusinessName(name: string) {
 }
 
 export function normalizeContent(stored: Partial<SiteContent> = {}): SiteContent {
-  const content = deepMerge(DEFAULT_CONTENT, stored);
+  const merged = {
+    ...stored,
+    // Prefer stored arrays over defaults when present (including empty = intentionally cleared).
+    pageLayout: stored.pageLayout ?? DEFAULT_CONTENT.pageLayout,
+    customBlocks: stored.customBlocks ?? DEFAULT_CONTENT.customBlocks,
+  };
+  const content = deepMerge(DEFAULT_CONTENT, merged);
+  if (Array.isArray(stored.customBlocks)) content.customBlocks = stored.customBlocks;
+  if (stored.pageLayout?.sections) content.pageLayout = { sections: stored.pageLayout.sections };
+
   const cleaned = cleanBusinessName(content.site.name);
   content.site.name = cleaned || DEFAULT_CONTENT.site.name;
-  // Prefer the updated public label even if older content still says "Staff login".
   if (/^staff\s*login$/i.test(content.footer.staffLoginLabel.trim())) {
     content.footer.staffLoginLabel = DEFAULT_CONTENT.footer.staffLoginLabel;
   }
-  return content;
+  return normalizePageLayout(content);
 }

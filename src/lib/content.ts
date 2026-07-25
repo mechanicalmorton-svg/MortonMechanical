@@ -35,9 +35,8 @@ export async function saveContent(content: SiteContent) {
 
 export function validateContent(data: unknown): SiteContent {
   const c = normalizeContent((data ?? {}) as Partial<SiteContent>);
-  if (!c.site.name.trim()) throw new Error("Business name is required.");
-  if (!c.site.phone.trim()) throw new Error("Phone number is required.");
-  if (!c.site.email.trim()) throw new Error("Email is required.");
-  if (!c.services.length) throw new Error("At least one service is required.");
+  if (!c.site.name.trim()) throw new Error("Please enter a business name.");
+  if (!c.site.phone.trim()) throw new Error("Please enter a phone number.");
+  if (!c.site.email.trim()) throw new Error("Please enter an email address.");
   return c;
 }

@@ -7,6 +7,9 @@ import { ContactForm } from "@/components/ContactForm";
 import { getContent } from "@/lib/content";
 import { emailHref, phoneHref } from "@/lib/content-types";
 
+/** Always read latest Site Contents after owner saves. */
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   const { pages } = await getContent();
   return {

@@ -3,16 +3,34 @@ import { NextResponse } from "next/server";
 import { withAdminAuth, withOwnerAdmin } from "@/lib/admin-route";
 import { getContent, saveContent, validateContent } from "@/lib/content";
 
+function revalidatePublicSite() {
+  // Clear cached public pages so visitors see Site Contents changes immediately.
+  revalidatePath("/", "layout");
+  revalidatePath("/");
+  revalidatePath("/contact");
+  revalidatePath("/privacy");
+  revalidatePath("/terms");
+}
+
 export async function GET() {
   return withAdminAuth(async () => NextResponse.json(await getContent()));
 }
 
 export async function PUT(req: Request) {
   return withOwnerAdmin(async () => {
-    const body = await req.json();
-    const content = validateContent(body);
-    await saveContent(content);
-    revalidatePath("/", "layout");
-    return NextResponse.json({ ok: true, content });
+    try {
+      const body = await req.json();
+      const content = validateContent(body);
+      await saveContent(content);
+      revalidatePublicSite();
+      return NextResponse.json({
+        ok: true,
+        content,
+        message: "Saved. Your website homepage and contact page are updated.",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not save site contents.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
   });
 }

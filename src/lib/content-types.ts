@@ -1,6 +1,40 @@
 export type ServiceIcon = "scan" | "calendar" | "shield" | "cog" | "battery" | "wind";
 
+/** Built-in homepage sections the owner can show/hide and reorder. */
+export type BuiltInSectionId =
+  | "hero"
+  | "trustBar"
+  | "services"
+  | "howItWorks"
+  | "about"
+  | "testimonials"
+  | "cta";
+
+export type SectionAlign = "left" | "center" | "right";
+
+export type PageSectionEntry = {
+  /** Built-in id, or `custom:<id>` for owner-created blocks. */
+  id: string;
+  enabled: boolean;
+  align: SectionAlign;
+};
+
+export type CustomBlock = {
+  id: string;
+  title: string;
+  body: string;
+  imageUrl: string;
+  buttonText: string;
+  buttonHref: string;
+};
+
 export type SiteContent = {
+  /** Homepage section order, visibility, and alignment. */
+  pageLayout: {
+    sections: PageSectionEntry[];
+  };
+  /** Extra sections the owner adds to the homepage. */
+  customBlocks: CustomBlock[];
   site: {
     name: string;
     tagline: string;
@@ -75,7 +109,31 @@ export type SiteContent = {
   };
 };
 
+export const DEFAULT_PAGE_SECTIONS: PageSectionEntry[] = [
+  { id: "hero", enabled: true, align: "left" },
+  { id: "trustBar", enabled: true, align: "center" },
+  { id: "services", enabled: true, align: "left" },
+  { id: "howItWorks", enabled: true, align: "left" },
+  { id: "about", enabled: true, align: "left" },
+  { id: "testimonials", enabled: true, align: "left" },
+  { id: "cta", enabled: true, align: "left" },
+];
+
+export const BUILT_IN_SECTION_LABELS: Record<BuiltInSectionId, string> = {
+  hero: "Hero",
+  trustBar: "Trust bar",
+  services: "Services",
+  howItWorks: "How it works",
+  about: "About",
+  testimonials: "Reviews",
+  cta: "Call to action",
+};
+
 export const DEFAULT_CONTENT: SiteContent = {
+  pageLayout: {
+    sections: DEFAULT_PAGE_SECTIONS.map((s) => ({ ...s })),
+  },
+  customBlocks: [],
   site: {
     name: "Morton's Mechanicals",
     tagline: "Mobile mechanic services — we come to you.",
