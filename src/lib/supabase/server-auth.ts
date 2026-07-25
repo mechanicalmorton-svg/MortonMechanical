@@ -172,7 +172,7 @@ function parseSessionRaw(rawValue: string): CookieSession | null {
   return null;
 }
 
-async function getSessionFromCookies(): Promise<CookieSession | null> {
+export async function getSessionFromCookies(): Promise<CookieSession | null> {
   try {
     const cookieStore = await cookies();
     const all = cookieStore.getAll();

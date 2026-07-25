@@ -131,13 +131,14 @@ function rowToCustomer(r: Record<string, unknown>): Customer {
     email: (r.email as string) || undefined,
     address: (r.address as string) || undefined,
     notes: (r.notes as string) || undefined,
+    authUserId: (r.auth_user_id as string) || undefined,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
   };
 }
 
 function customerToRow(c: Customer) {
-  return {
+  const row: Record<string, unknown> = {
     id: c.id,
     name: c.name,
     phone: c.phone,
@@ -147,6 +148,10 @@ function customerToRow(c: Customer) {
     created_at: c.createdAt,
     updated_at: c.updatedAt,
   };
+  if (c.authUserId !== undefined) {
+    row.auth_user_id = c.authUserId || null;
+  }
+  return row;
 }
 
 function rowToCustomerVehicle(r: Record<string, unknown>): CustomerVehicle {
@@ -461,8 +466,30 @@ export async function loadCustomers(query?: string): Promise<Customer[]> {
 
 export async function upsertCustomer(item: Customer) {
   if (useDatabase()) {
-    const { error } = await requireAdminClient().from("customers").upsert(customerToRow(item));
-    throwOnError(error, "Could not save customer");
+    const client = requireAdminClient();
+    const row = customerToRow(item);
+    const { error } = await client.from("customers").upsert(row);
+    if (error) {
+      const lower = error.message.toLowerCase();
+      const missingAuthColumn =
+        lower.includes("auth_user_id") &&
+        (lower.includes("schema cache") || lower.includes("does not exist") || lower.includes("column"));
+      if (missingAuthColumn) {
+        const { auth_user_id: _authUserId, ...rowWithoutAuth } = row;
+        const retry = await client.from("customers").upsert(rowWithoutAuth);
+        throwOnError(
+          retry.error,
+          "Could not save customer. Run supabase/add-customer-auth.sql in the Supabase SQL editor, then try again.",
+        );
+        if (item.authUserId) {
+          throw new Error(
+            "Customer login is not ready. Run supabase/add-customer-auth.sql in the Supabase SQL editor.",
+          );
+        }
+        return;
+      }
+      throwOnError(error, "Could not save customer");
+    }
     return;
   }
   const items = await loadCustomers();
@@ -523,6 +550,47 @@ export async function deleteCustomerVehicle(id: string) {
 export async function getCustomerById(id: string) {
   const customers = await loadCustomers();
   return customers.find((customer) => customer.id === id) ?? null;
+}
+
+export async function getCustomerByAuthUserId(authUserId: string) {
+  const id = authUserId.trim();
+  if (!id) return null;
+  if (useDatabase()) {
+    const { data, error } = await requireAdminClient()
+      .from("customers")
+      .select("*")
+      .eq("auth_user_id", id)
+      .maybeSingle();
+    if (error) {
+      const lower = error.message.toLowerCase();
+      if (lower.includes("auth_user_id") && (lower.includes("does not exist") || lower.includes("schema cache"))) {
+        throw new Error(
+          "Customer login is not ready. Run supabase/add-customer-auth.sql in the Supabase SQL editor.",
+        );
+      }
+      throwOnError(error, "Could not load customer account");
+    }
+    return data ? rowToCustomer(data as Record<string, unknown>) : null;
+  }
+  const customers = await loadCustomers();
+  return customers.find((customer) => customer.authUserId === id) ?? null;
+}
+
+export async function getCustomerByEmail(email: string) {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return null;
+  if (useDatabase()) {
+    const { data, error } = await requireAdminClient()
+      .from("customers")
+      .select("*")
+      .ilike("email", normalized)
+      .limit(1);
+    throwOnError(error, "Could not look up customer by email");
+    const row = (data ?? [])[0];
+    return row ? rowToCustomer(row as Record<string, unknown>) : null;
+  }
+  const customers = await loadCustomers();
+  return customers.find((customer) => customer.email?.trim().toLowerCase() === normalized) ?? null;
 }
 
 /** Find an existing customer by phone/email, or create one from contact details. */

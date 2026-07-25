@@ -187,6 +187,10 @@ export function LoginForm({ useEmailLogin = false, portal = "admin" }: Props) {
                 </Link>
               </>
             )}
+            <span className="mx-2 text-slate-700">·</span>
+            <Link href="/client/login" className="text-cyan-300/90 transition hover:text-cyan-200">
+              Client portal
+            </Link>
           </p>
         ) : (
           <p className="mt-5 text-center text-xs text-slate-600">
@@ -197,6 +201,10 @@ export function LoginForm({ useEmailLogin = false, portal = "admin" }: Props) {
             {" · "}
             <Link href="/dispatcher/login" className="text-slate-400 transition hover:text-slate-200">
               Dispatcher
+            </Link>
+            {" · "}
+            <Link href="/client/login" className="text-cyan-400/90 transition hover:text-cyan-300">
+              Client
             </Link>
           </p>
         )}

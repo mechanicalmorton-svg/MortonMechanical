@@ -74,6 +74,7 @@ create table if not exists customers (
   email text default '',
   address text default '',
   notes text,
+  auth_user_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

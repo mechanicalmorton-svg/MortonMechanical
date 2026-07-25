@@ -15,6 +15,8 @@ export type Customer = {
   email?: string;
   address?: string;
   notes?: string;
+  /** Supabase Auth user id when this customer has a client portal account. */
+  authUserId?: string;
   createdAt: string;
   updatedAt: string;
 };

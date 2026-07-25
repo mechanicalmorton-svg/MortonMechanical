@@ -48,6 +48,12 @@ export function HeaderNav({ name, phone, header }: Props) {
             {header.callButtonText}
           </a>
           <Link
+            href="/client/login"
+            className="inline-flex items-center rounded-full border border-cyan-700/50 px-4 py-2 text-sm font-semibold text-cyan-100/90 transition hover:border-cyan-500/50 hover:text-cyan-50"
+          >
+            Client login
+          </Link>
+          <Link
             href="/admin"
             className="inline-flex items-center rounded-full border border-slate-700/80 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:border-slate-500 hover:text-white"
           >
@@ -88,6 +94,9 @@ export function HeaderNav({ name, phone, header }: Props) {
                 <Phone className="h-4 w-4" />
                 {header.callButtonText}
               </a>
+              <Link href="/client/login" className="site-btn-secondary" onClick={() => setOpen(false)}>
+                Client login
+              </Link>
               <Link
                 href="/admin"
                 className="site-btn-secondary"

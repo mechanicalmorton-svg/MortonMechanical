@@ -144,6 +144,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: message }, { status: 401 });
     }
 
+    if (data.user.app_metadata?.portal === "client") {
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {
+        /* still clear cookies below */
+      }
+      const names = [
+        ...new Set([
+          ...pendingCookies.filter((c) => isAuthTokenCookie(c.name)).map((c) => c.name),
+          ...cookieStore.getAll().filter((c) => isAuthTokenCookie(c.name)).map((c) => c.name),
+        ]),
+      ];
+      const response = NextResponse.json(
+        { error: "Client accounts use the customer portal at /client/login." },
+        { status: 403 },
+      );
+      for (const name of names) {
+        response.cookies.set(name, "", { path: "/", maxAge: 0 });
+      }
+      return response;
+    }
+
     if (portal === "mechanic" || portal === "dispatcher") {
       const roleIds = await loadStaffRoleIds(data.user.id, data.user.email.toLowerCase());
       if (!portalAllowsRoles(portal, roleIds)) {

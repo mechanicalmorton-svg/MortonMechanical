@@ -213,6 +213,7 @@ export async function createPortalUser(input: {
     password: input.password,
     email_confirm: true,
     user_metadata: { full_name: input.name.trim() },
+    app_metadata: { portal: "staff" },
     phone: input.phone?.trim() || undefined,
   });
   if (error || !data.user) {
