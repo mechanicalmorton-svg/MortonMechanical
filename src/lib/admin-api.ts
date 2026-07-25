@@ -44,6 +44,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
             "routes-manager",
             "routes-today",
             "site-contents",
+            "audit-logs",
           ]
         : ["dashboard", "work-orders", "bookings", "routes-today"],
       manageUsers: isElevated,

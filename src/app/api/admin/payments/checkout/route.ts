@@ -97,6 +97,20 @@ export async function POST(req: Request) {
       updatedAt: new Date().toISOString(),
     });
 
+    const { writeAuditEvent } = await import("@/lib/audit-log");
+    void writeAuditEvent({
+      module: "payments",
+      action: "payment_link_created",
+      description: `Pay Now link created for ${order.customerName}`,
+      recordType: "work_order",
+      recordId: order.id,
+      recordLabel: order.customerName,
+      oldValue: { paymentStatus: order.paymentStatus, stripeCheckoutSessionId: order.stripeCheckoutSessionId },
+      newValue: { paymentStatus: order.paymentStatus ?? "unpaid", stripeCheckoutSessionId: session.id, amountCents },
+      severity: "notice",
+      page: "/admin#work-orders",
+    });
+
     return NextResponse.json({
       ok: true,
       checkoutUrl: session.url,

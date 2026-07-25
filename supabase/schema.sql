@@ -267,6 +267,46 @@ alter table routes enable row level security;
 alter table customers enable row level security;
 alter table customer_vehicles enable row level security;
 
+-- Enterprise audit trail (append-only; service role writes)
+create table if not exists audit_logs (
+  id text primary key,
+  created_at timestamptz not null default now(),
+  actor_user_id text,
+  actor_name text default '',
+  actor_email text default '',
+  actor_role text default '',
+  actor_avatar_url text,
+  actor_kind text not null default 'system',
+  module text not null,
+  page text default '',
+  action text not null,
+  description text not null default '',
+  severity text not null default 'info',
+  status text not null default 'success',
+  record_type text default '',
+  record_id text default '',
+  record_label text default '',
+  old_value jsonb,
+  new_value jsonb,
+  changed_fields text[] default '{}',
+  ip_address text default '',
+  user_agent text default '',
+  device text default '',
+  browser text default '',
+  os text default '',
+  session_id text default '',
+  shop_id text,
+  search_text text not null default '',
+  notes text default '',
+  metadata jsonb default '{}'::jsonb
+);
+
+alter table audit_logs enable row level security;
+create index if not exists audit_logs_created_at_idx on audit_logs (created_at desc);
+create index if not exists audit_logs_module_action_idx on audit_logs (module, action);
+create index if not exists audit_logs_record_idx on audit_logs (record_type, record_id, created_at desc);
+create index if not exists audit_logs_actor_idx on audit_logs (actor_user_id);
+
 -- Allow anon to read site content only (public website)
 drop policy if exists "Public can read site content" on site_content;
 create policy "Public can read site content" on site_content for select using (true);

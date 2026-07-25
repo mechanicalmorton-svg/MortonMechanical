@@ -40,9 +40,26 @@ import {
   slugifyRoleId,
   type RoleDefinition,
 } from "./role-definitions";
+import { auditDelete, auditUpsert } from "./audit-instrument";
+import { writeAuditEvent } from "./audit-log";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+async function fetchDbRowById<T>(
+  table: string,
+  id: string,
+  map: (row: Record<string, unknown>) => T,
+): Promise<T | null> {
+  if (!id || !useDatabase()) return null;
+  try {
+    const { data, error } = await requireAdminClient().from(table).select("*").eq("id", id).maybeSingle();
+    if (error || !data) return null;
+    return map(data as Record<string, unknown>);
+  } catch {
+    return null;
+  }
 }
 
 function monthStart() {
@@ -375,6 +392,11 @@ function isMissingStripePaymentColumn(message?: string | null) {
 }
 
 export async function upsertWorkOrder(item: WorkOrder) {
+  const before =
+    (await fetchDbRowById("work_orders", item.id, rowToWorkOrder)) ??
+    (await loadWorkOrders()).find((w) => w.id === item.id) ??
+    null;
+
   if (useDatabase()) {
     const client = requireAdminClient();
     const row = workOrderToRow(item);
@@ -395,6 +417,17 @@ export async function upsertWorkOrder(item: WorkOrder) {
           );
         }
       }
+      void auditUpsert({
+        module: "work-orders",
+        recordType: "work_order",
+        recordId: item.id,
+        recordLabel: item.customerName,
+        before,
+        after: item,
+        createDescription: `Work order created for ${item.customerName}`,
+        updateDescription: `Work order updated for ${item.customerName}`,
+        page: "/admin#work-orders",
+      });
       return;
     }
 
@@ -409,6 +442,17 @@ export async function upsertWorkOrder(item: WorkOrder) {
         retry.error,
         "Could not save work order. Run supabase/add-stripe-payments.sql in the Supabase SQL editor, then try again.",
       );
+      void auditUpsert({
+        module: "work-orders",
+        recordType: "work_order",
+        recordId: item.id,
+        recordLabel: item.customerName,
+        before,
+        after: item,
+        createDescription: `Work order created for ${item.customerName}`,
+        updateDescription: `Work order updated for ${item.customerName}`,
+        page: "/admin#work-orders",
+      });
       return;
     }
 
@@ -422,6 +466,17 @@ export async function upsertWorkOrder(item: WorkOrder) {
         // Column save succeeded; storage backup is optional.
       }
     }
+    void auditUpsert({
+      module: "work-orders",
+      recordType: "work_order",
+      recordId: item.id,
+      recordLabel: item.customerName,
+      before,
+      after: item,
+      createDescription: `Work order created for ${item.customerName}`,
+      updateDescription: `Work order updated for ${item.customerName}`,
+      page: "/admin#work-orders",
+    });
     return;
   }
   const items = await loadWorkOrders();
@@ -429,15 +484,39 @@ export async function upsertWorkOrder(item: WorkOrder) {
   if (idx >= 0) items[idx] = item;
   else items.unshift(item);
   writeJson("work-orders.json", items);
+  void auditUpsert({
+    module: "work-orders",
+    recordType: "work_order",
+    recordId: item.id,
+    recordLabel: item.customerName,
+    before,
+    after: item,
+    createDescription: `Work order created for ${item.customerName}`,
+    updateDescription: `Work order updated for ${item.customerName}`,
+    page: "/admin#work-orders",
+  });
 }
 
 export async function deleteWorkOrder(id: string) {
+  const before =
+    (await fetchDbRowById("work_orders", id, rowToWorkOrder)) ??
+    (await loadWorkOrders()).find((w) => w.id === id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("work_orders").delete().eq("id", id);
     throwOnError(error, "Could not delete work order");
-    return;
+  } else {
+    writeJson("work-orders.json", (await loadWorkOrders()).filter((w) => w.id !== id));
   }
-  writeJson("work-orders.json", (await loadWorkOrders()).filter((w) => w.id !== id));
+  void auditDelete({
+    module: "work-orders",
+    recordType: "work_order",
+    recordId: id,
+    recordLabel: before?.customerName,
+    before,
+    description: `Work order deleted${before ? ` for ${before.customerName}` : ""}`,
+    page: "/admin#work-orders",
+  });
 }
 
 export async function loadCustomers(query?: string): Promise<Customer[]> {
@@ -465,6 +544,10 @@ export async function loadCustomers(query?: string): Promise<Customer[]> {
 }
 
 export async function upsertCustomer(item: Customer) {
+  const before =
+    (await fetchDbRowById("customers", item.id, rowToCustomer)) ??
+    (await loadCustomers()).find((c) => c.id === item.id) ??
+    null;
   if (useDatabase()) {
     const client = requireAdminClient();
     const row = customerToRow(item);
@@ -486,30 +569,54 @@ export async function upsertCustomer(item: Customer) {
             "Customer login is not ready. Run supabase/add-customer-auth.sql in the Supabase SQL editor.",
           );
         }
-        return;
+      } else {
+        throwOnError(error, "Could not save customer");
       }
-      throwOnError(error, "Could not save customer");
     }
-    return;
+  } else {
+    const items = await loadCustomers();
+    const idx = items.findIndex((c) => c.id === item.id);
+    if (idx >= 0) items[idx] = item;
+    else items.push(item);
+    writeJson("customers.json", items);
   }
-  const items = await loadCustomers();
-  const idx = items.findIndex((c) => c.id === item.id);
-  if (idx >= 0) items[idx] = item;
-  else items.push(item);
-  writeJson("customers.json", items);
+  void auditUpsert({
+    module: "customers",
+    recordType: "customer",
+    recordId: item.id,
+    recordLabel: item.name,
+    before,
+    after: item,
+    createDescription: `Customer created: ${item.name}`,
+    updateDescription: `Customer updated: ${item.name}`,
+    page: "/admin#customers",
+  });
 }
 
 export async function deleteCustomer(id: string) {
+  const before =
+    (await fetchDbRowById("customers", id, rowToCustomer)) ??
+    (await loadCustomers()).find((c) => c.id === id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("customers").delete().eq("id", id);
     throwOnError(error, "Could not delete customer");
-    return;
+  } else {
+    writeJson("customers.json", (await loadCustomers()).filter((c) => c.id !== id));
+    writeJson(
+      "customer-vehicles.json",
+      (await loadCustomerVehicles()).filter((v) => v.customerId !== id),
+    );
   }
-  writeJson("customers.json", (await loadCustomers()).filter((c) => c.id !== id));
-  writeJson(
-    "customer-vehicles.json",
-    (await loadCustomerVehicles()).filter((v) => v.customerId !== id),
-  );
+  void auditDelete({
+    module: "customers",
+    recordType: "customer",
+    recordId: id,
+    recordLabel: before?.name,
+    before,
+    description: `Customer deleted: ${before?.name || id}`,
+    page: "/admin#customers",
+  });
 }
 
 export async function loadCustomerVehicles(customerId?: string): Promise<CustomerVehicle[]> {
@@ -526,25 +633,54 @@ export async function loadCustomerVehicles(customerId?: string): Promise<Custome
 }
 
 export async function upsertCustomerVehicle(item: CustomerVehicle) {
+  const before =
+    (await fetchDbRowById("customer_vehicles", item.id, rowToCustomerVehicle)) ??
+    (await loadCustomerVehicles()).find((v) => v.id === item.id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("customer_vehicles").upsert(customerVehicleToRow(item));
     throwOnError(error, "Could not save customer vehicle");
-    return;
+  } else {
+    const items = await loadCustomerVehicles();
+    const idx = items.findIndex((v) => v.id === item.id);
+    if (idx >= 0) items[idx] = item;
+    else items.unshift(item);
+    writeJson("customer-vehicles.json", items);
   }
-  const items = await loadCustomerVehicles();
-  const idx = items.findIndex((v) => v.id === item.id);
-  if (idx >= 0) items[idx] = item;
-  else items.unshift(item);
-  writeJson("customer-vehicles.json", items);
+  const label = formatCustomerVehicleLabel(item) || item.plate || item.vin || item.id;
+  void auditUpsert({
+    module: "vehicles",
+    recordType: "customer_vehicle",
+    recordId: item.id,
+    recordLabel: label,
+    before,
+    after: item,
+    createDescription: `Vehicle added: ${label}`,
+    updateDescription: `Vehicle updated: ${label}`,
+    page: "/admin#customers",
+  });
 }
 
 export async function deleteCustomerVehicle(id: string) {
+  const before =
+    (await fetchDbRowById("customer_vehicles", id, rowToCustomerVehicle)) ??
+    (await loadCustomerVehicles()).find((v) => v.id === id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("customer_vehicles").delete().eq("id", id);
     throwOnError(error, "Could not delete customer vehicle");
-    return;
+  } else {
+    writeJson("customer-vehicles.json", (await loadCustomerVehicles()).filter((v) => v.id !== id));
   }
-  writeJson("customer-vehicles.json", (await loadCustomerVehicles()).filter((v) => v.id !== id));
+  void auditDelete({
+    module: "vehicles",
+    recordType: "customer_vehicle",
+    recordId: id,
+    recordLabel: before ? formatCustomerVehicleLabel(before) : id,
+    before,
+    description: `Vehicle deleted: ${before ? formatCustomerVehicleLabel(before) : id}`,
+    page: "/admin#customers",
+  });
 }
 
 export async function getCustomerById(id: string) {
@@ -767,6 +903,10 @@ export async function loadBookings(): Promise<Booking[]> {
 }
 
 export async function upsertBooking(item: Booking) {
+  const before =
+    (await fetchDbRowById("bookings", item.id, rowToBooking)) ??
+    (await loadBookings()).find((b) => b.id === item.id) ??
+    null;
   if (useDatabase()) {
     const client = requireAdminClient();
     const row = bookingToRow(item);
@@ -779,16 +919,27 @@ export async function upsertBooking(item: Booking) {
       } = row;
       const retry = await client.from("bookings").upsert(rowWithoutPayment);
       throwOnError(retry.error, "Could not save booking");
-      return;
+    } else {
+      throwOnError(error, "Could not save booking");
     }
-    throwOnError(error, "Could not save booking");
-    return;
+  } else {
+    const items = await loadBookings();
+    const idx = items.findIndex((b) => b.id === item.id);
+    if (idx >= 0) items[idx] = item;
+    else items.unshift(item);
+    writeJson("bookings.json", items);
   }
-  const items = await loadBookings();
-  const idx = items.findIndex((b) => b.id === item.id);
-  if (idx >= 0) items[idx] = item;
-  else items.unshift(item);
-  writeJson("bookings.json", items);
+  void auditUpsert({
+    module: "bookings",
+    recordType: "booking",
+    recordId: item.id,
+    recordLabel: item.customerName,
+    before,
+    after: item,
+    createDescription: `Booking created for ${item.customerName}`,
+    updateDescription: `Booking updated for ${item.customerName}`,
+    page: "/admin#bookings",
+  });
 }
 
 export async function markBookingDepositPaid(bookingId: string, sessionId: string) {
@@ -823,12 +974,27 @@ export async function markBookingDepositPaid(bookingId: string, sessionId: strin
       throwOnError(updateError, "Could not mark booking deposit paid");
     }
     if (!updated) throw new Error("Booking not found.");
-    return rowToBooking(updated as Record<string, unknown>);
+    const next = rowToBooking(updated as Record<string, unknown>);
+    void writeAuditEvent({
+      module: "payments",
+      action: "deposit_paid",
+      description: `Booking deposit paid for ${next.customerName}`,
+      recordType: "booking",
+      recordId: next.id,
+      recordLabel: next.customerName,
+      oldValue: { depositPaid: booking.depositPaid, status: booking.status },
+      newValue: { depositPaid: true, status: next.status, stripeCheckoutSessionId: sessionId },
+      severity: "notice",
+      actorKind: "system",
+      page: "/api/stripe/webhook",
+    });
+    return next;
   }
   const items = await loadBookings();
   const idx = items.findIndex((b) => b.id === bookingId);
   if (idx < 0) throw new Error("Booking not found.");
   if (items[idx].depositPaid) return items[idx];
+  const prev = items[idx];
   items[idx] = {
     ...items[idx],
     depositPaid: true,
@@ -837,6 +1003,19 @@ export async function markBookingDepositPaid(bookingId: string, sessionId: strin
     notes: [items[idx].notes, "Deposit paid via Stripe."].filter(Boolean).join("\n"),
   };
   writeJson("bookings.json", items);
+  void writeAuditEvent({
+    module: "payments",
+    action: "deposit_paid",
+    description: `Booking deposit paid for ${items[idx].customerName}`,
+    recordType: "booking",
+    recordId: items[idx].id,
+    recordLabel: items[idx].customerName,
+    oldValue: { depositPaid: prev.depositPaid, status: prev.status },
+    newValue: { depositPaid: true, status: items[idx].status, stripeCheckoutSessionId: sessionId },
+    severity: "notice",
+    actorKind: "system",
+    page: "/api/stripe/webhook",
+  });
   return items[idx];
 }
 
@@ -869,12 +1048,27 @@ export async function markWorkOrderInvoicePaid(workOrderId: string, sessionId: s
       throwOnError(updateError, "Could not mark work order paid");
     }
     if (!updated) throw new Error("Work order not found.");
-    return rowToWorkOrder(updated as Record<string, unknown>);
+    const next = rowToWorkOrder(updated as Record<string, unknown>);
+    void writeAuditEvent({
+      module: "payments",
+      action: "invoice_paid",
+      description: `Work order invoice paid for ${next.customerName}`,
+      recordType: "work_order",
+      recordId: next.id,
+      recordLabel: next.customerName,
+      oldValue: { paymentStatus: order.paymentStatus },
+      newValue: { paymentStatus: "paid", stripeCheckoutSessionId: sessionId },
+      severity: "notice",
+      actorKind: "system",
+      page: "/api/stripe/webhook",
+    });
+    return next;
   }
   const items = await loadWorkOrders();
   const idx = items.findIndex((w) => w.id === workOrderId);
   if (idx < 0) throw new Error("Work order not found.");
   if (items[idx].paymentStatus === "paid") return items[idx];
+  const prev = items[idx];
   items[idx] = {
     ...items[idx],
     paymentStatus: "paid",
@@ -882,16 +1076,42 @@ export async function markWorkOrderInvoicePaid(workOrderId: string, sessionId: s
     updatedAt: new Date().toISOString(),
   };
   writeJson("work-orders.json", items);
+  void writeAuditEvent({
+    module: "payments",
+    action: "invoice_paid",
+    description: `Work order invoice paid for ${items[idx].customerName}`,
+    recordType: "work_order",
+    recordId: items[idx].id,
+    recordLabel: items[idx].customerName,
+    oldValue: { paymentStatus: prev.paymentStatus },
+    newValue: { paymentStatus: "paid", stripeCheckoutSessionId: sessionId },
+    severity: "notice",
+    actorKind: "system",
+    page: "/api/stripe/webhook",
+  });
   return items[idx];
 }
 
 export async function deleteBooking(id: string) {
+  const before =
+    (await fetchDbRowById("bookings", id, rowToBooking)) ??
+    (await loadBookings()).find((b) => b.id === id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("bookings").delete().eq("id", id);
     throwOnError(error, "Could not delete booking");
-    return;
+  } else {
+    writeJson("bookings.json", (await loadBookings()).filter((b) => b.id !== id));
   }
-  writeJson("bookings.json", (await loadBookings()).filter((b) => b.id !== id));
+  void auditDelete({
+    module: "bookings",
+    recordType: "booking",
+    recordId: id,
+    recordLabel: before?.customerName,
+    before,
+    description: `Booking deleted: ${before?.customerName || id}`,
+    page: "/admin#bookings",
+  });
 }
 
 export async function loadInventory(): Promise<InventoryItem[]> {
@@ -910,25 +1130,53 @@ export async function loadInventory(): Promise<InventoryItem[]> {
 }
 
 export async function upsertInventoryItem(item: InventoryItem) {
+  const before =
+    (await fetchDbRowById("inventory", item.id, rowToInventory)) ??
+    (await loadInventory()).find((i) => i.id === item.id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("inventory").upsert(inventoryToRow(item));
     throwOnError(error, "Could not save inventory item");
-    return;
+  } else {
+    const items = await loadInventory();
+    const idx = items.findIndex((i) => i.id === item.id);
+    if (idx >= 0) items[idx] = item;
+    else items.push(item);
+    writeJson("inventory.json", items);
   }
-  const items = await loadInventory();
-  const idx = items.findIndex((i) => i.id === item.id);
-  if (idx >= 0) items[idx] = item;
-  else items.push(item);
-  writeJson("inventory.json", items);
+  void auditUpsert({
+    module: "inventory",
+    recordType: "inventory_item",
+    recordId: item.id,
+    recordLabel: item.name,
+    before,
+    after: item,
+    createDescription: `Inventory item added: ${item.name}`,
+    updateDescription: `Inventory item updated: ${item.name}`,
+    page: "/admin#inventory-all",
+  });
 }
 
 export async function deleteInventoryItem(id: string) {
+  const before =
+    (await fetchDbRowById("inventory", id, rowToInventory)) ??
+    (await loadInventory()).find((i) => i.id === id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("inventory").delete().eq("id", id);
     throwOnError(error, "Could not delete inventory item");
-    return;
+  } else {
+    writeJson("inventory.json", (await loadInventory()).filter((i) => i.id !== id));
   }
-  writeJson("inventory.json", (await loadInventory()).filter((i) => i.id !== id));
+  void auditDelete({
+    module: "inventory",
+    recordType: "inventory_item",
+    recordId: id,
+    recordLabel: before?.name,
+    before,
+    description: `Inventory item deleted: ${before?.name || id}`,
+    page: "/admin#inventory-all",
+  });
 }
 
 function isMissingInventoryCategoriesTable(message?: string | null) {
@@ -1028,15 +1276,48 @@ export async function addInventoryCategory(rawName: string): Promise<string[]> {
 
     if (error && isMissingInventoryCategoriesTable(error.message)) {
       await saveCustomCategoriesToStorage(nextCustom);
+      void auditUpsert({
+        module: "inventory",
+        recordType: "inventory_category",
+        recordId: name,
+        recordLabel: name,
+        before: null,
+        after: { name },
+        createDescription: `Inventory category created: ${name}`,
+        updateDescription: `Inventory category created: ${name}`,
+        page: "/admin#inventory",
+      });
       return sortInventoryCategories(mergeInventoryCategories(nextCustom));
     }
     throwOnError(error, "Could not save inventory category");
+    void auditUpsert({
+      module: "inventory",
+      recordType: "inventory_category",
+      recordId: name,
+      recordLabel: name,
+      before: null,
+      after: { name },
+      createDescription: `Inventory category created: ${name}`,
+      updateDescription: `Inventory category created: ${name}`,
+      page: "/admin#inventory",
+    });
     return loadInventoryCategories();
   }
 
   const custom = await loadCustomInventoryCategories();
   const nextCustom = [...custom, name];
   writeJson("inventory-categories.json", nextCustom);
+  void auditUpsert({
+    module: "inventory",
+    recordType: "inventory_category",
+    recordId: name,
+    recordLabel: name,
+    before: null,
+    after: { name },
+    createDescription: `Inventory category created: ${name}`,
+    updateDescription: `Inventory category created: ${name}`,
+    page: "/admin#inventory",
+  });
   return sortInventoryCategories(mergeInventoryCategories(nextCustom));
 }
 
@@ -1060,9 +1341,27 @@ export async function deleteInventoryCategory(rawName: string): Promise<string[]
         (item) => item.toLowerCase() !== name.toLowerCase(),
       );
       await saveCustomCategoriesToStorage(nextCustom);
+      void auditDelete({
+        module: "inventory",
+        recordType: "inventory_category",
+        recordId: name,
+        recordLabel: name,
+        before: { name },
+        description: `Inventory category deleted: ${name}`,
+        page: "/admin#inventory",
+      });
       return sortInventoryCategories(mergeInventoryCategories(nextCustom));
     }
     throwOnError(error, "Could not delete inventory category");
+    void auditDelete({
+      module: "inventory",
+      recordType: "inventory_category",
+      recordId: name,
+      recordLabel: name,
+      before: { name },
+      description: `Inventory category deleted: ${name}`,
+      page: "/admin#inventory",
+    });
     return loadInventoryCategories();
   }
 
@@ -1070,6 +1369,15 @@ export async function deleteInventoryCategory(rawName: string): Promise<string[]
     (item) => item.toLowerCase() !== name.toLowerCase(),
   );
   writeJson("inventory-categories.json", nextCustom);
+  void auditDelete({
+    module: "inventory",
+    recordType: "inventory_category",
+    recordId: name,
+    recordLabel: name,
+    before: { name },
+    description: `Inventory category deleted: ${name}`,
+    page: "/admin#inventory",
+  });
   return sortInventoryCategories(mergeInventoryCategories(nextCustom));
 }
 
@@ -1194,7 +1502,20 @@ export async function upsertRoleDefinition(
         : role,
     );
     await persistRoleDefinitions(next);
-    return mergeRoleDefinitions(next);
+    const merged = mergeRoleDefinitions(next);
+    const saved = merged.find((role) => role.id === "owner") ?? existing;
+    void auditUpsert({
+      module: "roles",
+      recordType: "role",
+      recordId: saved.id,
+      recordLabel: saved.name,
+      before: existing,
+      after: saved,
+      createDescription: `Role created: ${saved.name}`,
+      updateDescription: `Role updated: ${saved.name}`,
+      page: "/admin#users",
+    });
+    return merged;
   }
 
   let id = (input.id || slugifyRoleId(input.name)).trim();
@@ -1224,7 +1545,20 @@ export async function upsertRoleDefinition(
     : [...roles, nextRole];
 
   await persistRoleDefinitions(next);
-  return mergeRoleDefinitions(next);
+  const merged = mergeRoleDefinitions(next);
+  const saved = merged.find((role) => role.id === nextRole.id) ?? nextRole;
+  void auditUpsert({
+    module: "roles",
+    recordType: "role",
+    recordId: saved.id,
+    recordLabel: saved.name,
+    before: existing ?? null,
+    after: saved,
+    createDescription: `Role created: ${saved.name}`,
+    updateDescription: `Role updated: ${saved.name}`,
+    page: "/admin#users",
+  });
+  return merged;
 }
 
 export async function deleteRoleDefinition(roleId: string): Promise<RoleDefinition[]> {
@@ -1253,15 +1587,24 @@ export async function deleteRoleDefinition(roleId: string): Promise<RoleDefiniti
     const { error } = await client.from("staff_roles").delete().eq("id", id);
     if (error && isMissingStaffRolesTable(error.message)) {
       await saveRolesToStorage(next);
-      return mergeRoleDefinitions(next);
+    } else {
+      throwOnError(error, "Could not delete role");
+      // Keep remaining custom/system overrides persisted for name/color edits.
+      await persistRoleDefinitions(next);
     }
-    throwOnError(error, "Could not delete role");
-    // Keep remaining custom/system overrides persisted for name/color edits.
-    await persistRoleDefinitions(next);
-    return mergeRoleDefinitions(next);
+  } else {
+    writeJson("staff-roles.json", next);
   }
 
-  writeJson("staff-roles.json", next);
+  void auditDelete({
+    module: "roles",
+    recordType: "role",
+    recordId: target.id,
+    recordLabel: target.name,
+    before: target,
+    description: `Role deleted: ${target.name}`,
+    page: "/admin#users",
+  });
   return mergeRoleDefinitions(next);
 }
 
@@ -1299,33 +1642,47 @@ export async function updateStaffMember(
     password?: string;
   },
 ) {
+  const staffBefore = (await loadStaff()).find((s) => s.id === id) ?? null;
+  let saved: StaffMember;
   if (useDatabase()) {
-    return updatePortalUser(id, patch);
+    saved = await updatePortalUser(id, patch);
+  } else {
+    const items = await loadStaff();
+    const idx = items.findIndex((s) => s.id === id);
+    if (idx < 0) throw new Error("User not found.");
+    const current = items[idx];
+    const roleIds =
+      patch.roleIds !== undefined || patch.role !== undefined
+        ? normalizeRoleIds(patch.roleIds, patch.role ?? current.role)
+        : normalizeRoleIds(current.roleIds, current.role);
+    saved = {
+      ...current,
+      ...patch,
+      name: patch.name !== undefined ? patch.name.trim() : current.name,
+      email: patch.email !== undefined ? patch.email.trim().toLowerCase() : current.email,
+      phone: patch.phone !== undefined ? patch.phone.trim() : current.phone,
+      active: patch.active !== undefined ? Boolean(patch.active) : current.active,
+      roleIds,
+      role: pickPrimaryRoleId(roleIds),
+    };
+    if (patch.password) {
+      const { updatePassword } = await import("./auth");
+      await updatePassword(id, patch.password);
+    }
+    items[idx] = saved;
+    writeJson("staff.json", items);
   }
-  const items = await loadStaff();
-  const idx = items.findIndex((s) => s.id === id);
-  if (idx < 0) throw new Error("User not found.");
-  const current = items[idx];
-  const roleIds =
-    patch.roleIds !== undefined || patch.role !== undefined
-      ? normalizeRoleIds(patch.roleIds, patch.role ?? current.role)
-      : normalizeRoleIds(current.roleIds, current.role);
-  const saved: StaffMember = {
-    ...current,
-    ...patch,
-    name: patch.name !== undefined ? patch.name.trim() : current.name,
-    email: patch.email !== undefined ? patch.email.trim().toLowerCase() : current.email,
-    phone: patch.phone !== undefined ? patch.phone.trim() : current.phone,
-    active: patch.active !== undefined ? Boolean(patch.active) : current.active,
-    roleIds,
-    role: pickPrimaryRoleId(roleIds),
-  };
-  if (patch.password) {
-    const { updatePassword } = await import("./auth");
-    await updatePassword(id, patch.password);
-  }
-  items[idx] = saved;
-  writeJson("staff.json", items);
+  void auditUpsert({
+    module: "staff",
+    recordType: "staff",
+    recordId: id,
+    recordLabel: saved.name,
+    before: staffBefore,
+    after: { ...saved, password: patch.password ? "[changed]" : undefined },
+    createDescription: `Staff user updated: ${saved.name}`,
+    updateDescription: `Staff user updated: ${saved.name}`,
+    page: "/admin#users",
+  });
   return saved;
 }
 
@@ -1341,11 +1698,21 @@ export async function upsertStaffMember(item: StaffMember) {
 }
 
 export async function deleteStaffMember(id: string) {
+  const before = (await loadStaff()).find((s) => s.id === id) ?? null;
   if (useDatabase()) {
     await deletePortalUser(id);
-    return;
+  } else {
+    writeJson("staff.json", (await loadStaff()).filter((s) => s.id !== id));
   }
-  writeJson("staff.json", (await loadStaff()).filter((s) => s.id !== id));
+  void auditDelete({
+    module: "staff",
+    recordType: "staff",
+    recordId: id,
+    recordLabel: before?.name,
+    before,
+    description: `Staff user deleted: ${before?.name || id}`,
+    page: "/admin#users",
+  });
 }
 
 export { createPortalUser };
@@ -1360,25 +1727,53 @@ export async function loadFleet(): Promise<FleetVehicle[]> {
 }
 
 export async function upsertFleetVehicle(item: FleetVehicle) {
+  const before =
+    (await fetchDbRowById("fleet", item.id, rowToFleet)) ??
+    (await loadFleet()).find((v) => v.id === item.id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("fleet").upsert(fleetToRow(item));
     throwOnError(error, "Could not save fleet vehicle");
-    return;
+  } else {
+    const items = await loadFleet();
+    const idx = items.findIndex((v) => v.id === item.id);
+    if (idx >= 0) items[idx] = item;
+    else items.push(item);
+    writeJson("fleet.json", items);
   }
-  const items = await loadFleet();
-  const idx = items.findIndex((v) => v.id === item.id);
-  if (idx >= 0) items[idx] = item;
-  else items.push(item);
-  writeJson("fleet.json", items);
+  void auditUpsert({
+    module: "fleet",
+    recordType: "fleet_vehicle",
+    recordId: item.id,
+    recordLabel: item.name,
+    before,
+    after: item,
+    createDescription: `Fleet vehicle added: ${item.name}`,
+    updateDescription: `Fleet vehicle updated: ${item.name}`,
+    page: "/admin#fleet",
+  });
 }
 
 export async function deleteFleetVehicle(id: string) {
+  const before =
+    (await fetchDbRowById("fleet", id, rowToFleet)) ??
+    (await loadFleet()).find((v) => v.id === id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("fleet").delete().eq("id", id);
     throwOnError(error, "Could not delete fleet vehicle");
-    return;
+  } else {
+    writeJson("fleet.json", (await loadFleet()).filter((v) => v.id !== id));
   }
-  writeJson("fleet.json", (await loadFleet()).filter((v) => v.id !== id));
+  void auditDelete({
+    module: "fleet",
+    recordType: "fleet_vehicle",
+    recordId: id,
+    recordLabel: before?.name,
+    before,
+    description: `Fleet vehicle deleted: ${before?.name || id}`,
+    page: "/admin#fleet",
+  });
 }
 
 export async function loadRoutes(): Promise<RoutePlan[]> {
@@ -1394,25 +1789,53 @@ export async function loadRoutes(): Promise<RoutePlan[]> {
 }
 
 export async function upsertRoute(item: RoutePlan) {
+  const before =
+    (await fetchDbRowById("routes", item.id, rowToRoute)) ??
+    (await loadRoutes()).find((r) => r.id === item.id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("routes").upsert(routeToRow(item));
     throwOnError(error, "Could not save route");
-    return;
+  } else {
+    const items = await loadRoutes();
+    const idx = items.findIndex((r) => r.id === item.id);
+    if (idx >= 0) items[idx] = item;
+    else items.unshift(item);
+    writeJson("routes.json", items);
   }
-  const items = await loadRoutes();
-  const idx = items.findIndex((r) => r.id === item.id);
-  if (idx >= 0) items[idx] = item;
-  else items.unshift(item);
-  writeJson("routes.json", items);
+  void auditUpsert({
+    module: "routes",
+    recordType: "route",
+    recordId: item.id,
+    recordLabel: item.date,
+    before,
+    after: item,
+    createDescription: `Route created for ${item.date}`,
+    updateDescription: `Route updated for ${item.date}`,
+    page: "/admin#routes-manager",
+  });
 }
 
 export async function deleteRoute(id: string) {
+  const before =
+    (await fetchDbRowById("routes", id, rowToRoute)) ??
+    (await loadRoutes()).find((r) => r.id === id) ??
+    null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("routes").delete().eq("id", id);
     throwOnError(error, "Could not delete route");
-    return;
+  } else {
+    writeJson("routes.json", (await loadRoutes()).filter((r) => r.id !== id));
   }
-  writeJson("routes.json", (await loadRoutes()).filter((r) => r.id !== id));
+  void auditDelete({
+    module: "routes",
+    recordType: "route",
+    recordId: id,
+    recordLabel: before?.date,
+    before,
+    description: `Route deleted: ${before?.date || id}`,
+    page: "/admin#routes-manager",
+  });
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

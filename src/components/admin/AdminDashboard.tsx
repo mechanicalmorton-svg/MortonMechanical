@@ -15,6 +15,7 @@ import {
   Menu,
   Package,
   Paintbrush,
+  ScrollText,
   Sparkles,
   UserCircle,
   Truck,
@@ -25,6 +26,7 @@ import { SiteLogo } from "@/components/SiteLogo";
 import { userHasOwnerRole, type RolePermissions } from "@/lib/role-definitions";
 import type { StaffRole } from "@/lib/shop-types";
 import { RoleBadge } from "./admin-ui";
+import { AuditLogsPanel } from "./AuditLogsPanel";
 import { BookingsPanel } from "./BookingsPanel";
 import { ContentEditor } from "./ContentEditor";
 import { DashboardHome } from "./DashboardHome";
@@ -49,6 +51,7 @@ export type Tab =
   | "routes-manager"
   | "routes-today"
   | "site-contents"
+  | "audit-logs"
   | "settings";
 
 type Props = {
@@ -83,12 +86,23 @@ function userCanAccessTab(
 ) {
   if (userHasOwnerRole(user)) return true;
   if (tab === "settings") return true;
+  if (tab === "audit-logs") {
+    return (
+      userHasOwnerRole(user) ||
+      Boolean(user.permissions?.manageUsers) ||
+      user.role === "admin" ||
+      Boolean(user.roleIds?.includes("admin")) ||
+      Boolean(user.permissions?.tabs.includes("audit-logs"))
+    );
+  }
   if (tab === "customizer") {
     return Boolean(user.permissions?.editSiteContent || user.permissions?.tabs.includes("site-contents"));
   }
   if (!user.permissions) {
     // Fallback for older sessions without embedded permissions.
-    return tab !== "users" && tab !== "site-contents" ? true : user.role === "admin" || Boolean(user.roleIds?.includes("admin"));
+    return tab !== "users" && tab !== "site-contents" && tab !== "audit-logs"
+      ? true
+      : user.role === "admin" || Boolean(user.roleIds?.includes("admin"));
   }
   return user.permissions.tabs.includes(tab);
 }
@@ -135,6 +149,7 @@ const nav: NavItem[] = [
     ],
   },
   { id: "site-contents", label: "Site Contents", icon: Paintbrush },
+  { id: "audit-logs", label: "Audit Logs", icon: ScrollText },
 ];
 
 const accountTab: Tab = "settings";
@@ -498,6 +513,7 @@ export function AdminDashboard({ user }: Props) {
               {tab === "routes-manager" && <RoutesPanel />}
               {tab === "routes-today" && <RoutesPanel todayOnly userId={user.id} />}
               {tab === "site-contents" && userCanAccessTab(user, "site-contents") && <ContentEditor />}
+              {tab === "audit-logs" && userCanAccessTab(user, "audit-logs") && <AuditLogsPanel />}
               {tab === "settings" && <SettingsPanel user={user} />}
             </div>
           </main>

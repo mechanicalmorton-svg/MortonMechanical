@@ -19,10 +19,23 @@ export async function GET() {
 export async function PUT(req: Request) {
   return withOwnerAdmin(async () => {
     try {
+      const before = await getContent();
       const body = await req.json();
       const content = validateContent(body);
       await saveContent(content);
       revalidatePublicSite();
+      const { writeAuditEvent } = await import("@/lib/audit-log");
+      void writeAuditEvent({
+        module: "content",
+        action: "settings_updated",
+        description: "Site contents updated",
+        recordType: "content",
+        recordId: "site_content",
+        recordLabel: content.site.name,
+        oldValue: before,
+        newValue: content,
+        page: "/admin#site-contents",
+      });
       return NextResponse.json({
         ok: true,
         content,

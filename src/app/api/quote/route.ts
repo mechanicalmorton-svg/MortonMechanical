@@ -94,6 +94,32 @@ export async function POST(req: Request) {
           ...booking,
           stripeCheckoutSessionId: session.id,
         });
+        const { writeAuditEvent, auditContextFromRequest, runWithAuditContext } = await import(
+          "@/lib/audit-log"
+        );
+        void runWithAuditContext(
+          auditContextFromRequest(req, {
+            email: email || undefined,
+            name: name || undefined,
+            kind: "client",
+          }),
+          () =>
+            writeAuditEvent({
+              module: "payments",
+              action: "payment_link_created",
+              description: `Booking deposit checkout created for ${name || email || booking.id}`,
+              recordType: "booking",
+              recordId: booking.id,
+              recordLabel: name || email || booking.id,
+              actorKind: "client",
+              actorEmail: email || "",
+              actorName: name || "",
+              newValue: { stripeCheckoutSessionId: session.id, depositCents },
+              severity: "notice",
+              page: "/contact",
+              metadata: { quoteId: quote.id },
+            }),
+        );
         return NextResponse.json({
           ok: true,
           quoteId: quote.id,

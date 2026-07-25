@@ -6,6 +6,8 @@ import { normalizeRoleIds } from "@/lib/role-definitions";
 import { isAllowedAdminEmail } from "@/lib/supabase/server-auth";
 import { getPublishableKey, getSupabaseAdmin, getSupabaseUrl, isSupabaseAuthConfigured } from "@/lib/supabase/server";
 import { isJwtKeyError, sanitizeAuthError } from "@/lib/auth-errors";
+import { auditContextFromRequest, runWithAuditContext } from "@/lib/audit-log";
+import { auditAuthEvent } from "@/lib/audit-instrument";
 
 type PendingCookie = {
   name: string;
@@ -98,6 +100,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
     }
     if (!isAllowedAdminEmail(email)) {
+      await runWithAuditContext(auditContextFromRequest(req, { email, kind: "anonymous" }), async () => {
+        await auditAuthEvent({
+          action: "login_denied",
+          description: `Staff login denied for ${email} (domain not allowed)`,
+          status: "denied",
+          actorEmail: email,
+          actorKind: "anonymous",
+          page: `/admin/login`,
+          metadata: { portal },
+        });
+      });
       return NextResponse.json(
         { error: "Only @mortonsmechanical.com accounts can access this portal." },
         { status: 403 },
@@ -141,6 +154,17 @@ export async function POST(req: Request) {
       const message = isJwtKeyError(error?.message)
         ? sanitizeAuthError(error?.message, "Sign-in failed due to an auth configuration issue.")
         : "Wrong email or password.";
+      await runWithAuditContext(auditContextFromRequest(req, { email, kind: "anonymous" }), async () => {
+        await auditAuthEvent({
+          action: "login_failed",
+          description: `Staff login failed for ${email}`,
+          status: "failure",
+          actorEmail: email,
+          actorKind: "anonymous",
+          page: `/${portal === "admin" ? "admin" : portal}/login`,
+          metadata: { portal },
+        });
+      });
       return NextResponse.json({ error: message }, { status: 401 });
     }
 
@@ -183,6 +207,28 @@ export async function POST(req: Request) {
         return rejectedPortalResponse(portal, names);
       }
     }
+
+    await runWithAuditContext(
+      auditContextFromRequest(req, {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.email.split("@")[0],
+        kind: "staff",
+      }),
+      async () => {
+        await auditAuthEvent({
+          action: "login",
+          description: `Staff signed in via ${portal} portal`,
+          status: "success",
+          actorUserId: data.user.id,
+          actorEmail: data.user.email!,
+          actorName: data.user.email!.split("@")[0],
+          actorKind: "staff",
+          page: `/${portal === "admin" ? "admin" : portal}/login`,
+          metadata: { portal },
+        });
+      },
+    );
 
     const response = NextResponse.json({
       user: {
@@ -227,7 +273,17 @@ export async function POST(req: Request) {
   return res;
 }
 
-export async function DELETE() {
+export async function DELETE(req: Request) {
+  await runWithAuditContext(auditContextFromRequest(req, { kind: "staff" }), async () => {
+    await auditAuthEvent({
+      action: "logout",
+      description: "Staff signed out",
+      status: "success",
+      actorKind: "staff",
+      page: "/admin",
+    });
+  });
+
   if (isSupabaseAuthConfigured()) {
     const cookieStore = await cookies();
     const pendingCookies: PendingCookie[] = [];

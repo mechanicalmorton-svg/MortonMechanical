@@ -23,6 +23,7 @@ export const DASHBOARD_TAB_OPTIONS = [
   { id: "routes-manager", label: "Routes · Manager" },
   { id: "routes-today", label: "Routes · My route today" },
   { id: "site-contents", label: "Site Contents" },
+  { id: "audit-logs", label: "Audit Logs" },
 ] as const;
 
 export type DashboardTabId = (typeof DASHBOARD_TAB_OPTIONS)[number]["id"];

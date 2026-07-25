@@ -211,6 +211,13 @@ export function StatusBadge({ status }: { status: string }) {
     unpaid: "admin-glass-chip--amber text-amber-100",
     paid: "admin-glass-chip--emerald text-emerald-100",
     deposit_paid: "admin-glass-chip--sky text-sky-100",
+    info: "admin-glass-chip--sky text-sky-100",
+    notice: "admin-glass-chip--amber text-amber-100",
+    warning: "admin-glass-chip--amber text-amber-100",
+    critical: "admin-glass-chip--red text-red-100",
+    success: "admin-glass-chip--emerald text-emerald-100",
+    failure: "admin-glass-chip--red text-red-100",
+    denied: "admin-glass-chip--red text-red-100",
   };
   const label = status.replace(/_/g, " ");
   return (

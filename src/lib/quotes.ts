@@ -1,6 +1,7 @@
-import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase/server";
+import { isSupabaseConfigured } from "./supabase/server";
 import { requireAdminClient, requireDatabaseInProduction, throwOnError } from "./supabase/db";
 import { readJson, writeJson, newId } from "./store";
+import { auditDelete, auditUpsert } from "./audit-instrument";
 
 export type Quote = {
   id: string;
@@ -73,16 +74,27 @@ export async function addQuote(entry: Omit<Quote, "id" | "createdAt" | "status">
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("quotes").insert(quoteToRow(quote));
     throwOnError(error, "Could not save quote request");
-    return quote;
+  } else {
+    const quotes = readJson<Quote[]>("quotes.json", []);
+    quotes.push(quote);
+    writeJson("quotes.json", quotes);
   }
-
-  const quotes = readJson<Quote[]>("quotes.json", []);
-  quotes.push(quote);
-  writeJson("quotes.json", quotes);
+  void auditUpsert({
+    module: "quotes",
+    recordType: "quote",
+    recordId: quote.id,
+    recordLabel: quote.name,
+    before: null,
+    after: quote,
+    createDescription: `Quote request submitted by ${quote.name}`,
+    updateDescription: `Quote request updated for ${quote.name}`,
+    page: "/contact",
+  });
   return quote;
 }
 
 export async function updateQuote(id: string, patch: Partial<Quote>) {
+  const before = (await loadQuotes()).find((q) => q.id === id) ?? null;
   if (useDatabase()) {
     const row: Record<string, unknown> = {};
     if (patch.status) row.status = patch.status;
@@ -91,7 +103,21 @@ export async function updateQuote(id: string, patch: Partial<Quote>) {
       throwOnError(error, "Could not update quote request");
     }
     const quotes = await loadQuotes();
-    return quotes.find((q) => q.id === id) ?? null;
+    const next = quotes.find((q) => q.id === id) ?? null;
+    if (next) {
+      void auditUpsert({
+        module: "quotes",
+        recordType: "quote",
+        recordId: id,
+        recordLabel: next.name,
+        before,
+        after: next,
+        createDescription: `Quote created for ${next.name}`,
+        updateDescription: `Quote status updated for ${next.name}`,
+        page: "/admin#quotes",
+      });
+    }
+    return next;
   }
 
   const quotes = readJson<Quote[]>("quotes.json", []);
@@ -99,16 +125,37 @@ export async function updateQuote(id: string, patch: Partial<Quote>) {
   if (!q) return null;
   Object.assign(q, patch);
   writeJson("quotes.json", quotes);
+  void auditUpsert({
+    module: "quotes",
+    recordType: "quote",
+    recordId: id,
+    recordLabel: q.name,
+    before,
+    after: q,
+    createDescription: `Quote created for ${q.name}`,
+    updateDescription: `Quote updated for ${q.name}`,
+    page: "/admin#quotes",
+  });
   return q;
 }
 
 export async function deleteQuote(id: string) {
+  const before = (await loadQuotes()).find((q) => q.id === id) ?? null;
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("quotes").delete().eq("id", id);
     throwOnError(error, "Could not delete quote request");
-    return;
+  } else {
+    writeJson("quotes.json", readJson<Quote[]>("quotes.json", []).filter((q) => q.id !== id));
   }
-  writeJson("quotes.json", readJson<Quote[]>("quotes.json", []).filter((q) => q.id !== id));
+  void auditDelete({
+    module: "quotes",
+    recordType: "quote",
+    recordId: id,
+    recordLabel: before?.name,
+    before,
+    description: `Quote deleted: ${before?.name || id}`,
+    page: "/admin#quotes",
+  });
 }
 
 export { newId as createId };

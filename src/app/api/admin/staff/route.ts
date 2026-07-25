@@ -41,6 +41,18 @@ export async function POST(req: Request) {
       role: pickPrimaryRoleId(roleIds) as StaffRole,
       roleIds,
     });
+    const { auditUpsert } = await import("@/lib/audit-instrument");
+    void auditUpsert({
+      module: "staff",
+      recordType: "staff",
+      recordId: member.id,
+      recordLabel: member.name,
+      before: null,
+      after: { ...member, password: "[set]" },
+      createDescription: `Staff user created: ${member.name}`,
+      updateDescription: `Staff user created: ${member.name}`,
+      page: "/admin#users",
+    });
     return NextResponse.json(member);
   });
 }

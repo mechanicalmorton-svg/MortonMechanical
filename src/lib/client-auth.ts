@@ -17,6 +17,8 @@ import {
   isSupabaseAuthConfigured,
 } from "./supabase/server";
 import { friendlyAuthAdminError } from "./staff-auth";
+import { auditAuthEvent } from "./audit-instrument";
+import { auditContextFromHeaders, runWithAuditContext } from "./audit-log";
 
 export type ClientUser = {
   id: string;
@@ -271,6 +273,25 @@ export async function registerClientAccount(input: {
     phone: input.phone,
   });
 
+  const ctx = await auditContextFromHeaders({
+    id: data.user.id,
+    name: customer.name,
+    email,
+    kind: "client",
+  });
+  void runWithAuditContext(ctx, () =>
+    auditAuthEvent({
+      action: "register",
+      description: `Client registered: ${email}`,
+      actorUserId: data.user.id,
+      actorName: customer.name,
+      actorEmail: email,
+      actorKind: "client",
+      page: "/client/register",
+      metadata: { customerId: customer.id },
+    }),
+  );
+
   return { authUserId: data.user.id, email, customer };
 }
 
@@ -286,7 +307,22 @@ export async function signInClient(input: {
   try {
     email = assertClientEmailAllowed(input.email);
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Invalid email." }, { status: 400 });
+    const msg = err instanceof Error ? err.message : "Invalid email.";
+    const denied = msg.toLowerCase().includes("staff");
+    const ctx = await auditContextFromHeaders({ email: normalizeEmail(input.email), kind: "anonymous" });
+    void runWithAuditContext(ctx, () =>
+      auditAuthEvent({
+        action: denied ? "login_denied" : "login_failed",
+        description: denied
+          ? `Client login denied for ${normalizeEmail(input.email)} (staff email)`
+          : `Client login failed: invalid email`,
+        status: denied ? "denied" : "failure",
+        actorEmail: normalizeEmail(input.email),
+        actorKind: "anonymous",
+        page: "/client/login",
+      }),
+    );
+    return NextResponse.json({ error: msg }, { status: denied ? 403 : 400 });
   }
   const password = input.password ?? "";
   if (!password) {
@@ -322,6 +358,17 @@ export async function signInClient(input: {
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user?.email || !data.session) {
+    const ctx = await auditContextFromHeaders({ email, kind: "anonymous" });
+    void runWithAuditContext(ctx, () =>
+      auditAuthEvent({
+        action: "login_failed",
+        description: `Client login failed for ${email}`,
+        status: "failure",
+        actorEmail: email,
+        actorKind: "anonymous",
+        page: "/client/login",
+      }),
+    );
     return NextResponse.json({ error: "Wrong email or password." }, { status: 401 });
   }
 
@@ -332,6 +379,22 @@ export async function signInClient(input: {
     } catch {
       /* clear cookies below */
     }
+    const ctx = await auditContextFromHeaders({
+      id: data.user.id,
+      email: signedEmail,
+      kind: "anonymous",
+    });
+    void runWithAuditContext(ctx, () =>
+      auditAuthEvent({
+        action: "login_denied",
+        description: `Client login denied for ${signedEmail} (wrong portal)`,
+        status: "denied",
+        actorUserId: data.user.id,
+        actorEmail: signedEmail,
+        actorKind: "anonymous",
+        page: "/client/login",
+      }),
+    );
     const response = NextResponse.json(
       { error: "Staff accounts use the staff portal at /admin/login." },
       { status: 403 },
@@ -369,6 +432,24 @@ export async function signInClient(input: {
     }
 
     const user = toClientUser(customer, data.user.id, signedEmail);
+    const ctx = await auditContextFromHeaders({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      kind: "client",
+    });
+    void runWithAuditContext(ctx, () =>
+      auditAuthEvent({
+        action: "login",
+        description: `Client login: ${user.email}`,
+        actorUserId: user.id,
+        actorName: user.name,
+        actorEmail: user.email,
+        actorKind: "client",
+        page: "/client/login",
+        metadata: { customerId: user.customerId },
+      }),
+    );
     const response = NextResponse.json({ user });
     applyPendingCookies(response, pendingCookies);
     return response;
@@ -395,6 +476,12 @@ export async function signOutClient(): Promise<NextResponse> {
   const pendingCookies: PendingCookie[] = [];
   const url = getSupabaseUrl();
   const key = getPublishableKey();
+  let actor: ClientUser | null = null;
+  try {
+    actor = await getClientUser();
+  } catch {
+    actor = null;
+  }
 
   if (url && key && isSupabaseAuthConfigured()) {
     const supabase = createServerClient(url, key, {
@@ -421,6 +508,23 @@ export async function signOutClient(): Promise<NextResponse> {
       pendingCookies.push({ name: cookie.name, value: "", options: { path: "/", maxAge: 0 } });
     }
   }
+
+  const ctx = await auditContextFromHeaders(
+    actor
+      ? { id: actor.id, name: actor.name, email: actor.email, kind: "client" }
+      : { kind: "client" },
+  );
+  void runWithAuditContext(ctx, () =>
+    auditAuthEvent({
+      action: "logout",
+      description: actor ? `Client logout: ${actor.email}` : "Client logout",
+      actorUserId: actor?.id,
+      actorName: actor?.name,
+      actorEmail: actor?.email,
+      actorKind: "client",
+      page: "/client",
+    }),
+  );
 
   const response = NextResponse.json({ ok: true });
   applyPendingCookies(response, pendingCookies);

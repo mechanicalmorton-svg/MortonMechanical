@@ -34,7 +34,20 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Deposit cannot exceed $5,000." }, { status: 400 });
     }
 
+    const before = await loadPaymentSettings();
     const settings = await savePaymentSettings({ bookingDepositCents: Math.round(bookingDepositCents) });
+    const { writeAuditEvent } = await import("@/lib/audit-log");
+    void writeAuditEvent({
+      module: "settings",
+      action: "settings_updated",
+      description: "Payment settings updated",
+      recordType: "settings",
+      recordId: "payment-settings",
+      recordLabel: "Payment settings",
+      oldValue: before,
+      newValue: settings,
+      page: "/admin#settings",
+    });
     return NextResponse.json({
       ...settings,
       bookingDepositLabel: formatUsdFromCents(settings.bookingDepositCents),
