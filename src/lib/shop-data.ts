@@ -24,6 +24,12 @@ import {
   loadWorkOrderDocumentData,
   saveWorkOrderDocumentData,
 } from "./work-order-document-store";
+import {
+  isDefaultInventoryCategory,
+  mergeInventoryCategories,
+  normalizeCategoryName,
+  sortInventoryCategories,
+} from "./inventory-categories";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -694,6 +700,148 @@ export async function deleteInventoryItem(id: string) {
     return;
   }
   writeJson("inventory.json", (await loadInventory()).filter((i) => i.id !== id));
+}
+
+function isMissingInventoryCategoriesTable(message?: string | null) {
+  if (!message) return false;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("inventory_categories") &&
+    (lower.includes("schema cache") ||
+      lower.includes("could not find") ||
+      lower.includes("does not exist") ||
+      lower.includes("relation"))
+  );
+}
+
+async function loadCustomCategoriesFromStorage(): Promise<string[]> {
+  try {
+    const client = requireAdminClient();
+    const { data, error } = await client.storage.from("shop-settings").download("inventory-categories.json");
+    if (error || !data) return [];
+    const parsed = JSON.parse(await data.text()) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string").map(normalizeCategoryName)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveCustomCategoriesToStorage(categories: string[]) {
+  const client = requireAdminClient();
+  const { data: buckets } = await client.storage.listBuckets();
+  if (!buckets?.some((bucket) => bucket.name === "shop-settings")) {
+    const created = await client.storage.createBucket("shop-settings", {
+      public: false,
+      fileSizeLimit: 256 * 1024,
+    });
+    if (created.error && !created.error.message.toLowerCase().includes("already exists")) {
+      throw created.error;
+    }
+  }
+  const { error } = await client.storage
+    .from("shop-settings")
+    .upload("inventory-categories.json", JSON.stringify(categories, null, 2), {
+      contentType: "application/json",
+      upsert: true,
+    });
+  if (error) throw error;
+}
+
+async function loadCustomInventoryCategories(): Promise<string[]> {
+  if (useDatabase()) {
+    const client = requireAdminClient();
+    const { data, error } = await client
+      .from("inventory_categories")
+      .select("name, sort_order")
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+
+    if (error && isMissingInventoryCategoriesTable(error.message)) {
+      return loadCustomCategoriesFromStorage();
+    }
+    throwOnError(error, "Could not load inventory categories");
+    return (data ?? [])
+      .map((row) => normalizeCategoryName(String((row as { name?: string }).name ?? "")))
+      .filter(Boolean);
+  }
+  return readJson<string[]>("inventory-categories.json", []).map(normalizeCategoryName).filter(Boolean);
+}
+
+export async function loadInventoryCategories(): Promise<string[]> {
+  const custom = await loadCustomInventoryCategories();
+  return sortInventoryCategories(mergeInventoryCategories(custom));
+}
+
+export async function addInventoryCategory(rawName: string): Promise<string[]> {
+  const name = normalizeCategoryName(rawName);
+  if (!name) throw new Error("Category name is required.");
+  if (name.length > 48) throw new Error("Category name must be 48 characters or less.");
+
+  const existing = await loadInventoryCategories();
+  if (existing.some((item) => item.toLowerCase() === name.toLowerCase())) {
+    throw new Error("That category already exists.");
+  }
+
+  if (useDatabase()) {
+    const client = requireAdminClient();
+    const custom = await loadCustomInventoryCategories();
+    const nextCustom = sortInventoryCategories([...custom, name]).filter(
+      (item) => !isDefaultInventoryCategory(item),
+    );
+
+    const { error } = await client.from("inventory_categories").upsert({
+      name,
+      sort_order: 100 + nextCustom.length,
+      created_at: new Date().toISOString(),
+    });
+
+    if (error && isMissingInventoryCategoriesTable(error.message)) {
+      await saveCustomCategoriesToStorage(nextCustom);
+      return sortInventoryCategories(mergeInventoryCategories(nextCustom));
+    }
+    throwOnError(error, "Could not save inventory category");
+    return loadInventoryCategories();
+  }
+
+  const custom = await loadCustomInventoryCategories();
+  const nextCustom = [...custom, name];
+  writeJson("inventory-categories.json", nextCustom);
+  return sortInventoryCategories(mergeInventoryCategories(nextCustom));
+}
+
+export async function deleteInventoryCategory(rawName: string): Promise<string[]> {
+  const name = normalizeCategoryName(rawName);
+  if (!name) throw new Error("Category name is required.");
+  if (isDefaultInventoryCategory(name)) {
+    throw new Error("Built-in categories cannot be deleted.");
+  }
+
+  const inventory = await loadInventory();
+  if (inventory.some((item) => (item.category || "").toLowerCase() === name.toLowerCase())) {
+    throw new Error("Move or re-categorize parts in this category before deleting it.");
+  }
+
+  if (useDatabase()) {
+    const client = requireAdminClient();
+    const { error } = await client.from("inventory_categories").delete().eq("name", name);
+    if (error && isMissingInventoryCategoriesTable(error.message)) {
+      const nextCustom = (await loadCustomCategoriesFromStorage()).filter(
+        (item) => item.toLowerCase() !== name.toLowerCase(),
+      );
+      await saveCustomCategoriesToStorage(nextCustom);
+      return sortInventoryCategories(mergeInventoryCategories(nextCustom));
+    }
+    throwOnError(error, "Could not delete inventory category");
+    return loadInventoryCategories();
+  }
+
+  const nextCustom = (await loadCustomInventoryCategories()).filter(
+    (item) => item.toLowerCase() !== name.toLowerCase(),
+  );
+  writeJson("inventory-categories.json", nextCustom);
+  return sortInventoryCategories(mergeInventoryCategories(nextCustom));
 }
 
 export async function loadStaff(): Promise<StaffMember[]> {

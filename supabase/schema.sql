@@ -123,6 +123,12 @@ create table if not exists inventory (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists inventory_categories (
+  name text primary key,
+  sort_order int not null default 100,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists staff (
   id text primary key,
   name text not null,
@@ -229,6 +235,7 @@ alter table quotes enable row level security;
 alter table work_orders enable row level security;
 alter table bookings enable row level security;
 alter table inventory enable row level security;
+alter table inventory_categories enable row level security;
 alter table staff enable row level security;
 alter table fleet enable row level security;
 alter table routes enable row level security;

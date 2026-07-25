@@ -1,8 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Barcode, ExternalLink, Minus, Package, Pencil, Plus, Trash2 } from "lucide-react";
-import type { FleetVehicle, InventoryItem } from "@/lib/shop-types";
+import { AlertTriangle, Barcode, ExternalLink, FolderPlus, Minus, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import type { FleetVehicle, InventoryItem, StaffRole } from "@/lib/shop-types";
+import { canManageUsers } from "@/lib/admin-roles";
+import {
+  DEFAULT_INVENTORY_CATEGORIES,
+  isDefaultInventoryCategory,
+  mergeInventoryCategories,
+  sortInventoryCategories,
+} from "@/lib/inventory-categories";
 import {
   formatFleetVehicleOption,
   resolveInventoryVehicle,
@@ -15,21 +22,7 @@ import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { SearchableSelect } from "./SearchableSelect";
 
-type Props = { lowStockOnly?: boolean };
-
-const CATEGORIES = [
-  "General",
-  "Filters",
-  "Fluids",
-  "Brakes",
-  "Electrical",
-  "Engine",
-  "Belts",
-  "Batteries",
-  "Tires",
-  "Tools",
-  "Other",
-] as const;
+type Props = { lowStockOnly?: boolean; role?: StaffRole };
 
 const emptyForm = {
   name: "",
@@ -45,17 +38,8 @@ const emptyForm = {
   vehicleId: "",
 };
 
-function categoryOptions(current?: string) {
-  const set = new Set<string>(CATEGORIES);
-  if (current?.trim()) set.add(current.trim());
-  return [...set].sort((a, b) => {
-    const ai = CATEGORIES.indexOf(a as (typeof CATEGORIES)[number]);
-    const bi = CATEGORIES.indexOf(b as (typeof CATEGORIES)[number]);
-    if (ai !== -1 && bi !== -1) return ai - bi;
-    if (ai !== -1) return -1;
-    if (bi !== -1) return 1;
-    return a.localeCompare(b);
-  });
+function categoryOptions(categories: string[], current?: string) {
+  return sortInventoryCategories(mergeInventoryCategories(categories, current ? [current] : []));
 }
 
 function formatUrlForDisplay(url: string) {
@@ -72,7 +56,7 @@ function normalizeSupplierLink(raw: string) {
   return trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
 }
 
-function groupByCategory(items: InventoryItem[]) {
+function groupByCategory(items: InventoryItem[], categories: string[]) {
   const map = new Map<string, InventoryItem[]>();
   for (const item of items) {
     const category = item.category?.trim() || "Uncategorized";
@@ -82,7 +66,8 @@ function groupByCategory(items: InventoryItem[]) {
   }
 
   const groups: { category: string; items: InventoryItem[] }[] = [];
-  for (const category of CATEGORIES) {
+  const ordered = sortInventoryCategories(mergeInventoryCategories(categories));
+  for (const category of ordered) {
     const list = map.get(category);
     if (list?.length) {
       groups.push({ category, items: list.sort((a, b) => a.name.localeCompare(b.name)) });
@@ -144,12 +129,17 @@ function FormField({
   );
 }
 
-export function InventoryPanel({ lowStockOnly }: Props) {
+export function InventoryPanel({ lowStockOnly, role }: Props) {
   const toast = useAdminToast();
+  const canManageCategories = role ? canManageUsers(role) : false;
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
+  const [categories, setCategories] = useState<string[]>([...DEFAULT_INVENTORY_CATEGORIES]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [savingCategory, setSavingCategory] = useState(false);
   const [scanMode, setScanMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -159,14 +149,17 @@ export function InventoryPanel({ lowStockOnly }: Props) {
 
   async function load() {
     setLoading(true);
-    const [inventoryRes, fleetRes] = await Promise.all([
+    const [inventoryRes, fleetRes, categoriesRes] = await Promise.all([
       adminGet<InventoryItem[]>("/api/admin/inventory"),
       adminGet<FleetVehicle[]>("/api/admin/fleet"),
+      adminGet<{ categories: string[] }>("/api/admin/inventory/categories"),
     ]);
     if (inventoryRes.error) toast.error(inventoryRes.error);
     else setItems(inventoryRes.data ?? []);
     if (fleetRes.error) toast.error(fleetRes.error);
     else setFleet(fleetRes.data ?? []);
+    if (categoriesRes.error) toast.error(categoriesRes.error);
+    else setCategories(categoriesRes.data?.categories?.length ? categoriesRes.data.categories : [...DEFAULT_INVENTORY_CATEGORIES]);
     setLoading(false);
   }
 
@@ -255,8 +248,47 @@ export function InventoryPanel({ lowStockOnly }: Props) {
   const filtered = lowStockOnly
     ? items.filter((item) => item.minStock > 0 && item.quantity <= item.minStock)
     : items;
-  const grouped = groupByCategory(filtered);
+  const grouped = groupByCategory(filtered, categories);
   const fleetOptions = sortFleetForSelect(fleet);
+  const customCategories = categories.filter((name) => !isDefaultInventoryCategory(name));
+
+  async function saveCategory(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canManageCategories) return;
+    setSavingCategory(true);
+    const { data, error } = await adminSend<{ categories: string[] }>("/api/admin/inventory/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newCategoryName }),
+    });
+    setSavingCategory(false);
+    if (error || !data) {
+      toast.error(error || "Could not add category.");
+      return;
+    }
+    setCategories(data.categories);
+    setForm((prev) => ({ ...prev, category: newCategoryName.trim() || prev.category }));
+    setNewCategoryName("");
+    setShowCategoryModal(false);
+    toast.success("Category added.");
+  }
+
+  async function removeCategory(name: string) {
+    if (!canManageCategories) return;
+    if (!window.confirm(`Delete category “${name}”? Parts must be moved out of it first.`)) return;
+    const { data, error } = await adminSend<{ categories: string[] }>("/api/admin/inventory/categories", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (error || !data) {
+      toast.error(error || "Could not delete category.");
+      return;
+    }
+    setCategories(data.categories);
+    if (form.category === name) setForm((prev) => ({ ...prev, category: "General" }));
+    toast.success("Category deleted.");
+  }
 
   async function saveItem(e: React.FormEvent) {
     e.preventDefault();
@@ -338,29 +370,41 @@ export function InventoryPanel({ lowStockOnly }: Props) {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-        <PageHeader
-          title={lowStockOnly ? "Low Stock Alerts" : "Inventory"}
-          subtitle={
-            lowStockOnly
-              ? "Parts at or below a minimum greater than zero. Items with minimum stock set to 0 are ignored."
-              : "Manage parts, fluids, and shop supplies."
-          }
-        />
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setScanMode((v) => !v)}
-            className={scanMode ? `${btnPrimary} ring-2 ring-emerald-400/40` : btnSecondary}
-          >
-            <Barcode className="h-4 w-4" />
-            {scanMode ? "Scan mode on" : "Barcode scan"}
-          </button>
-          <button type="button" onClick={openAddModal} className={btnPrimary}>
-            <Plus className="h-4 w-4" /> {lowStockOnly ? "Add Part" : "Add Inventory"}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={lowStockOnly ? "Low Stock Alerts" : "Inventory"}
+        subtitle={
+          lowStockOnly
+            ? "Parts at or below a minimum greater than zero. Items with minimum stock set to 0 are ignored."
+            : "Manage parts, fluids, and shop supplies."
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setScanMode((v) => !v)}
+              className={scanMode ? `${btnPrimary} ring-2 ring-emerald-400/40` : btnSecondary}
+            >
+              <Barcode className="h-4 w-4" />
+              {scanMode ? "Scan mode on" : "Barcode scan"}
+            </button>
+            {canManageCategories && !lowStockOnly ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setNewCategoryName("");
+                  setShowCategoryModal(true);
+                }}
+                className={btnSecondary}
+              >
+                <FolderPlus className="h-4 w-4" /> Add Category
+              </button>
+            ) : null}
+            <button type="button" onClick={openAddModal} className={btnPrimary}>
+              <Plus className="h-4 w-4" /> {lowStockOnly ? "Add Part" : "Add Inventory"}
+            </button>
+          </>
+        }
+      />
 
       {scanMode && (
         <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
@@ -432,7 +476,7 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                 <SearchableSelect
                   value={form.category}
                   onChange={(category) => setForm({ ...form, category })}
-                  options={categoryOptions(form.category)}
+                  options={categoryOptions(categories, form.category)}
                   placeholder="Select category"
                   closeSignal={closeDropdowns}
                   className={inputClass}
@@ -654,6 +698,76 @@ export function InventoryPanel({ lowStockOnly }: Props) {
           ))}
         </div>
       )}
+
+      <AdminModal
+        open={showCategoryModal}
+        onClose={() => {
+          if (savingCategory) return;
+          setShowCategoryModal(false);
+          setNewCategoryName("");
+        }}
+        title="Add Category"
+      >
+        <form onSubmit={saveCategory} className="space-y-5">
+          <p className="text-sm text-slate-400">
+            Create a custom inventory category for your shop. It will show up in Add/Edit Part and in the All parts list.
+          </p>
+          <FormField label="Category name" htmlFor="inv-new-category" required hint="Example: Suspension, Exhaust, Hardware">
+            <input
+              id="inv-new-category"
+              className={inputClass}
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="e.g. Suspension"
+              maxLength={48}
+              required
+              autoFocus
+            />
+          </FormField>
+
+          {customCategories.length ? (
+            <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Custom categories</p>
+              <ul className="mt-2 space-y-1.5">
+                {customCategories.map((name) => (
+                  <li
+                    key={name}
+                    className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-200"
+                  >
+                    <span>{name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeCategory(name)}
+                      className={btnDanger}
+                      aria-label={`Delete category ${name}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
+            <button
+              type="button"
+              className={btnSecondary}
+              onClick={() => {
+                setShowCategoryModal(false);
+                setNewCategoryName("");
+              }}
+              disabled={savingCategory}
+            >
+              Cancel
+            </button>
+            <button type="submit" className={btnPrimary} disabled={savingCategory || !newCategoryName.trim()}>
+              <FolderPlus className="h-4 w-4" />
+              {savingCategory ? "Saving…" : "Add Category"}
+            </button>
+          </div>
+        </form>
+      </AdminModal>
     </div>
   );
 }

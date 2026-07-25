@@ -23,8 +23,8 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="admin-rise mb-8 flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0">
+    <div className="admin-rise mb-8 flex flex-wrap items-start justify-between gap-4">
+      <div className="min-w-0 flex-1">
         {eyebrow ? (
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-200/55">{eyebrow}</p>
         ) : null}
@@ -34,7 +34,9 @@ export function PageHeader({
         </h1>
         {subtitle ? <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400 sm:text-[15px]">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>
+      ) : null}
     </div>
   );
 }

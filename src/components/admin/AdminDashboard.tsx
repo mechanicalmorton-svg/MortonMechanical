@@ -430,8 +430,8 @@ export function AdminDashboard({ user }: Props) {
             </div>
             <div key={tab} className="admin-rise relative p-4 sm:p-6 lg:p-8">
               {tab === "dashboard" && <DashboardHome name={user.name} role={user.role} onNavigate={selectTab} />}
-              {tab === "inventory-all" && <InventoryPanel />}
-              {tab === "inventory-low" && <InventoryPanel lowStockOnly />}
+              {tab === "inventory-all" && <InventoryPanel role={user.role} />}
+              {tab === "inventory-low" && <InventoryPanel lowStockOnly role={user.role} />}
               {tab === "work-orders" && <WorkOrdersPanel />}
               {tab === "bookings" && <BookingsPanel />}
               {tab === "quotes" && <QuotesPanel />}
