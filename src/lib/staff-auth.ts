@@ -58,9 +58,12 @@ async function listAuthUsers() {
 
   while (true) {
     const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 100 });
-    if (error) throw new Error(error.message);
-    users.push(...data.users.filter((user) => isAllowedAdminEmail(user.email)));
-    if (data.users.length < 100) break;
+    if (error) {
+      // Surface as a normal Error so callers can fall back on JWT-signing misconfig.
+      throw new Error(error.message);
+    }
+    users.push(...(data.users ?? []).filter((user) => isAllowedAdminEmail(user.email)));
+    if ((data.users?.length ?? 0) < 100) break;
     page += 1;
   }
 
@@ -157,12 +160,18 @@ export async function loadStaffFromAuth(): Promise<StaffMember[]> {
 
     return members.sort((a, b) => a.name.localeCompare(b.name));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "";
+    const message = error instanceof Error ? error.message : String(error ?? "");
     if (isJwtKeyError(message)) {
       console.warn("[staff-auth] Auth admin API unavailable (JWT signing key issue). Falling back to staff table.");
       return loadStaffFromTable();
     }
-    throw error;
+    // Prefer staff-table listing over hard-failing User Management when Auth Admin flakes.
+    console.warn("[staff-auth] Auth admin list failed; falling back to staff table.", message);
+    try {
+      return await loadStaffFromTable();
+    } catch {
+      throw error;
+    }
   }
 }
 

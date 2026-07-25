@@ -5,10 +5,15 @@ import { NextResponse, type NextRequest } from "next/server";
  * re-verify ES256 access tokens that lack a `kid` and wipe/break the session.
  * Auth is resolved inside route handlers / server components instead.
  */
-export async function middleware(_request: NextRequest) {
+export function proxy(_request: NextRequest) {
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: [
+    "/admin/:path*",
+    "/api/admin/:path*",
+    "/mechanic/:path*",
+    "/dispatcher/:path*",
+  ],
 };
