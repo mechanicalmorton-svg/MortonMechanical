@@ -103,11 +103,28 @@ function staffToRow(member: StaffMember, includeRoleIds = true) {
   return row;
 }
 
+export const ROLE_IDS_SQL =
+  "alter table staff add column if not exists role_ids text[]; update staff set role_ids = array[role] where (role_ids is null or cardinality(role_ids) = 0) and role is not null and btrim(role) <> ''; notify pgrst, 'reload schema';";
+
+export async function staffMultiRoleReady(): Promise<boolean> {
+  const sb = getSupabaseAdmin();
+  if (!sb) return false;
+  const { error } = await sb.from("staff").select("id, role_ids").limit(1);
+  if (!error) return true;
+  return !isMissingRoleIdsColumn(error.message);
+}
+
 async function upsertStaffRow(member: StaffMember) {
   const sb = getSupabaseAdmin()!;
-  const withIds = staffToRow(member, true);
+  const roleIds = normalizeRoleIds(member.roleIds, member.role);
+  const withIds = staffToRow({ ...member, roleIds }, true);
   const { error } = await sb.from("staff").upsert(withIds);
   if (error && isMissingRoleIdsColumn(error.message)) {
+    if (roleIds.length > 1) {
+      throw new Error(
+        "Multi-role assignment needs the staff.role_ids column. Run supabase/add-staff-role-ids.sql in the Supabase SQL editor, then try again.",
+      );
+    }
     const { error: fallbackError } = await sb.from("staff").upsert(staffToRow(member, false));
     throwOnError(fallbackError, "Could not save staff record");
     return;

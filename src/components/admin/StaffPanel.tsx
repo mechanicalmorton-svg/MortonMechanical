@@ -40,15 +40,19 @@ function RoleMultiSelect({
   value,
   onChange,
   className = "",
+  lockOwner = false,
 }: {
   roles: RoleDefinition[];
   value: string[];
   onChange: (next: string[]) => void;
   className?: string;
+  /** Keep Founder checked (e.g. last active Founder editing themselves). */
+  lockOwner?: boolean;
 }) {
   function toggle(id: string) {
     const has = value.includes(id);
     if (has && value.length <= 1) return;
+    if (has && id === "owner" && lockOwner) return;
     onChange(has ? value.filter((roleId) => roleId !== id) : [...value, id]);
   }
 
@@ -56,10 +60,13 @@ function RoleMultiSelect({
     <div className={`flex flex-wrap gap-2 ${className}`}>
       {roles.map((role) => {
         const checked = value.includes(role.id);
+        const locked = role.id === "owner" && lockOwner && checked;
         return (
           <label
             key={role.id}
-            className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+              locked ? "cursor-default opacity-90" : "cursor-pointer"
+            } ${
               checked
                 ? "border-amber-500/35 bg-amber-500/10 text-amber-50"
                 : "border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700"
@@ -68,6 +75,7 @@ function RoleMultiSelect({
             <input
               type="checkbox"
               checked={checked}
+              disabled={locked}
               onChange={() => toggle(role.id)}
               className="accent-amber-500"
             />
@@ -99,13 +107,17 @@ const emptyUserForm = {
 
 type Props = {
   currentUserId?: string;
+  /** Called after saving the signed-in user's roles so the sidebar can refresh. */
+  onSelfUpdated?: () => void;
 };
 
-export function StaffPanel({ currentUserId }: Props) {
+export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
   const toast = useAdminToast();
   const [items, setItems] = useState<StaffMember[]>([]);
   const [roles, setRoles] = useState<RoleDefinition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [multiRoleReady, setMultiRoleReady] = useState(true);
+  const [roleIdsSql, setRoleIdsSql] = useState<string | undefined>();
   const [showCreate, setShowCreate] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [showRoleForm, setShowRoleForm] = useState(false);
@@ -135,9 +147,18 @@ export function StaffPanel({ currentUserId }: Props) {
     if (!staffRes.ok) {
       toast.error(staffData.error ?? "Could not load users.");
       setItems([]);
+      setMultiRoleReady(true);
+      setRoleIdsSql(undefined);
     } else {
+      const list: StaffMember[] = Array.isArray(staffData)
+        ? staffData
+        : Array.isArray(staffData?.staff)
+          ? staffData.staff
+          : [];
+      setMultiRoleReady(Array.isArray(staffData) ? true : staffData?.multiRoleReady !== false);
+      setRoleIdsSql(Array.isArray(staffData) ? undefined : staffData?.roleIdsSql);
       setItems(
-        (Array.isArray(staffData) ? staffData : []).map((member: StaffMember) => {
+        list.map((member: StaffMember) => {
           const roleIds = memberRoleIds(member);
           return { ...member, roleIds, role: pickPrimaryRoleId(roleIds) };
         }),
@@ -277,6 +298,10 @@ export function StaffPanel({ currentUserId }: Props) {
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
     const roleIds = normalizeRoleIds(form.roleIds, "mechanic");
+    if (!multiRoleReady && roleIds.length > 1) {
+      toast.error("Run the role_ids SQL in Supabase first so multiple roles can be saved.");
+      return;
+    }
     setSavingUser(true);
     const res = await fetch("/api/admin/staff", {
       method: "POST",
@@ -297,13 +322,17 @@ export function StaffPanel({ currentUserId }: Props) {
       return;
     }
     closeUserModal();
-    toast.success("User created.");
+    toast.success("User created. They sign in once at /admin/login and see every page their roles allow.");
     load();
   }
 
   async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     if (!editingUserId) return;
+    if (!multiRoleReady && normalizeRoleIds(form.roleIds, "mechanic").length > 1) {
+      toast.error("Run the role_ids SQL in Supabase first so multiple roles can be saved.");
+      return;
+    }
     const roleIds = normalizeRoleIds(form.roleIds, "mechanic");
     setSavingUser(true);
     const res = await fetch("/api/admin/staff", {
@@ -326,9 +355,15 @@ export function StaffPanel({ currentUserId }: Props) {
       toast.error(data.error ?? "Could not update user.");
       return;
     }
+    const editedSelf = Boolean(currentUserId && editingUserId === currentUserId);
     closeUserModal();
-    toast.success("User updated.");
-    load();
+    toast.success(
+      editedSelf
+        ? "Your roles were updated. Refreshing your dashboard access…"
+        : "User updated. They keep the same login — sidebar pages come from all assigned roles.",
+    );
+    await load();
+    if (editedSelf) onSelfUpdated?.();
   }
 
   async function setActive(member: StaffMember, active: boolean) {
@@ -387,7 +422,7 @@ export function StaffPanel({ currentUserId }: Props) {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="User Management"
-        subtitle="Portal users are synced with Supabase Authentication (@mortonsmechanical.com)."
+        subtitle="Assign multiple roles per person. Everyone uses the same /admin login — sidebar pages combine from all their roles."
         actions={
           <>
             <button type="button" onClick={openCreateRole} className={btnSecondary}>
@@ -399,6 +434,18 @@ export function StaffPanel({ currentUserId }: Props) {
           </>
         }
       />
+
+      {!multiRoleReady ? (
+        <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+          <p className="font-medium">Multi-role storage isn’t set up yet</p>
+          <p className="mt-1 text-amber-100/80">
+            Run this in the Supabase SQL editor so Founders can save more than one role per user (including themselves):
+          </p>
+          <pre className="mt-2 overflow-x-auto rounded-xl border border-amber-500/20 bg-slate-950/50 p-3 text-xs text-amber-100/90">
+            {roleIdsSql || "see supabase/add-staff-role-ids.sql"}
+          </pre>
+        </div>
+      ) : null}
 
       {!loading && roles.length ? (
         <section className="mb-6 overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/30">
@@ -497,12 +544,27 @@ export function StaffPanel({ currentUserId }: Props) {
           </label>
           <div className="sm:col-span-2">
             <p className="mb-2 text-sm font-medium text-slate-200">Roles</p>
-            <p className="mb-2 text-xs text-slate-500">Assign one or more roles. Permissions combine across all selected roles.</p>
+            <p className="mb-2 text-xs text-slate-500">
+              Assign one or more roles (including yourself as Founder). Same login at{" "}
+              <span className="text-slate-300">/admin/login</span> — they see every dashboard page any of
+              their roles allow. Mechanic/Dispatcher login pages are optional shortcuts only.
+            </p>
             <RoleMultiSelect
               roles={roleOptions}
               value={form.roleIds}
-              onChange={(roleIds) => setForm({ ...form, roleIds })}
+              onChange={(roleIds) => setForm({ ...form, roleIds: roleIds as StaffRole[] })}
+              lockOwner={Boolean(
+                editingUserId &&
+                  form.roleIds.includes("owner") &&
+                  activeOwnerCount <= 1 &&
+                  (editingUser?.active ?? true),
+              )}
             />
+            {editingUserId && currentUserId && editingUserId === currentUserId ? (
+              <p className="mt-2 text-xs text-amber-200/80">
+                You can add Mechanic, Dispatcher, or custom roles to your Founder account. Keep Founder checked if you’re the last Founder.
+              </p>
+            ) : null}
           </div>
           {editingUserId ? (
             <label className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 sm:col-span-2">

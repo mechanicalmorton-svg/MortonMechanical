@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAdminAuth, withOwnerAdmin } from "@/lib/admin-route";
 import { normalizeRoleIds, pickPrimaryRoleId } from "@/lib/role-definitions";
-import { assertStaffMutationAllowed } from "@/lib/staff-auth";
+import { assertStaffMutationAllowed, ROLE_IDS_SQL, staffMultiRoleReady } from "@/lib/staff-auth";
 import {
   createPortalUser,
   deleteStaffMember,
@@ -19,7 +19,14 @@ function findMember(staff: StaffMember[], id: string) {
 }
 
 export async function GET() {
-  return withAdminAuth(async () => NextResponse.json(await loadStaff()));
+  return withAdminAuth(async () => {
+    const [staff, multiRoleReady] = await Promise.all([loadStaff(), staffMultiRoleReady()]);
+    return NextResponse.json({
+      staff,
+      multiRoleReady,
+      roleIdsSql: multiRoleReady ? undefined : ROLE_IDS_SQL,
+    });
+  });
 }
 
 export async function POST(req: Request) {

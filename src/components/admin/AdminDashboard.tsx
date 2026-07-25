@@ -491,7 +491,9 @@ export function AdminDashboard({ user }: Props) {
               {tab === "work-orders" && <WorkOrdersPanel />}
               {tab === "bookings" && <BookingsPanel />}
               {tab === "quotes" && <QuotesPanel />}
-              {tab === "users" && userCanManageUsers(user) && <StaffPanel currentUserId={user.id} />}
+              {tab === "users" && userCanManageUsers(user) && (
+                <StaffPanel currentUserId={user.id} onSelfUpdated={() => router.refresh()} />
+              )}
               {tab === "fleet" && <FleetPanel />}
               {tab === "routes-manager" && <RoutesPanel />}
               {tab === "routes-today" && <RoutesPanel todayOnly userId={user.id} />}
