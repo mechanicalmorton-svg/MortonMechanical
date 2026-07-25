@@ -743,11 +743,11 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     pendingBookings: bookings.filter((b) => b.status === "pending").length,
     urgentItems:
       workOrders.filter((w) => w.priority === "urgent" && w.status !== "completed" && w.status !== "cancelled").length +
-      inventory.filter((i) => i.quantity <= i.minStock).length,
+      inventory.filter((i) => i.minStock > 0 && i.quantity <= i.minStock).length,
     mtdRevenue: workOrders
       .filter((w) => w.status === "completed" && w.updatedAt >= ms)
       .reduce((sum, w) => sum + (w.revenue ?? 0), 0),
-    lowStockCount: inventory.filter((i) => i.quantity <= i.minStock).length,
+    lowStockCount: inventory.filter((i) => i.minStock > 0 && i.quantity <= i.minStock).length,
     activeFleet: fleet.filter((f) => f.status === "active").length,
   };
 }

@@ -252,7 +252,9 @@ export function InventoryPanel({ lowStockOnly }: Props) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [scanMode, handleScan]);
 
-  const filtered = lowStockOnly ? items.filter((item) => item.quantity <= item.minStock) : items;
+  const filtered = lowStockOnly
+    ? items.filter((item) => item.minStock > 0 && item.quantity <= item.minStock)
+    : items;
   const grouped = groupByCategory(filtered);
   const fleetOptions = sortFleetForSelect(fleet);
 
@@ -339,7 +341,11 @@ export function InventoryPanel({ lowStockOnly }: Props) {
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <PageHeader
           title={lowStockOnly ? "Low Stock Alerts" : "Inventory"}
-          subtitle={lowStockOnly ? "Parts at or below minimum stock levels." : "Manage parts, fluids, and shop supplies."}
+          subtitle={
+            lowStockOnly
+              ? "Parts at or below a minimum greater than zero. Items with minimum stock set to 0 are ignored."
+              : "Manage parts, fluids, and shop supplies."
+          }
         />
         <div className="flex flex-wrap gap-2">
           <button
@@ -576,7 +582,9 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                       <tr key={item.id} className="bg-slate-950/20 transition hover:bg-slate-900/40">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            {item.quantity <= item.minStock && <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />}
+                            {item.minStock > 0 && item.quantity <= item.minStock && (
+                              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                            )}
                             <div className="min-w-0">
                               <p className="font-medium text-white">{item.name}</p>
                               <p className="text-xs text-slate-400">
@@ -595,7 +603,15 @@ export function InventoryPanel({ lowStockOnly }: Props) {
                             <button type="button" onClick={() => adjustStock(item, -1)} className={btnSecondary} aria-label="Decrease stock">
                               <Minus className="h-3.5 w-3.5" />
                             </button>
-                            <span className={item.quantity <= item.minStock ? "font-semibold text-amber-300" : "text-slate-300"}>{item.quantity}</span>
+                            <span
+                              className={
+                                item.minStock > 0 && item.quantity <= item.minStock
+                                  ? "font-semibold text-amber-300"
+                                  : "text-slate-300"
+                              }
+                            >
+                              {item.quantity}
+                            </span>
                             <button type="button" onClick={() => adjustStock(item, 1)} className={btnSecondary} aria-label="Increase stock">
                               <Plus className="h-3.5 w-3.5" />
                             </button>

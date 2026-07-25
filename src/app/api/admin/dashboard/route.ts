@@ -20,7 +20,7 @@ export async function GET() {
       urgentWorkOrders: workOrders.filter(
         (w) => w.priority === "urgent" && w.status !== "completed" && w.status !== "cancelled",
       ),
-      lowStockItems: inventory.filter((i) => i.quantity <= i.minStock),
+      lowStockItems: inventory.filter((i) => i.minStock > 0 && i.quantity <= i.minStock),
       mtdCompletedJobs: workOrders.filter((w) => w.status === "completed" && w.updatedAt >= monthStart),
     });
   });
