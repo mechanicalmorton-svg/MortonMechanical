@@ -731,15 +731,31 @@ export async function markBookingDepositPaid(bookingId: string, sessionId: strin
     if (!data) throw new Error("Booking not found.");
     const booking = rowToBooking(data as Record<string, unknown>);
     if (booking.depositPaid) return booking;
-    const next: Booking = {
-      ...booking,
-      depositPaid: true,
-      stripeCheckoutSessionId: sessionId,
-      status: booking.status === "pending" ? "confirmed" : booking.status,
-      notes: [booking.notes, "Deposit paid via Stripe."].filter(Boolean).join("\n"),
-    };
-    await upsertBooking(next);
-    return next;
+
+    const notes = [booking.notes, "Deposit paid via Stripe."].filter(Boolean).join("\n");
+    const status = booking.status === "pending" ? "confirmed" : booking.status;
+    const { data: updated, error: updateError } = await client
+      .from("bookings")
+      .update({
+        deposit_paid: true,
+        stripe_checkout_session_id: sessionId,
+        status,
+        notes,
+      })
+      .eq("id", bookingId)
+      .select("*")
+      .maybeSingle();
+
+    if (updateError) {
+      if (isMissingStripePaymentColumn(updateError.message)) {
+        throw new Error(
+          "Booking deposit columns are missing. Run supabase/add-stripe-payments.sql in the Supabase SQL editor.",
+        );
+      }
+      throwOnError(updateError, "Could not mark booking deposit paid");
+    }
+    if (!updated) throw new Error("Booking not found.");
+    return rowToBooking(updated as Record<string, unknown>);
   }
   const items = await loadBookings();
   const idx = items.findIndex((b) => b.id === bookingId);
@@ -764,14 +780,28 @@ export async function markWorkOrderInvoicePaid(workOrderId: string, sessionId: s
     if (!data) throw new Error("Work order not found.");
     const order = rowToWorkOrder(data as Record<string, unknown>);
     if (order.paymentStatus === "paid") return order;
-    const next: WorkOrder = {
-      ...order,
-      paymentStatus: "paid",
-      stripeCheckoutSessionId: sessionId,
-      updatedAt: new Date().toISOString(),
-    };
-    await upsertWorkOrder(next);
-    return next;
+
+    const { data: updated, error: updateError } = await client
+      .from("work_orders")
+      .update({
+        payment_status: "paid",
+        stripe_checkout_session_id: sessionId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", workOrderId)
+      .select("*")
+      .maybeSingle();
+
+    if (updateError) {
+      if (isMissingStripePaymentColumn(updateError.message)) {
+        throw new Error(
+          "Work order payment columns are missing. Run supabase/add-stripe-payments.sql in the Supabase SQL editor.",
+        );
+      }
+      throwOnError(updateError, "Could not mark work order paid");
+    }
+    if (!updated) throw new Error("Work order not found.");
+    return rowToWorkOrder(updated as Record<string, unknown>);
   }
   const items = await loadWorkOrders();
   const idx = items.findIndex((w) => w.id === workOrderId);

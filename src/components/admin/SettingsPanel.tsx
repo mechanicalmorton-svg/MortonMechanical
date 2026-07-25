@@ -87,6 +87,8 @@ export function SettingsPanel({ user }: Props) {
 
   const [depositDollars, setDepositDollars] = useState("50");
   const [stripeConfigured, setStripeConfigured] = useState(false);
+  const [paymentsReady, setPaymentsReady] = useState(false);
+  const [paymentsHealthNote, setPaymentsHealthNote] = useState("");
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [savingDeposit, setSavingDeposit] = useState(false);
 
@@ -116,19 +118,44 @@ export function SettingsPanel({ user }: Props) {
     if (!canManagePayments) return;
     let active = true;
     setLoadingPayments(true);
-    adminGet<{ bookingDepositCents?: number; stripeConfigured?: boolean }>("/api/admin/payments/settings").then(
-      ({ data, error }) => {
-        if (!active) return;
-        if (error) {
-          toast.error(error);
-        } else if (data) {
-          const cents = Number(data.bookingDepositCents ?? 5000);
-          setDepositDollars((cents / 100).toFixed(cents % 100 === 0 ? 0 : 2));
-          setStripeConfigured(Boolean(data.stripeConfigured));
-        }
-        setLoadingPayments(false);
-      },
-    );
+    Promise.all([
+      adminGet<{ bookingDepositCents?: number; stripeConfigured?: boolean }>("/api/admin/payments/settings"),
+      adminGet<{
+        ready?: boolean;
+        stripeConfigured?: boolean;
+        webhookConfigured?: boolean;
+        workOrderPaymentsReady?: boolean;
+        bookingDepositsReady?: boolean;
+        sqlHint?: string;
+        dbMessage?: string;
+      }>("/api/admin/payments/health"),
+    ]).then(([settingsRes, healthRes]) => {
+      if (!active) return;
+      if (settingsRes.error) toast.error(settingsRes.error);
+      if (settingsRes.data) {
+        const cents = Number(settingsRes.data.bookingDepositCents ?? 5000);
+        setDepositDollars((cents / 100).toFixed(cents % 100 === 0 ? 0 : 2));
+        setStripeConfigured(Boolean(settingsRes.data.stripeConfigured));
+      }
+      if (healthRes.data) {
+        setPaymentsReady(Boolean(healthRes.data.ready));
+        const parts = [
+          healthRes.data.stripeConfigured ? "Stripe keys" : "Stripe keys missing",
+          healthRes.data.webhookConfigured ? "webhook" : "webhook missing",
+          healthRes.data.workOrderPaymentsReady ? "work-order columns" : "work-order columns missing",
+          healthRes.data.bookingDepositsReady ? "booking columns" : "booking columns missing",
+        ];
+        setPaymentsHealthNote(
+          healthRes.data.ready
+            ? `Payments ready (${parts.join(", ")}).`
+            : `Not fully ready: ${parts.join(", ")}.${healthRes.data.sqlHint ? ` ${healthRes.data.sqlHint}` : ""}`,
+        );
+      } else if (healthRes.error) {
+        setPaymentsReady(false);
+        setPaymentsHealthNote(healthRes.error);
+      }
+      setLoadingPayments(false);
+    });
     return () => {
       active = false;
     };
@@ -430,10 +457,11 @@ export function SettingsPanel({ user }: Props) {
                         required
                       />
                     </label>
-                    <p className="text-xs text-slate-500">
-                      {stripeConfigured
-                        ? "Stripe is configured — quote submissions will redirect to Checkout for this deposit."
-                        : "Stripe keys are not set yet. Quote submissions still save without payment until STRIPE_SECRET_KEY is configured."}
+                    <p className={`text-xs ${paymentsReady ? "text-emerald-400/90" : "text-amber-300/90"}`}>
+                      {paymentsHealthNote ||
+                        (stripeConfigured
+                          ? "Stripe is configured — quote submissions will redirect to Checkout for this deposit."
+                          : "Stripe keys are not set yet. Quote submissions still save without payment until STRIPE_SECRET_KEY is configured.")}
                     </p>
                     <div className="flex justify-end">
                       <button type="submit" className={btnPrimary} disabled={savingDeposit}>

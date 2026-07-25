@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/admin-route";
 import { canManageUsers } from "@/lib/admin-roles";
 import { dollarsToCents, getSiteUrl, getStripe, isStripeConfigured } from "@/lib/stripe";
-import { loadWorkOrders, upsertWorkOrder } from "@/lib/shop-data";
+import { getCustomerById, loadWorkOrders, upsertWorkOrder } from "@/lib/shop-data";
 
 function canCreateInvoiceCheckout(user: {
   role: string;
@@ -51,11 +51,22 @@ export async function POST(req: Request) {
     const siteUrl = getSiteUrl();
     const stripe = getStripe();
 
+    let customerEmail: string | undefined;
+    if (order.customerId) {
+      try {
+        const customer = await getCustomerById(order.customerId);
+        const email = customer?.email?.trim();
+        if (email) customerEmail = email;
+      } catch {
+        // Optional — Checkout still works without prefilled email.
+      }
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       success_url: `${siteUrl}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${siteUrl}/pay/cancel`,
-      customer_email: undefined,
+      customer_email: customerEmail,
       line_items: [
         {
           quantity: 1,

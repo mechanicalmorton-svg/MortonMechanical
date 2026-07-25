@@ -592,6 +592,7 @@ export function WorkOrdersPanel() {
                       <div className="flex flex-wrap gap-1">
                         <StatusBadge status={statusBadgeKey(order.status)} />
                         {isOverdue(order) && <StatusBadge status="overdue" />}
+                        <StatusBadge status={order.paymentStatus ?? "unpaid"} />
                       </div>
                     </td>
                     <td className="hidden px-4 py-3 md:table-cell">
