@@ -74,9 +74,16 @@ export function AdminToastProvider({ children }: { children: React.ReactNode }) 
     (type: ToastType, message: string) => {
       const trimmed = message.trim();
       if (!trimmed) return;
-      const id = crypto.randomUUID();
-      setToasts((prev) => [...prev.slice(-(MAX_TOASTS - 1)), { id, type, message: trimmed }]);
-      window.setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
+
+      setToasts((prev) => {
+        // Dedupe identical active toasts (panels often fire the same auth error together).
+        if (prev.some((toast) => !toast.exiting && toast.type === type && toast.message === trimmed)) {
+          return prev;
+        }
+        const id = crypto.randomUUID();
+        window.setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
+        return [...prev.slice(-(MAX_TOASTS - 1)), { id, type, message: trimmed }];
+      });
     },
     [dismiss],
   );

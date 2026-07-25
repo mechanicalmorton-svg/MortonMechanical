@@ -257,7 +257,7 @@ export function ContentEditor() {
     return (
       <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-200">
         {loadError || "Site contents could not be loaded."}
-        <p className="mt-2 text-red-200/70">Sign in again, then reopen Site Contents.</p>
+        <p className="mt-2 text-red-200/70">Refresh the page, then reopen Site Contents.</p>
       </div>
     );
   }

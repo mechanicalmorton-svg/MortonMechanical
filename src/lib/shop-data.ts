@@ -19,6 +19,11 @@ import type {
   WorkOrder,
 } from "./shop-types";
 import { formatCustomerVehicleLabel } from "./customer-vehicles";
+import {
+  isMissingDocumentDataColumn,
+  loadWorkOrderDocumentData,
+  saveWorkOrderDocumentData,
+} from "./work-order-document-store";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -66,7 +71,7 @@ function rowToWorkOrder(r: Record<string, unknown>): WorkOrder {
 }
 
 function workOrderToRow(w: WorkOrder) {
-  return {
+  const row: Record<string, unknown> = {
     id: w.id,
     customer_id: w.customerId?.trim() || null,
     customer_vehicle_id: w.customerVehicleId?.trim() || null,
@@ -82,10 +87,16 @@ function workOrderToRow(w: WorkOrder) {
     internal_notes: w.internalNotes ?? "",
     revenue: w.revenue,
     scheduled_date: w.scheduledDate,
-    document_data: w.documentData ?? {},
     created_at: w.createdAt,
     updated_at: w.updatedAt,
   };
+
+  // Only send when present so older databases without the column can still save other fields.
+  if (w.documentData !== undefined) {
+    row.document_data = w.documentData ?? {};
+  }
+
+  return row;
 }
 
 function rowToCustomer(r: Record<string, unknown>): Customer {
@@ -284,20 +295,67 @@ function routeToRow(r: RoutePlan) {
 
 export async function loadWorkOrders(): Promise<WorkOrder[]> {
   if (useDatabase()) {
-    const { data, error } = await requireAdminClient()
-      .from("work_orders")
-      .select("*")
-      .order("updated_at", { ascending: false });
-    throwOnError(error, "Could not load work orders");
-    return (data ?? []).map(rowToWorkOrder);
+    const client = requireAdminClient();
+    const primary = await client.from("work_orders").select("*").order("updated_at", { ascending: false });
+
+    if (primary.error && isMissingDocumentDataColumn(primary.error.message)) {
+      const fallback = await client
+        .from("work_orders")
+        .select(
+          "id, customer_id, customer_vehicle_id, customer_name, phone, vehicle, customer_concern, service, status, priority, assigned_to, notes, internal_notes, revenue, scheduled_date, created_at, updated_at",
+        )
+        .order("updated_at", { ascending: false });
+      throwOnError(fallback.error, "Could not load work orders");
+      const orders = (fallback.data ?? []).map(rowToWorkOrder);
+      await Promise.all(
+        orders.map(async (order) => {
+          const stored = await loadWorkOrderDocumentData(order.id);
+          if (stored) order.documentData = stored;
+        }),
+      );
+      return orders;
+    }
+
+    throwOnError(primary.error, "Could not load work orders");
+    return (primary.data ?? []).map(rowToWorkOrder);
   }
   return readJson("work-orders.json", []);
 }
 
 export async function upsertWorkOrder(item: WorkOrder) {
   if (useDatabase()) {
-    const { error } = await requireAdminClient().from("work_orders").upsert(workOrderToRow(item));
+    const client = requireAdminClient();
+    const row = workOrderToRow(item);
+    const { error } = await client.from("work_orders").upsert(row);
+
+    if (error && isMissingDocumentDataColumn(error.message)) {
+      const { document_data: _documentData, ...rowWithoutDocument } = row;
+      const retry = await client.from("work_orders").upsert(rowWithoutDocument);
+      throwOnError(retry.error, "Could not save work order");
+      if (item.documentData) {
+        try {
+          await saveWorkOrderDocumentData(item.id, item.documentData);
+        } catch (storageError) {
+          throw new Error(
+            `Could not save work order documents. Run supabase/add-work-order-document-data.sql in the Supabase SQL editor, then try again. (${
+              storageError instanceof Error ? storageError.message : "storage unavailable"
+            })`,
+          );
+        }
+      }
+      return;
+    }
+
     throwOnError(error, "Could not save work order");
+
+    // Keep a storage copy as backup even when the column exists.
+    if (item.documentData) {
+      try {
+        await saveWorkOrderDocumentData(item.id, item.documentData);
+      } catch {
+        // Column save succeeded; storage backup is optional.
+      }
+    }
     return;
   }
   const items = await loadWorkOrders();

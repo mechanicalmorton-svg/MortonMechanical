@@ -108,12 +108,48 @@ function metadataFromClaims(payload: Record<string, unknown>) {
   return undefined;
 }
 
+type CookieSession = {
+  access_token?: string;
+  user?: {
+    id?: string;
+    email?: string;
+    user_metadata?: Record<string, unknown>;
+  };
+  currentSession?: {
+    access_token?: string;
+    user?: CookieSession["user"];
+  };
+};
+
 /**
- * Read access token from auth cookies only.
+ * Read session from auth cookies only.
  * Do not call getSession()/getUser()/getClaims() — those re-verify ES256 tokens
  * that may lack a JWT `kid` and break the session.
  */
-async function getAccessTokenFromSession() {
+function parseSessionRaw(rawValue: string): CookieSession | null {
+  let raw = rawValue;
+  if (raw.startsWith("base64-")) raw = raw.slice("base64-".length);
+
+  const attempts = [
+    () => {
+      const json = Buffer.from(raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+      return JSON.parse(json) as CookieSession;
+    },
+    () => JSON.parse(raw) as CookieSession,
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const parsed = attempt();
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch {
+      /* try next decode strategy */
+    }
+  }
+  return null;
+}
+
+async function getSessionFromCookies(): Promise<CookieSession | null> {
   try {
     const cookieStore = await cookies();
     const all = cookieStore.getAll();
@@ -124,26 +160,25 @@ async function getAccessTokenFromSession() {
     }
 
     for (const base of basenames) {
-      const chunks = all
-        .filter((cookie) => cookie.name === base || cookie.name.startsWith(`${base}.`))
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-      if (!chunks.length) continue;
+      // Prefer numbered chunks only. Mixing a bare cookie with `.0/.1` chunks corrupts JSON
+      // and causes intermittent "Not signed in" / login redirects.
+      const numbered = all
+        .map((cookie) => {
+          const match = cookie.name.match(new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.(\\d+)$`));
+          if (!match) return null;
+          return { index: Number(match[1]), value: cookie.value };
+        })
+        .filter((item): item is { index: number; value: string } => item !== null)
+        .sort((a, b) => a.index - b.index);
 
-      let raw = chunks.map((chunk) => chunk.value).join("");
-      if (raw.startsWith("base64-")) raw = raw.slice("base64-".length);
-      try {
-        const json = Buffer.from(raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
-        const parsed = JSON.parse(json) as { access_token?: string; currentSession?: { access_token?: string } };
-        const token = parsed.access_token ?? parsed.currentSession?.access_token;
-        if (token) return token;
-      } catch {
-        try {
-          const parsed = JSON.parse(raw) as { access_token?: string; currentSession?: { access_token?: string } };
-          const token = parsed.access_token ?? parsed.currentSession?.access_token;
-          if (token) return token;
-        } catch {
-          /* try next cookie group */
-        }
+      const raw = numbered.length
+        ? numbered.map((chunk) => chunk.value).join("")
+        : all.find((cookie) => cookie.name === base)?.value;
+
+      if (!raw) continue;
+      const parsed = parseSessionRaw(raw);
+      if (parsed?.access_token || parsed?.currentSession?.access_token || parsed?.user?.email) {
+        return parsed;
       }
     }
   } catch {
@@ -160,14 +195,14 @@ async function loadStaffProfile(userId: string) {
   try {
     const { data: staffById, error: byIdError } = await admin
       .from("staff")
-      .select("name, role, phone, avatar_url")
+      .select("name, email, role, phone, avatar_url")
       .eq("id", userId)
       .maybeSingle();
     if (!byIdError && staffById) return staffById;
 
     const { data: staffByAuth, error: byAuthError } = await admin
       .from("staff")
-      .select("name, role, phone, avatar_url")
+      .select("name, email, role, phone, avatar_url")
       .eq("auth_user_id", userId)
       .maybeSingle();
     if (!byAuthError && staffByAuth) return staffByAuth;
@@ -179,13 +214,20 @@ async function loadStaffProfile(userId: string) {
 
 function buildAdminUser(
   user: { id: string; email: string; user_metadata?: Record<string, unknown> },
-  staff?: { name?: string | null; role?: string | null; phone?: string | null; avatar_url?: string | null } | null,
+  staff?: {
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+    phone?: string | null;
+    avatar_url?: string | null;
+  } | null,
 ): AdminUser | null {
-  if (!isAllowedAdminEmail(user.email)) return null;
+  const email = (user.email || staff?.email || "").toLowerCase();
+  if (!isAllowedAdminEmail(email)) return null;
 
   let name =
     (typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : undefined) ||
-    emailToDisplayName(user.email);
+    emailToDisplayName(email);
   let role: StaffRole = "mechanic";
   let phone = typeof staff?.phone === "string" ? staff.phone : "";
   let avatarUrl =
@@ -197,8 +239,8 @@ function buildAdminUser(
 
   return {
     id: user.id,
-    email: user.email,
-    username: user.email.split("@")[0],
+    email,
+    username: email.split("@")[0],
     name,
     role,
     phone,
@@ -213,12 +255,15 @@ async function adminUserFromAuthUser(user: User) {
 }
 
 export async function getSupabaseAuthUser(): Promise<AdminUser | null> {
-  const token = await getAccessTokenFromSession();
+  const session = await getSessionFromCookies();
+  const token = session?.access_token ?? session?.currentSession?.access_token;
   if (!token) return null;
 
   const payload = decodeJwtPayload(token);
-  const userId = typeof payload?.sub === "string" ? payload.sub : null;
-  const email = typeof payload?.email === "string" ? payload.email : null;
+  const cookieUser = session?.user ?? session?.currentSession?.user;
+  const userId =
+    (typeof payload?.sub === "string" ? payload.sub : null) ||
+    (typeof cookieUser?.id === "string" ? cookieUser.id : null);
   if (!userId || !payload || isJwtExpired(payload)) return null;
 
   const admin = getSupabaseAdmin();
@@ -243,14 +288,20 @@ export async function getSupabaseAuthUser(): Promise<AdminUser | null> {
     }
   }
 
-  // Prefer session JWT claims when Admin API is unavailable (common with ES256 kid issues).
-  if (!email) return null;
+  // Prefer cookie/JWT claims when Admin API is unavailable (common with ES256 kid issues).
   const staff = await loadStaffProfile(userId);
+  const email =
+    (typeof payload.email === "string" ? payload.email : null) ||
+    (typeof cookieUser?.email === "string" ? cookieUser.email : null) ||
+    (typeof staff?.email === "string" ? staff.email : null);
+
+  if (!email) return null;
+
   return buildAdminUser(
     {
       id: userId,
       email,
-      user_metadata: metadataFromClaims(payload),
+      user_metadata: cookieUser?.user_metadata ?? metadataFromClaims(payload),
     },
     staff,
   );

@@ -28,7 +28,15 @@ function databaseGuard() {
 
 export async function withAdminAuth(handler: (user: AuthUser) => Promise<NextResponse>) {
   const { user, error } = await requireAuth();
-  if (error || !user) return error ?? NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  if (error || !user) {
+    return (
+      error ??
+      NextResponse.json(
+        { error: "Could not verify your session for that request. Refresh the page if this keeps happening." },
+        { status: 401 },
+      )
+    );
+  }
   const dbError = databaseGuard();
   if (dbError) return dbError;
   try {
@@ -41,7 +49,15 @@ export async function withAdminAuth(handler: (user: AuthUser) => Promise<NextRes
 
 export async function withOwnerAdmin(handler: (user: AuthUser) => Promise<NextResponse>) {
   const { user, error } = await requireOwnerOrAdmin();
-  if (error || !user) return error ?? NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  if (error || !user) {
+    return (
+      error ??
+      NextResponse.json(
+        { error: "Could not verify your session for that request. Refresh the page if this keeps happening." },
+        { status: 401 },
+      )
+    );
+  }
   const dbError = databaseGuard();
   if (dbError) return dbError;
   try {

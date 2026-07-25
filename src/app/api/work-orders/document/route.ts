@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadWorkOrders } from "@/lib/shop-data";
 import type { WorkOrderDocumentKind } from "@/lib/shop-types";
+import { findWorkOrderDocumentByToken } from "@/lib/work-order-document-store";
 
 function parseKind(value: string | null): WorkOrderDocumentKind {
   if (value === "estimate" || value === "invoice" || value === "work-order") return value;
@@ -17,15 +18,32 @@ export async function GET(req: Request) {
   }
 
   const orders = await loadWorkOrders();
-  const order = orders.find((item) => item.documentData?.viewToken === token);
-  if (!order) {
-    return NextResponse.json({ error: "Document not found." }, { status: 404 });
+  let order = orders.find((item) => item.documentData?.viewToken === token);
+  let fields = order?.documentData?.documents?.[kind];
+
+  if (!fields) {
+    const stored = await findWorkOrderDocumentByToken(token);
+    if (stored) {
+      order = orders.find((item) => item.id === stored.orderId) ?? order;
+      fields = stored.documentData.documents?.[kind];
+      if (!order) {
+        return NextResponse.json({
+          kind,
+          orderId: stored.orderId,
+          customerName: fields?.customer.name || "Customer",
+          fields,
+        });
+      }
+    }
   }
 
-  const fields = order.documentData?.documents?.[kind];
-  if (!fields) {
+  if (!order || !fields) {
     return NextResponse.json(
-      { error: "That document has not been saved yet. Ask the shop to save it first." },
+      {
+        error: !order
+          ? "Document not found."
+          : "That document has not been saved yet. Ask the shop to save it first.",
+      },
       { status: 404 },
     );
   }

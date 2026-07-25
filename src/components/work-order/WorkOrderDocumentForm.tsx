@@ -1,10 +1,10 @@
 "use client";
 
+import type { HTMLAttributes } from "react";
 import {
   calculateDocumentTotals,
   DOCUMENT_TITLES,
   partLineTotal,
-  SHOP_CONTACT,
 } from "@/lib/work-order-documents";
 import type { WorkOrderDocumentFields, WorkOrderDocumentKind } from "@/lib/shop-types";
 
@@ -15,134 +15,93 @@ type Props = {
   readOnly?: boolean;
 };
 
+type Box = {
+  left: string;
+  top: string;
+  width: string;
+  height?: string;
+};
+
 function money(amount: number) {
   return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function FieldLine({
-  label,
+function AbsInput({
+  box,
   value,
   onChange,
   readOnly,
   type = "text",
+  align = "left",
   className = "",
+  inputMode,
 }: {
-  label: string;
-  value: string;
+  box: Box;
+  value: string | number;
   onChange?: (value: string) => void;
   readOnly?: boolean;
   type?: string;
+  align?: "left" | "right" | "center";
   className?: string;
+  inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
 }) {
   return (
-    <label className={`wo-field ${className}`}>
-      <span className="wo-field-label">{label}</span>
-      <input
-        className="wo-field-input"
-        type={type}
-        value={value}
-        readOnly={readOnly}
-        onChange={(e) => onChange?.(e.target.value)}
-      />
-    </label>
+    <input
+      className={`wo-abs-input ${className}`}
+      style={{
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height ?? "2.1%",
+        textAlign: align,
+      }}
+      type={type}
+      inputMode={inputMode}
+      value={value}
+      readOnly={readOnly}
+      onChange={(e) => onChange?.(e.target.value)}
+    />
   );
 }
 
-function SectionHeader({ title, icon }: { title: string; icon: string }) {
-  return (
-    <div className="wo-section-head">
-      <span className="wo-section-icon" aria-hidden>
-        {icon}
-      </span>
-      <span>{title}</span>
-    </div>
-  );
-}
-
-function DocumentHeader({
-  kind,
+function AbsArea({
+  box,
   value,
   onChange,
   readOnly,
+  className = "",
 }: {
-  kind: WorkOrderDocumentKind;
-  value: WorkOrderDocumentFields;
-  onChange?: (next: WorkOrderDocumentFields) => void;
+  box: Box;
+  value: string;
+  onChange?: (value: string) => void;
   readOnly?: boolean;
+  className?: string;
 }) {
-  const title = DOCUMENT_TITLES[kind];
   return (
-    <header className="wo-header">
-      <div className="wo-header-logo">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="Morton's Mechanical LLC" className="wo-logo-img" width={92} height={92} />
-      </div>
-      <div className="wo-header-center">
-        <h1 className="wo-title">{title}</h1>
-        <div className="wo-title-stripe" aria-hidden />
-        <div className="wo-contact">
-          <p>
-            <span className="wo-contact-icon">☎</span> {SHOP_CONTACT.phone}
-          </p>
-          <p>
-            <span className="wo-contact-icon">✉</span> {SHOP_CONTACT.email}
-          </p>
-          <p>
-            <span className="wo-contact-icon">⌖</span> {SHOP_CONTACT.address}
-          </p>
-        </div>
-      </div>
-      <div className="wo-header-meta">
-        <FieldLine
-          label={kind === "estimate" ? "ESTIMATE #:" : kind === "invoice" ? "INVOICE #:" : "WORK ORDER #:"}
-          value={value.workOrderNumber}
-          readOnly={readOnly}
-          onChange={(workOrderNumber) => onChange?.({ ...value, workOrderNumber })}
-        />
-        <FieldLine
-          label="DATE:"
-          type="date"
-          value={value.date}
-          readOnly={readOnly}
-          onChange={(date) => onChange?.({ ...value, date })}
-        />
-        <FieldLine
-          label="PROMISED DATE:"
-          type="date"
-          value={value.promisedDate}
-          readOnly={readOnly}
-          onChange={(promisedDate) => onChange?.({ ...value, promisedDate })}
-        />
-        <FieldLine
-          label="ADVISOR / SERVICE WRITER:"
-          value={value.advisor}
-          readOnly={readOnly}
-          onChange={(advisor) => onChange?.({ ...value, advisor })}
-        />
-      </div>
-    </header>
+    <textarea
+      className={`wo-abs-area ${className}`}
+      style={{
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height ?? "10%",
+      }}
+      value={value}
+      readOnly={readOnly}
+      onChange={(e) => onChange?.(e.target.value)}
+    />
   );
 }
 
-function DocumentFooter({ page }: { page: 1 | 2 }) {
-  return (
-    <footer className="wo-footer">
-      <p className="wo-thankyou">{SHOP_CONTACT.thankYou}</p>
-      <div className="wo-footer-bolt" aria-hidden>
-        ⬡
-      </div>
-      <p className="wo-slogan">
-        {SHOP_CONTACT.slogan} <span>{SHOP_CONTACT.sloganAccent}</span>
-      </p>
-      {page === 2 ? <p className="wo-page-num">PAGE 2 OF 2</p> : null}
-    </footer>
-  );
+function TitleCover({ kind }: { kind: WorkOrderDocumentKind }) {
+  if (kind === "work-order") return null;
+  return <div className="wo-title-cover">{DOCUMENT_TITLES[kind]}</div>;
 }
 
 export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props) {
   const totals = calculateDocumentTotals(value);
   const showAuthorization = kind !== "estimate";
-  const totalLabel = kind === "estimate" ? "ESTIMATE TOTAL:" : "TOTAL DUE:";
+  const totalLabel = kind === "estimate" ? "ESTIMATE TOTAL" : "TOTAL DUE";
 
   function patch(next: Partial<WorkOrderDocumentFields>) {
     onChange?.({ ...value, ...next });
@@ -154,403 +113,116 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
         .wo-doc-root {
           --wo-navy: #0a1931;
           --wo-cyan: #00a8ff;
-          --wo-line: #c5d0de;
-          --wo-muted: #6b7c93;
-          color: var(--wo-navy);
+          color: #0a1931;
           font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
         }
+        .wo-sheet {
+          width: min(100%, 8.5in);
+          margin: 0 auto 28px;
+        }
         .wo-page {
-          width: 8.5in;
-          min-height: 11in;
-          margin: 0 auto 24px;
-          background: #fff;
-          border: 1px solid #dbe3ef;
-          box-shadow: 0 18px 40px rgba(2, 12, 27, 0.18);
-          display: flex;
-          flex-direction: column;
+          position: relative;
+          width: 100%;
+          aspect-ratio: 1024 / 1536;
+          background-color: #fff;
+          background-repeat: no-repeat;
+          background-position: center;
+          background-size: 100% 100%;
+          box-shadow: 0 18px 40px rgba(2, 12, 27, 0.22);
+          overflow: hidden;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .wo-page-1 {
+          background-image: url("/documents/workorder-page-1.png");
+        }
+        .wo-page-2 {
+          background-image: url("/documents/workorder-page-2.png");
+        }
+        .wo-abs-input,
+        .wo-abs-area {
+          position: absolute;
+          margin: 0;
+          border: 0;
+          outline: none;
+          background: transparent;
+          color: #0b1b33;
+          font: inherit;
+          font-size: clamp(9px, 1.15vw, 12px);
+          line-height: 1.2;
+          padding: 0 2px;
+          box-sizing: border-box;
+        }
+        .wo-abs-area {
+          resize: none;
+          line-height: 1.55;
           overflow: hidden;
         }
-        .wo-page-body {
-          flex: 1;
-          padding: 14px 16px 10px;
+        .wo-abs-input:focus,
+        .wo-abs-area:focus {
+          background: rgba(0, 168, 255, 0.08);
+          box-shadow: inset 0 -1px 0 var(--wo-cyan);
         }
-        .wo-header {
-          display: grid;
-          grid-template-columns: 110px 1fr 220px;
-          gap: 10px;
-          align-items: stretch;
-          background: var(--wo-navy);
-          color: #fff;
-          padding: 12px 14px;
-        }
-        .wo-header-logo {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .wo-logo-img {
-          width: 92px;
-          height: 92px;
-          object-fit: contain;
-          border-radius: 999px;
-          background: rgba(255, 255, 255, 0.04);
-        }
-        .wo-header-center {
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          min-width: 0;
-        }
-        .wo-title {
-          margin: 0;
-          font-size: 34px;
-          font-weight: 800;
-          letter-spacing: 0.04em;
-          line-height: 1;
-        }
-        .wo-title-stripe {
-          height: 8px;
-          margin: 8px 0 10px;
-          background: repeating-linear-gradient(
-            -45deg,
-            var(--wo-cyan),
-            var(--wo-cyan) 8px,
-            #0077b8 8px,
-            #0077b8 16px
-          );
-          border-radius: 2px;
-        }
-        .wo-contact {
-          font-size: 12px;
-          line-height: 1.45;
-        }
-        .wo-contact p {
-          margin: 0;
-        }
-        .wo-contact-icon {
-          color: var(--wo-cyan);
-          margin-right: 6px;
-        }
-        .wo-header-meta {
-          border-left: 2px solid var(--wo-cyan);
-          padding-left: 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-          justify-content: center;
-        }
-        .wo-header-meta .wo-field-label {
-          color: var(--wo-cyan);
-        }
-        .wo-header-meta .wo-field-input {
-          color: #fff;
-          border-bottom-color: rgba(255, 255, 255, 0.55);
-        }
-        .wo-field {
-          display: block;
-        }
-        .wo-field-label {
-          display: block;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.04em;
-          color: var(--wo-muted);
-          margin-bottom: 2px;
-        }
-        .wo-field-input,
-        .wo-cell-input,
-        .wo-notes-area,
-        .wo-ruled-area {
-          width: 100%;
-          border: 0;
-          border-bottom: 1px solid var(--wo-line);
-          background: transparent;
-          color: var(--wo-navy);
-          font: inherit;
-          font-size: 12px;
-          padding: 2px 0;
-          outline: none;
-        }
-        .wo-field-input:focus,
-        .wo-cell-input:focus,
-        .wo-notes-area:focus,
-        .wo-ruled-area:focus {
-          border-bottom-color: var(--wo-cyan);
-        }
-        .wo-field-input[readonly],
-        .wo-cell-input[readonly],
-        .wo-notes-area[readonly],
-        .wo-ruled-area[readonly] {
+        .wo-abs-input[readonly],
+        .wo-abs-area[readonly] {
           cursor: default;
         }
-        .wo-section {
-          border: 1.5px solid var(--wo-navy);
-          border-radius: 8px;
-          margin-top: 10px;
-          overflow: hidden;
-          background: #fff;
-        }
-        .wo-section-head {
-          display: inline-flex;
+        .wo-title-cover {
+          position: absolute;
+          left: 28%;
+          top: 3.4%;
+          width: 34%;
+          height: 4.2%;
+          display: flex;
           align-items: center;
-          gap: 8px;
+          justify-content: center;
           background: var(--wo-navy);
           color: #fff;
-          font-size: 11px;
+          font-size: clamp(16px, 2.4vw, 28px);
           font-weight: 800;
           letter-spacing: 0.06em;
-          padding: 7px 12px;
-          border-bottom-right-radius: 8px;
-        }
-        .wo-section-icon {
-          color: var(--wo-cyan);
-          font-size: 12px;
-        }
-        .wo-section-body {
-          padding: 10px 12px 12px;
-        }
-        .wo-two-col {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-          margin-top: 10px;
-        }
-        .wo-customer-grid {
-          display: grid;
-          gap: 8px;
-        }
-        .wo-vehicle-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 8px 14px;
-        }
-        .wo-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 8px;
-          font-size: 11px;
-        }
-        .wo-table th {
-          text-align: left;
-          font-size: 10px;
-          letter-spacing: 0.05em;
-          color: var(--wo-muted);
-          border-bottom: 1.5px solid var(--wo-navy);
-          padding: 4px 6px;
-        }
-        .wo-table td {
-          border-bottom: 1px solid #e4ebf4;
-          padding: 3px 4px;
-          vertical-align: middle;
-        }
-        .wo-table .num {
-          width: 28px;
-          text-align: center;
-          color: var(--wo-muted);
-          font-weight: 700;
-        }
-        .wo-table .money {
-          width: 90px;
-        }
-        .wo-table .qty {
-          width: 48px;
-        }
-        .wo-table .partno {
-          width: 110px;
-        }
-        .wo-money-wrap {
-          display: flex;
-          align-items: center;
-          gap: 2px;
-        }
-        .wo-money-wrap::before {
-          content: "$";
-          color: var(--wo-muted);
-          font-size: 11px;
-        }
-        .wo-parts-total {
-          display: flex;
-          justify-content: flex-end;
-          align-items: center;
-          gap: 10px;
-          margin-top: 8px;
-          font-size: 12px;
-          font-weight: 800;
-        }
-        .wo-parts-total .wo-money-wrap {
-          min-width: 90px;
-          border-bottom: 1.5px solid var(--wo-navy);
-          padding-bottom: 2px;
-        }
-        .wo-ruled-area {
-          min-height: 132px;
-          border: 0;
-          resize: vertical;
-          line-height: 1.65;
-          background-image: repeating-linear-gradient(
-            to bottom,
-            transparent,
-            transparent 21px,
-            #d9e2ee 21px,
-            #d9e2ee 22px
-          );
-          background-attachment: local;
-        }
-        .wo-notes-area {
-          min-height: 88px;
-          border: 1px solid #d5deea;
-          border-radius: 6px;
-          padding: 8px;
-          resize: vertical;
-        }
-        .wo-work-desc {
-          min-height: 220px;
-        }
-        .wo-page2-grid {
-          display: grid;
-          grid-template-columns: 1.15fr 0.85fr;
-          gap: 10px;
-          margin-top: 10px;
-          align-items: start;
-        }
-        .wo-legal {
-          font-size: 10px;
-          line-height: 1.45;
-          color: #243447;
-          margin: 0 0 10px;
-        }
-        .wo-sign-row {
-          display: grid;
-          grid-template-columns: 1.4fr 0.8fr;
-          gap: 12px;
-          margin-top: 8px;
+          z-index: 2;
         }
         .wo-check {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-top: 10px;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.02em;
-        }
-        .wo-check input {
-          width: 14px;
-          height: 14px;
+          position: absolute;
+          width: 1.5%;
+          height: 1%;
           accent-color: var(--wo-cyan);
         }
-        .wo-payment-box {
-          margin-top: 10px;
-          border: 1.5px solid var(--wo-navy);
-          border-radius: 8px;
-          overflow: hidden;
-        }
-        .wo-payment-head {
+        .wo-meta-label-cover {
+          position: absolute;
+          left: 71.5%;
+          top: 2.7%;
+          width: 24%;
+          height: 2%;
           background: var(--wo-navy);
-          color: #fff;
-          font-size: 11px;
-          font-weight: 800;
-          letter-spacing: 0.05em;
-          padding: 7px 10px;
-        }
-        .wo-payment-body {
-          padding: 10px;
-        }
-        .wo-summary-table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 6px;
-        }
-        .wo-summary-table td {
-          padding: 7px 8px;
-          border-bottom: 1px solid #d9e2ee;
-          font-size: 12px;
-          font-weight: 700;
-        }
-        .wo-summary-table td:last-child {
-          text-align: right;
-          width: 120px;
-        }
-        .wo-summary-total {
-          background: var(--wo-navy);
-          color: #fff;
-        }
-        .wo-summary-total td {
-          border: 0;
-          padding: 12px 10px;
-          font-size: 15px;
-        }
-        .wo-summary-total .wo-money-wrap::before {
-          color: #fff;
-        }
-        .wo-summary-total .wo-cell-input {
-          color: #fff;
-          border-bottom-color: rgba(255, 255, 255, 0.4);
-          font-size: 16px;
-          font-weight: 800;
-          text-align: right;
-        }
-        .wo-tax-input {
-          width: 42px;
-          display: inline-block;
-          text-align: center;
-          border-bottom: 1px solid var(--wo-line);
-          margin: 0 4px;
-        }
-        .wo-footer {
-          margin-top: auto;
-          background: var(--wo-navy);
-          color: #fff;
-          display: grid;
-          grid-template-columns: 1fr auto 1fr;
-          align-items: center;
-          gap: 10px;
-          padding: 12px 16px;
-          position: relative;
-        }
-        .wo-thankyou {
-          margin: 0;
-          font-family: "Segoe Script", "Brush Script MT", cursive;
           color: var(--wo-cyan);
-          font-size: 18px;
-        }
-        .wo-footer-bolt {
-          color: var(--wo-cyan);
-          font-size: 18px;
-        }
-        .wo-slogan {
-          margin: 0;
-          text-align: right;
-          font-size: 11px;
+          font-size: clamp(8px, 1vw, 10px);
           font-weight: 700;
           letter-spacing: 0.04em;
+          display: flex;
+          align-items: center;
+          z-index: 2;
         }
-        .wo-slogan span {
-          color: var(--wo-cyan);
-        }
-        .wo-page-num {
+        .wo-estimate-banner {
           position: absolute;
-          right: 16px;
-          bottom: 4px;
-          margin: 0;
-          font-size: 9px;
-          letter-spacing: 0.08em;
-          opacity: 0.85;
-        }
-        .wo-estimate-note {
-          margin-top: 10px;
-          border: 1.5px dashed var(--wo-cyan);
-          border-radius: 8px;
-          padding: 12px;
-          font-size: 11px;
+          left: 5.5%;
+          top: 62%;
+          width: 52%;
+          height: 22%;
+          background: rgba(255, 255, 255, 0.96);
+          border: 2px dashed var(--wo-cyan);
+          border-radius: 10px;
+          padding: 3%;
+          font-size: clamp(10px, 1.2vw, 12px);
           line-height: 1.45;
           color: #243447;
-          background: #f3faff;
+          z-index: 3;
         }
         @media print {
           @page {
-            size: letter;
-            margin: 0.28in;
+            size: 8.5in 12.75in;
+            margin: 0;
           }
           html,
           body {
@@ -566,15 +238,20 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           }
           .wo-print-root {
             position: absolute;
-            left: 0;
-            top: 0;
+            inset: 0;
             width: 100%;
+            margin: 0 !important;
+            max-width: none !important;
+          }
+          .wo-sheet {
+            width: 8.5in;
+            margin: 0;
           }
           .wo-page {
-            width: auto;
-            min-height: auto;
+            width: 8.5in;
+            height: 12.75in;
+            aspect-ratio: auto;
             margin: 0;
-            border: 0;
             box-shadow: none;
             break-after: page;
             page-break-after: always;
@@ -583,499 +260,407 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
             break-after: auto;
             page-break-after: auto;
           }
-          .wo-field-input,
-          .wo-cell-input,
-          .wo-notes-area,
-          .wo-ruled-area {
-            border-bottom-color: #999 !important;
+          .wo-abs-input:focus,
+          .wo-abs-area:focus {
+            background: transparent !important;
+            box-shadow: none !important;
           }
           .no-print {
             display: none !important;
           }
         }
-        @media (max-width: 920px) {
-          .wo-page {
-            width: 100%;
-            min-height: 0;
-          }
-          .wo-header,
-          .wo-two-col,
-          .wo-page2-grid,
-          .wo-vehicle-grid,
-          .wo-sign-row,
-          .wo-footer {
-            grid-template-columns: 1fr;
-          }
-          .wo-header-meta {
-            border-left: 0;
-            border-top: 2px solid var(--wo-cyan);
-            padding-left: 0;
-            padding-top: 10px;
-          }
-          .wo-slogan,
-          .wo-thankyou {
-            text-align: center;
-          }
-        }
       `}</style>
 
-      <section className="wo-page wo-page-1">
-        <DocumentHeader kind={kind} value={value} onChange={onChange} readOnly={readOnly} />
-        <div className="wo-page-body">
-          <div className="wo-two-col">
-            <section className="wo-section">
-              <SectionHeader title="CUSTOMER INFORMATION" icon="👤" />
-              <div className="wo-section-body wo-customer-grid">
-                <FieldLine
-                  label="NAME"
-                  value={value.customer.name}
-                  readOnly={readOnly}
-                  onChange={(name) => patch({ customer: { ...value.customer, name } })}
-                />
-                <FieldLine
-                  label="PHONE"
-                  value={value.customer.phone}
-                  readOnly={readOnly}
-                  onChange={(phone) => patch({ customer: { ...value.customer, phone } })}
-                />
-                <FieldLine
-                  label="EMAIL"
-                  value={value.customer.email}
-                  readOnly={readOnly}
-                  onChange={(email) => patch({ customer: { ...value.customer, email } })}
-                />
-                <FieldLine
-                  label="ADDRESS"
-                  value={value.customer.address}
-                  readOnly={readOnly}
-                  onChange={(address) => patch({ customer: { ...value.customer, address } })}
-                />
-              </div>
-            </section>
-
-            <section className="wo-section">
-              <SectionHeader title="VEHICLE INFORMATION" icon="🚗" />
-              <div className="wo-section-body wo-vehicle-grid">
-                <FieldLine
-                  label="MAKE"
-                  value={value.vehicle.make}
-                  readOnly={readOnly}
-                  onChange={(make) => patch({ vehicle: { ...value.vehicle, make } })}
-                />
-                <FieldLine
-                  label="MODEL"
-                  value={value.vehicle.model}
-                  readOnly={readOnly}
-                  onChange={(model) => patch({ vehicle: { ...value.vehicle, model } })}
-                />
-                <FieldLine
-                  label="YEAR"
-                  value={value.vehicle.year}
-                  readOnly={readOnly}
-                  onChange={(year) => patch({ vehicle: { ...value.vehicle, year } })}
-                />
-                <FieldLine
-                  label="VIN"
-                  value={value.vehicle.vin}
-                  readOnly={readOnly}
-                  onChange={(vin) => patch({ vehicle: { ...value.vehicle, vin } })}
-                />
-                <FieldLine
-                  label="LICENSE PLATE"
-                  value={value.vehicle.plate}
-                  readOnly={readOnly}
-                  onChange={(plate) => patch({ vehicle: { ...value.vehicle, plate } })}
-                />
-                <FieldLine
-                  label="MILEAGE"
-                  value={value.vehicle.mileage}
-                  readOnly={readOnly}
-                  onChange={(mileage) => patch({ vehicle: { ...value.vehicle, mileage } })}
-                />
-                <FieldLine
-                  label="COLOR"
-                  value={value.vehicle.color}
-                  readOnly={readOnly}
-                  onChange={(color) => patch({ vehicle: { ...value.vehicle, color } })}
-                />
-                <FieldLine
-                  label="ENGINE"
-                  value={value.vehicle.engine}
-                  readOnly={readOnly}
-                  onChange={(engine) => patch({ vehicle: { ...value.vehicle, engine } })}
-                />
-              </div>
-            </section>
-          </div>
-
-          <section className="wo-section">
-            <SectionHeader title="REQUESTED SERVICES / CUSTOMER CONCERNS" icon="🔧" />
-            <div className="wo-section-body">
-              <table className="wo-table">
-                <thead>
-                  <tr>
-                    <th className="num">#</th>
-                    <th>DESCRIPTION OF SERVICE</th>
-                    <th className="money">EST. LABOR</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {value.services.map((line, index) => (
-                    <tr key={`svc-${index}`}>
-                      <td className="num">{index + 1}</td>
-                      <td>
-                        <input
-                          className="wo-cell-input"
-                          value={line.description}
-                          readOnly={readOnly}
-                          onChange={(e) => {
-                            const services = value.services.map((row, i) =>
-                              i === index ? { ...row, description: e.target.value } : row,
-                            );
-                            patch({ services });
-                          }}
-                        />
-                      </td>
-                      <td className="money">
-                        <span className="wo-money-wrap">
-                          <input
-                            className="wo-cell-input"
-                            inputMode="decimal"
-                            value={line.estLabor ?? ""}
-                            readOnly={readOnly}
-                            onChange={(e) => {
-                              const raw = e.target.value.trim();
-                              const services = value.services.map((row, i) =>
-                                i === index
-                                  ? { ...row, estLabor: raw === "" ? null : Number(raw) }
-                                  : row,
-                              );
-                              patch({ services });
-                            }}
-                          />
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <div className="wo-sheet">
+        <section className="wo-page wo-page-1" aria-label="Work order page 1">
+          <TitleCover kind={kind} />
+          {kind !== "work-order" ? (
+            <div className="wo-meta-label-cover">
+              {kind === "estimate" ? "ESTIMATE #:" : "INVOICE #:"}
             </div>
-          </section>
+          ) : null}
 
-          <section className="wo-section">
-            <SectionHeader title="TECHNICIAN NOTES / DIAGNOSIS" icon="📋" />
-            <div className="wo-section-body">
-              <textarea
-                className="wo-ruled-area"
-                value={value.technicianNotes}
+          <AbsInput
+            box={{ left: "78%", top: "3.5%", width: "17%" }}
+            value={value.workOrderNumber}
+            readOnly={readOnly}
+            onChange={(workOrderNumber) => patch({ workOrderNumber })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "6.4%", width: "17%" }}
+            type="date"
+            value={value.date}
+            readOnly={readOnly}
+            onChange={(date) => patch({ date })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "9.3%", width: "17%" }}
+            type="date"
+            value={value.promisedDate}
+            readOnly={readOnly}
+            onChange={(promisedDate) => patch({ promisedDate })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "12.2%", width: "17%" }}
+            value={value.advisor}
+            readOnly={readOnly}
+            onChange={(advisor) => patch({ advisor })}
+          />
+
+          <AbsInput
+            box={{ left: "12%", top: "20.8%", width: "34%" }}
+            value={value.customer.name}
+            readOnly={readOnly}
+            onChange={(name) => patch({ customer: { ...value.customer, name } })}
+          />
+          <AbsInput
+            box={{ left: "12%", top: "23.8%", width: "34%" }}
+            value={value.customer.phone}
+            readOnly={readOnly}
+            onChange={(phone) => patch({ customer: { ...value.customer, phone } })}
+          />
+          <AbsInput
+            box={{ left: "12%", top: "26.8%", width: "34%" }}
+            value={value.customer.email}
+            readOnly={readOnly}
+            onChange={(email) => patch({ customer: { ...value.customer, email } })}
+          />
+          <AbsInput
+            box={{ left: "12%", top: "29.8%", width: "34%" }}
+            value={value.customer.address}
+            readOnly={readOnly}
+            onChange={(address) => patch({ customer: { ...value.customer, address } })}
+          />
+
+          <AbsInput
+            box={{ left: "55%", top: "20.8%", width: "16%" }}
+            value={value.vehicle.make}
+            readOnly={readOnly}
+            onChange={(make) => patch({ vehicle: { ...value.vehicle, make } })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "20.8%", width: "16%" }}
+            value={value.vehicle.model}
+            readOnly={readOnly}
+            onChange={(model) => patch({ vehicle: { ...value.vehicle, model } })}
+          />
+          <AbsInput
+            box={{ left: "55%", top: "23.8%", width: "16%" }}
+            value={value.vehicle.year}
+            readOnly={readOnly}
+            onChange={(year) => patch({ vehicle: { ...value.vehicle, year } })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "23.8%", width: "16%" }}
+            value={value.vehicle.vin}
+            readOnly={readOnly}
+            onChange={(vin) => patch({ vehicle: { ...value.vehicle, vin } })}
+          />
+          <AbsInput
+            box={{ left: "55%", top: "26.8%", width: "16%" }}
+            value={value.vehicle.plate}
+            readOnly={readOnly}
+            onChange={(plate) => patch({ vehicle: { ...value.vehicle, plate } })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "26.8%", width: "16%" }}
+            value={value.vehicle.mileage}
+            readOnly={readOnly}
+            onChange={(mileage) => patch({ vehicle: { ...value.vehicle, mileage } })}
+          />
+          <AbsInput
+            box={{ left: "55%", top: "29.8%", width: "16%" }}
+            value={value.vehicle.color}
+            readOnly={readOnly}
+            onChange={(color) => patch({ vehicle: { ...value.vehicle, color } })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "29.8%", width: "16%" }}
+            value={value.vehicle.engine}
+            readOnly={readOnly}
+            onChange={(engine) => patch({ vehicle: { ...value.vehicle, engine } })}
+          />
+
+          {value.services.map((line, index) => {
+            const top = `${36.6 + index * 2.55}%`;
+            return (
+              <div key={`svc-${index}`}>
+                <AbsInput
+                  box={{ left: "10%", top, width: "66%", height: "2.2%" }}
+                  value={line.description}
+                  readOnly={readOnly}
+                  onChange={(description) => {
+                    const services = value.services.map((row, i) =>
+                      i === index ? { ...row, description } : row,
+                    );
+                    patch({ services });
+                  }}
+                />
+                <AbsInput
+                  box={{ left: "84%", top, width: "10%", height: "2.2%" }}
+                  align="right"
+                  inputMode="decimal"
+                  value={line.estLabor ?? ""}
+                  readOnly={readOnly}
+                  onChange={(raw) => {
+                    const services = value.services.map((row, i) =>
+                      i === index
+                        ? { ...row, estLabor: raw.trim() === "" ? null : Number(raw) }
+                        : row,
+                    );
+                    patch({ services });
+                  }}
+                />
+              </div>
+            );
+          })}
+
+          <AbsArea
+            box={{ left: "5.5%", top: "54.2%", width: "89%", height: "8.2%" }}
+            value={value.technicianNotes}
+            readOnly={readOnly}
+            onChange={(technicianNotes) => patch({ technicianNotes })}
+          />
+
+          {value.parts.map((line, index) => {
+            const top = `${67.35 + index * 2.05}%`;
+            return (
+              <div key={`part-${index}`}>
+                <AbsInput
+                  box={{ left: "5.5%", top, width: "7%", height: "1.9%" }}
+                  align="center"
+                  value={line.qty ?? ""}
+                  readOnly={readOnly}
+                  onChange={(raw) => {
+                    const parts = value.parts.map((row, i) =>
+                      i === index ? { ...row, qty: raw.trim() === "" ? null : Number(raw) } : row,
+                    );
+                    patch({ parts });
+                  }}
+                />
+                <AbsInput
+                  box={{ left: "13.5%", top, width: "34%", height: "1.9%" }}
+                  value={line.description}
+                  readOnly={readOnly}
+                  onChange={(description) => {
+                    const parts = value.parts.map((row, i) =>
+                      i === index ? { ...row, description } : row,
+                    );
+                    patch({ parts });
+                  }}
+                />
+                <AbsInput
+                  box={{ left: "48.5%", top, width: "18%", height: "1.9%" }}
+                  value={line.partNumber}
+                  readOnly={readOnly}
+                  onChange={(partNumber) => {
+                    const parts = value.parts.map((row, i) =>
+                      i === index ? { ...row, partNumber } : row,
+                    );
+                    patch({ parts });
+                  }}
+                />
+                <AbsInput
+                  box={{ left: "70%", top, width: "11%", height: "1.9%" }}
+                  align="right"
+                  value={line.unitPrice ?? ""}
+                  readOnly={readOnly}
+                  onChange={(raw) => {
+                    const parts = value.parts.map((row, i) =>
+                      i === index
+                        ? { ...row, unitPrice: raw.trim() === "" ? null : Number(raw) }
+                        : row,
+                    );
+                    patch({ parts });
+                  }}
+                />
+                <AbsInput
+                  box={{ left: "84%", top, width: "10%", height: "1.9%" }}
+                  align="right"
+                  readOnly
+                  value={line.qty || line.unitPrice ? money(partLineTotal(line)) : ""}
+                />
+              </div>
+            );
+          })}
+
+          <AbsInput
+            box={{ left: "84%", top: "88.2%", width: "10%", height: "2%" }}
+            align="right"
+            readOnly
+            value={money(totals.partsTotal)}
+          />
+        </section>
+      </div>
+
+      <div className="wo-sheet">
+        <section className="wo-page wo-page-2" aria-label="Work order page 2">
+          <TitleCover kind={kind} />
+          {kind !== "work-order" ? (
+            <div className="wo-meta-label-cover">
+              {kind === "estimate" ? "ESTIMATE #:" : "INVOICE #:"}
+            </div>
+          ) : null}
+
+          <AbsInput
+            box={{ left: "78%", top: "3.5%", width: "17%" }}
+            value={value.workOrderNumber}
+            readOnly={readOnly}
+            onChange={(workOrderNumber) => patch({ workOrderNumber })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "6.4%", width: "17%" }}
+            type="date"
+            value={value.date}
+            readOnly={readOnly}
+            onChange={(date) => patch({ date })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "9.3%", width: "17%" }}
+            type="date"
+            value={value.promisedDate}
+            readOnly={readOnly}
+            onChange={(promisedDate) => patch({ promisedDate })}
+          />
+          <AbsInput
+            box={{ left: "78%", top: "12.2%", width: "17%" }}
+            value={value.advisor}
+            readOnly={readOnly}
+            onChange={(advisor) => patch({ advisor })}
+          />
+
+          <AbsArea
+            box={{ left: "5.5%", top: "19%", width: "89%", height: "28%" }}
+            value={value.workDescription}
+            readOnly={readOnly}
+            onChange={(workDescription) => patch({ workDescription })}
+          />
+
+          {showAuthorization ? (
+            <>
+              <AbsInput
+                box={{ left: "22%", top: "58.8%", width: "28%", height: "2%" }}
+                value={value.authorization.customerSignature}
                 readOnly={readOnly}
-                onChange={(e) => patch({ technicianNotes: e.target.value })}
+                onChange={(customerSignature) =>
+                  patch({ authorization: { ...value.authorization, customerSignature } })
+                }
               />
-            </div>
-          </section>
-
-          <section className="wo-section">
-            <SectionHeader title="PARTS AND MATERIALS" icon="⚙" />
-            <div className="wo-section-body">
-              <table className="wo-table">
-                <thead>
-                  <tr>
-                    <th className="qty">QTY</th>
-                    <th>PART / DESCRIPTION</th>
-                    <th className="partno">PART NUMBER</th>
-                    <th className="money">UNIT PRICE</th>
-                    <th className="money">TOTAL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {value.parts.map((line, index) => (
-                    <tr key={`part-${index}`}>
-                      <td>
-                        <input
-                          className="wo-cell-input"
-                          inputMode="decimal"
-                          value={line.qty ?? ""}
-                          readOnly={readOnly}
-                          onChange={(e) => {
-                            const raw = e.target.value.trim();
-                            const parts = value.parts.map((row, i) =>
-                              i === index ? { ...row, qty: raw === "" ? null : Number(raw) } : row,
-                            );
-                            patch({ parts });
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="wo-cell-input"
-                          value={line.description}
-                          readOnly={readOnly}
-                          onChange={(e) => {
-                            const parts = value.parts.map((row, i) =>
-                              i === index ? { ...row, description: e.target.value } : row,
-                            );
-                            patch({ parts });
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="wo-cell-input"
-                          value={line.partNumber}
-                          readOnly={readOnly}
-                          onChange={(e) => {
-                            const parts = value.parts.map((row, i) =>
-                              i === index ? { ...row, partNumber: e.target.value } : row,
-                            );
-                            patch({ parts });
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <span className="wo-money-wrap">
-                          <input
-                            className="wo-cell-input"
-                            inputMode="decimal"
-                            value={line.unitPrice ?? ""}
-                            readOnly={readOnly}
-                            onChange={(e) => {
-                              const raw = e.target.value.trim();
-                              const parts = value.parts.map((row, i) =>
-                                i === index
-                                  ? { ...row, unitPrice: raw === "" ? null : Number(raw) }
-                                  : row,
-                              );
-                              patch({ parts });
-                            }}
-                          />
-                        </span>
-                      </td>
-                      <td>
-                        <span className="wo-money-wrap">
-                          <input className="wo-cell-input" readOnly value={money(partLineTotal(line))} />
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="wo-parts-total">
-                <span>PARTS TOTAL:</span>
-                <span className="wo-money-wrap">{money(totals.partsTotal)}</span>
-              </div>
-            </div>
-          </section>
-        </div>
-        <DocumentFooter page={1} />
-      </section>
-
-      <section className="wo-page wo-page-2">
-        <DocumentHeader kind={kind} value={value} onChange={onChange} readOnly={readOnly} />
-        <div className="wo-page-body">
-          <section className="wo-section">
-            <SectionHeader title="WORK DESCRIPTION" icon="📋" />
-            <div className="wo-section-body">
-              <textarea
-                className="wo-ruled-area wo-work-desc"
-                value={value.workDescription}
+              <AbsInput
+                box={{ left: "58%", top: "58.8%", width: "14%", height: "2%" }}
+                type="date"
+                value={value.authorization.date}
                 readOnly={readOnly}
-                onChange={(e) => patch({ workDescription: e.target.value })}
+                onChange={(date) => patch({ authorization: { ...value.authorization, date } })}
               />
+              <input
+                className="wo-check"
+                style={{ left: "7.2%", top: "62.4%" }}
+                type="checkbox"
+                checked={value.authorization.textEmailUpdates}
+                disabled={readOnly}
+                onChange={(e) =>
+                  patch({
+                    authorization: {
+                      ...value.authorization,
+                      textEmailUpdates: e.target.checked,
+                    },
+                  })
+                }
+                aria-label="Receive text or email updates"
+              />
+              <AbsInput
+                box={{ left: "18%", top: "74.8%", width: "28%", height: "2%" }}
+                value={value.authorization.paymentSignature}
+                readOnly={readOnly}
+                onChange={(paymentSignature) =>
+                  patch({ authorization: { ...value.authorization, paymentSignature } })
+                }
+              />
+              <AbsInput
+                box={{ left: "54%", top: "74.8%", width: "14%", height: "2%" }}
+                type="date"
+                value={value.authorization.paymentDate}
+                readOnly={readOnly}
+                onChange={(paymentDate) =>
+                  patch({ authorization: { ...value.authorization, paymentDate } })
+                }
+              />
+            </>
+          ) : (
+            <div className="wo-estimate-banner">
+              This estimate is based on the information available at the time of writing. Final
+              charges may change after diagnosis or if additional parts/labor are required. No work
+              will be performed without your approval.
             </div>
-          </section>
+          )}
 
-          <div className="wo-page2-grid">
-            <div>
-              {showAuthorization ? (
-                <>
-                  <section className="wo-section">
-                    <SectionHeader title="AUTHORIZATION" icon="🛡" />
-                    <div className="wo-section-body">
-                      <p className="wo-legal">
-                        I hereby authorize the above repair work to be done along with the necessary
-                        materials. You and your employees may operate the vehicle for purposes of
-                        testing, inspection, or delivery at my risk. I acknowledge that Morton&apos;s
-                        Mechanical LLC is not responsible for loss or damage to the vehicle or articles
-                        left in the vehicle in case of fire, theft, or any cause beyond your control.
-                      </p>
-                      <div className="wo-sign-row">
-                        <FieldLine
-                          label="CUSTOMER SIGNATURE"
-                          value={value.authorization.customerSignature}
-                          readOnly={readOnly}
-                          onChange={(customerSignature) =>
-                            patch({
-                              authorization: { ...value.authorization, customerSignature },
-                            })
-                          }
-                        />
-                        <FieldLine
-                          label="DATE"
-                          type="date"
-                          value={value.authorization.date}
-                          readOnly={readOnly}
-                          onChange={(date) =>
-                            patch({ authorization: { ...value.authorization, date } })
-                          }
-                        />
-                      </div>
-                      <label className="wo-check">
-                        <input
-                          type="checkbox"
-                          checked={value.authorization.textEmailUpdates}
-                          disabled={readOnly}
-                          onChange={(e) =>
-                            patch({
-                              authorization: {
-                                ...value.authorization,
-                                textEmailUpdates: e.target.checked,
-                              },
-                            })
-                          }
-                        />
-                        YES, I WOULD LIKE TO RECEIVE TEXT / EMAIL UPDATES.
-                      </label>
-                    </div>
-                  </section>
+          <AbsInput
+            box={{ left: "82%", top: "54.6%", width: "12%", height: "2%" }}
+            align="right"
+            readOnly
+            value={money(totals.laborTotal)}
+          />
+          <AbsInput
+            box={{ left: "82%", top: "57.4%", width: "12%", height: "2%" }}
+            align="right"
+            readOnly
+            value={money(totals.partsTotal)}
+          />
+          <AbsInput
+            box={{ left: "82%", top: "60.2%", width: "12%", height: "2%" }}
+            align="right"
+            readOnly
+            value={money(totals.subtotal)}
+          />
+          <AbsInput
+            box={{ left: "72%", top: "63%", width: "6%", height: "2%" }}
+            align="center"
+            value={value.summary.taxPercent}
+            readOnly={readOnly}
+            onChange={(raw) =>
+              patch({
+                summary: { ...value.summary, taxPercent: Number(raw) || 0 },
+              })
+            }
+          />
+          <AbsInput
+            box={{ left: "82%", top: "63%", width: "12%", height: "2%" }}
+            align="right"
+            readOnly
+            value={money(totals.taxAmount)}
+          />
+          <AbsInput
+            box={{ left: "82%", top: "65.8%", width: "12%", height: "2%" }}
+            align="right"
+            value={value.summary.excise || ""}
+            readOnly={readOnly}
+            onChange={(raw) =>
+              patch({
+                summary: {
+                  ...value.summary,
+                  excise: raw.trim() === "" ? 0 : Number(raw) || 0,
+                },
+              })
+            }
+          />
+          <AbsInput
+            box={{ left: "78%", top: "69.2%", width: "16%", height: "2.6%" }}
+            align="right"
+            className="wo-total-input"
+            readOnly
+            value={money(totals.totalDue)}
+            aria-label={totalLabel}
+          />
 
-                  <div className="wo-payment-box">
-                    <div className="wo-payment-head">PAYMENT AUTHORIZATION (IF APPLICABLE)</div>
-                    <div className="wo-payment-body">
-                      <p className="wo-legal">
-                        {kind === "invoice"
-                          ? "I authorize Morton's Mechanical LLC to charge the payment method on file for the total amount due on this invoice."
-                          : "I authorize Morton's Mechanical LLC to charge the payment method on file for approved work and parts as described on this work order."}
-                      </p>
-                      <div className="wo-sign-row">
-                        <FieldLine
-                          label="SIGNATURE"
-                          value={value.authorization.paymentSignature}
-                          readOnly={readOnly}
-                          onChange={(paymentSignature) =>
-                            patch({
-                              authorization: { ...value.authorization, paymentSignature },
-                            })
-                          }
-                        />
-                        <FieldLine
-                          label="DATE"
-                          type="date"
-                          value={value.authorization.paymentDate}
-                          readOnly={readOnly}
-                          onChange={(paymentDate) =>
-                            patch({ authorization: { ...value.authorization, paymentDate } })
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="wo-estimate-note">
-                  This estimate is based on the information available at the time of writing. Final
-                  charges may change after diagnosis or if additional parts/labor are required. No
-                  work will be performed without your approval.
-                </div>
-              )}
-            </div>
-
-            <div>
-              <section className="wo-section">
-                <SectionHeader title="SUMMARY" icon="⚙" />
-                <div className="wo-section-body" style={{ paddingTop: 4 }}>
-                  <table className="wo-summary-table">
-                    <tbody>
-                      <tr>
-                        <td>LABOR TOTAL</td>
-                        <td>
-                          <span className="wo-money-wrap">{money(totals.laborTotal)}</span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>PARTS TOTAL</td>
-                        <td>
-                          <span className="wo-money-wrap">{money(totals.partsTotal)}</span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>SUBTOTAL</td>
-                        <td>
-                          <span className="wo-money-wrap">{money(totals.subtotal)}</span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>
-                          TAX (
-                          <input
-                            className="wo-tax-input"
-                            inputMode="decimal"
-                            value={value.summary.taxPercent}
-                            readOnly={readOnly}
-                            onChange={(e) =>
-                              patch({
-                                summary: {
-                                  ...value.summary,
-                                  taxPercent: Number(e.target.value) || 0,
-                                },
-                              })
-                            }
-                          />
-                          %)
-                        </td>
-                        <td>
-                          <span className="wo-money-wrap">{money(totals.taxAmount)}</span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>EXCISE TAX / FEES</td>
-                        <td>
-                          <span className="wo-money-wrap">
-                            <input
-                              className="wo-cell-input"
-                              inputMode="decimal"
-                              value={value.summary.excise || ""}
-                              readOnly={readOnly}
-                              onChange={(e) =>
-                                patch({
-                                  summary: {
-                                    ...value.summary,
-                                    excise: e.target.value === "" ? 0 : Number(e.target.value) || 0,
-                                  },
-                                })
-                              }
-                            />
-                          </span>
-                        </td>
-                      </tr>
-                      <tr className="wo-summary-total">
-                        <td>{totalLabel}</td>
-                        <td>
-                          <span className="wo-money-wrap">
-                            <input className="wo-cell-input" readOnly value={money(totals.totalDue)} />
-                          </span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-
-              <section className="wo-section" style={{ marginTop: 10 }}>
-                <SectionHeader title="NOTES" icon="✎" />
-                <div className="wo-section-body">
-                  <textarea
-                    className="wo-notes-area"
-                    value={value.notes}
-                    readOnly={readOnly}
-                    onChange={(e) => patch({ notes: e.target.value })}
-                  />
-                </div>
-              </section>
-            </div>
-          </div>
-        </div>
-        <DocumentFooter page={2} />
-      </section>
+          <AbsArea
+            box={{ left: "58%", top: "76.5%", width: "36.5%", height: "10%" }}
+            value={value.notes}
+            readOnly={readOnly}
+            onChange={(notes) => patch({ notes })}
+          />
+        </section>
+      </div>
     </div>
   );
 }

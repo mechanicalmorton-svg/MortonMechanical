@@ -4,10 +4,9 @@ import type { StaffRole } from "@/lib/shop-types";
 
 export function RoleBadge({ role, className = "" }: { role: StaffRole; className?: string }) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ring-1 ${roleBadgeClass[role]} ${className}`}
-    >
-      {roleLabels[role]}
+    <span className={`admin-glass-chip ${roleBadgeClass[role]} ${className}`}>
+      <span className="admin-glass-chip__sheen" aria-hidden />
+      <span className="relative z-[1]">{roleLabels[role]}</span>
     </span>
   );
 }
@@ -62,14 +61,15 @@ export function StatCard({
     red: "from-red-500/25 to-red-600/5 text-red-300 ring-red-400/25",
   };
 
-  const className = `group relative w-full overflow-hidden rounded-2xl border p-5 text-left transition duration-300 ${
+  const className = `group admin-glass-panel relative w-full overflow-hidden rounded-2xl p-5 text-left transition duration-300 ${
     active
-      ? "border-amber-400/40 bg-gradient-to-br from-amber-500/15 via-slate-900/80 to-slate-950 ring-1 ring-amber-400/25 shadow-lg shadow-amber-950/20"
-      : "border-slate-800/70 bg-gradient-to-br from-slate-900/80 via-slate-950/60 to-slate-950/90 hover:-translate-y-0.5 hover:border-slate-700/80 hover:shadow-xl hover:shadow-black/30"
+      ? "admin-glass-panel--active"
+      : "hover:-translate-y-0.5"
   } ${onClick ? "cursor-pointer" : ""}`;
 
   const content = (
     <>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent opacity-70" />
       <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-amber-500/10 to-pink-500/10 blur-2xl transition duration-500 group-hover:from-amber-500/20 group-hover:to-pink-500/15" />
       <div className="relative flex items-start justify-between gap-3">
         <div>
@@ -111,14 +111,15 @@ export function Panel({
   description?: string;
 }) {
   return (
-    <section className="admin-glass overflow-hidden rounded-2xl">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-800/70 px-5 py-4">
+    <section className="admin-glass admin-glass-panel overflow-hidden rounded-2xl">
+      <div className="flex items-start justify-between gap-3 border-b border-white/5 px-5 py-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h2 className="font-semibold tracking-tight text-white">{title}</h2>
             {badge !== undefined ? (
-              <span className="rounded-full bg-slate-800/90 px-2 py-0.5 text-[11px] font-semibold text-slate-300 ring-1 ring-slate-700/80">
-                {badge}
+              <span className="admin-glass-chip admin-glass-chip--slate text-slate-200">
+                <span className="admin-glass-chip__sheen" aria-hidden />
+                <span className="relative z-[1]">{badge}</span>
               </span>
             ) : null}
           </div>
@@ -145,29 +146,28 @@ export function EmptyState({ icon: Icon, title, text }: { icon: LucideIcon; titl
 
 export function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending: "bg-amber-500/15 text-amber-300 ring-amber-500/25",
-    open: "bg-sky-500/15 text-sky-300 ring-sky-500/25",
-    normal: "bg-sky-500/15 text-sky-300 ring-sky-500/25",
-    overdue: "bg-red-500/15 text-red-300 ring-red-500/25",
-    in_progress: "bg-fuchsia-500/15 text-fuchsia-300 ring-fuchsia-500/25",
-    confirmed: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/25",
-    completed: "bg-slate-700/80 text-slate-300 ring-slate-600/40",
-    cancelled: "bg-red-500/10 text-red-300 ring-red-500/20",
-    urgent: "bg-red-500/15 text-red-300 ring-red-500/25",
-    active: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/25",
-    maintenance: "bg-amber-500/15 text-amber-300 ring-amber-500/25",
-    retired: "bg-slate-700 text-slate-400 ring-slate-600/40",
-    planned: "bg-sky-500/15 text-sky-300 ring-sky-500/25",
-    new: "bg-amber-500/15 text-amber-300 ring-amber-500/25",
-    read: "bg-slate-700 text-slate-300 ring-slate-600/40",
-    archived: "bg-slate-800 text-slate-500 ring-slate-700/40",
+    pending: "admin-glass-chip--amber text-amber-100",
+    open: "admin-glass-chip--sky text-sky-100",
+    normal: "admin-glass-chip--sky text-sky-100",
+    overdue: "admin-glass-chip--red text-red-100",
+    in_progress: "admin-glass-chip--fuchsia text-fuchsia-100",
+    confirmed: "admin-glass-chip--emerald text-emerald-100",
+    completed: "admin-glass-chip--slate text-slate-200",
+    cancelled: "admin-glass-chip--red text-red-100",
+    urgent: "admin-glass-chip--red text-red-100",
+    active: "admin-glass-chip--emerald text-emerald-100",
+    maintenance: "admin-glass-chip--amber text-amber-100",
+    retired: "admin-glass-chip--slate text-slate-300",
+    planned: "admin-glass-chip--sky text-sky-100",
+    new: "admin-glass-chip--amber text-amber-100",
+    read: "admin-glass-chip--slate text-slate-200",
+    archived: "admin-glass-chip--slate text-slate-400",
   };
   const label = status.replace(/_/g, " ");
   return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ring-1 ${styles[status] ?? "bg-slate-800 text-slate-400 ring-slate-700"}`}
-    >
-      {label}
+    <span className={`admin-glass-chip ${styles[status] ?? "admin-glass-chip--slate text-slate-300"}`}>
+      <span className="admin-glass-chip__sheen" aria-hidden />
+      <span className="relative z-[1]">{label}</span>
     </span>
   );
 }

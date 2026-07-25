@@ -21,15 +21,19 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   };
 }
 
+const SESSION_ERROR = "Could not verify your session for that request. Refresh the page if this keeps happening.";
+
 export async function requireAuth() {
   const user = await getAuthUser();
-  if (!user) return { user: null, error: NextResponse.json({ error: "Not signed in." }, { status: 401 }) };
+  if (!user) return { user: null, error: NextResponse.json({ error: SESSION_ERROR }, { status: 401 }) };
   return { user, error: null };
 }
 
 export async function requireOwnerOrAdmin() {
   const { user, error } = await requireAuth();
-  if (error || !user) return { user: null, error: error ?? NextResponse.json({ error: "Not signed in." }, { status: 401 }) };
+  if (error || !user) {
+    return { user: null, error: error ?? NextResponse.json({ error: SESSION_ERROR }, { status: 401 }) };
+  }
   if (!canManageUsers(user.role)) {
     return { user: null, error: NextResponse.json({ error: "You do not have permission for this action." }, { status: 403 }) };
   }

@@ -22,8 +22,8 @@ export const roleLabels: Record<StaffRole, string> = {
 };
 
 export const roleBadgeClass: Record<StaffRole, string> = {
-  owner: "bg-sky-500/15 text-sky-300 ring-sky-400/30",
-  admin: "bg-violet-500/15 text-violet-300 ring-violet-400/30",
-  mechanic: "bg-slate-500/15 text-slate-300 ring-slate-600/30",
-  dispatcher: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
+  owner: "admin-glass-chip--sky text-sky-100",
+  admin: "admin-glass-chip--violet text-violet-100",
+  mechanic: "admin-glass-chip--slate text-slate-100",
+  dispatcher: "admin-glass-chip--emerald text-emerald-100",
 };

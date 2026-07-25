@@ -376,10 +376,48 @@ export function AdminDashboard({ user }: Props) {
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <div className="ml-auto hidden items-center gap-3 sm:flex">
-                <div className="rounded-full border border-slate-800/80 bg-slate-900/50 px-3 py-1.5 text-xs text-slate-400">
-                  Signed in as <span className="font-medium text-slate-200">{user.name}</span>
-                </div>
+              <div className="ml-auto hidden items-center gap-2.5 sm:flex">
+                <button
+                  type="button"
+                  onClick={() => selectTab(accountTab)}
+                  className="group inline-flex items-center gap-2.5 rounded-full border border-slate-700/70 bg-slate-950/55 py-1 pl-1 pr-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-amber-500/35 hover:bg-slate-900/80 hover:shadow-[0_0_0_1px_rgba(245,158,11,0.12)]"
+                  title="Account settings"
+                  aria-label={`Open account settings for ${user.name}`}
+                >
+                  <span className="relative shrink-0">
+                    {user.avatarUrl ? (
+                      <img
+                        src={user.avatarUrl}
+                        alt=""
+                        className={`h-7 w-7 rounded-full object-cover ring-2 ${
+                          user.role === "owner" ? "ring-sky-400/40" : "ring-amber-500/35"
+                        }`}
+                      />
+                    ) : (
+                      <span
+                        className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold ring-2 ${
+                          user.role === "owner"
+                            ? "bg-sky-500/15 text-sky-200 ring-sky-400/40"
+                            : "bg-gradient-to-br from-amber-500/25 to-pink-600/20 text-amber-100 ring-amber-500/35"
+                        }`}
+                      >
+                        {userInitials(user.name)}
+                      </span>
+                    )}
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-slate-950"
+                      aria-hidden
+                    />
+                  </span>
+                  <span className="min-w-0 text-left leading-tight">
+                    <span className="block text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500 transition group-hover:text-slate-400">
+                      Signed in
+                    </span>
+                    <span className="block max-w-[10rem] truncate text-xs font-semibold text-slate-100">
+                      {user.name}
+                    </span>
+                  </span>
+                </button>
                 <RoleBadge role={user.role} />
               </div>
             </div>

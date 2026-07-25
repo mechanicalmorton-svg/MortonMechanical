@@ -135,7 +135,16 @@ export function WorkOrderDocumentEditor({
     setSaving(false);
 
     if (error || !data) {
-      toast.error(error || "Could not save document.");
+      const setup = await adminSend<{ sql?: string; message?: string }>("/api/admin/setup-document-data", {
+        method: "POST",
+      });
+      if (setup.data?.sql) {
+        toast.error(
+          "Database needs a one-time update: run supabase/add-work-order-document-data.sql in Supabase SQL Editor, then Save again.",
+        );
+      } else {
+        toast.error(error || "Could not save document.");
+      }
       return;
     }
 
@@ -219,7 +228,7 @@ export function WorkOrderDocumentEditor({
             Loading document…
           </div>
         ) : (
-          <div className="wo-print-root mx-auto max-w-[8.75in]">
+          <div className="wo-print-root mx-auto w-full max-w-[8.5in]">
             <WorkOrderDocumentForm kind={kind} value={fields} onChange={setFields} />
           </div>
         )}
