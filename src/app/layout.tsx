@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
-import { Outfit, Syne } from "next/font/google";
+import { Barlow, Barlow_Condensed } from "next/font/google";
 import { ContentLiveRefresh } from "@/components/ContentLiveRefresh";
 import { getContent } from "@/lib/content";
 import "./globals.css";
 
-const siteSans = Outfit({
-  variable: "--font-geist-sans",
+const appSans = Barlow({
+  variable: "--font-app-sans",
   subsets: ["latin"],
   display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
-const siteDisplay = Syne({
-  variable: "--font-site-display",
+const appDisplay = Barlow_Condensed({
+  variable: "--font-app-display",
   subsets: ["latin"],
   display: "swap",
+  weight: ["500", "600", "700"],
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -27,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${siteSans.variable} ${siteDisplay.variable} h-full scroll-smooth`}>
+    <html lang="en" className={`${appSans.variable} ${appDisplay.variable} h-full scroll-smooth`}>
       <body className="site-shell flex min-h-full flex-col font-sans text-slate-100 antialiased">
         {children}
         <ContentLiveRefresh />

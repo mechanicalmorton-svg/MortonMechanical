@@ -195,7 +195,7 @@ export function WorkOrderDocumentEditor({
           </p>
           <h2 className="admin-glass-title admin-glass-title--sm admin-display max-w-full">
             <span className="admin-glass-title__sheen" aria-hidden />
-            <span className="admin-glass-title__text truncate">
+            <span className="admin-glass-title__text max-w-full break-words">
               {title} · {order.customerName}
             </span>
           </h2>

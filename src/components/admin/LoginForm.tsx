@@ -30,7 +30,7 @@ const PORTAL_COPY: Record<
 > = {
   admin: {
     eyebrow: "Staff access",
-    title: "Welcome back",
+    title: "Staff sign-in",
     subtitle: "Sign in to manage your shop website and day-to-day operations.",
     secureNote: "Secure portal · @mortonsmechanical.com accounts",
     accentBlob: "bg-amber-500/15",

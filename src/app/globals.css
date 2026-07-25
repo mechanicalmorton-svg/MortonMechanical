@@ -1,11 +1,12 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Barlow + Barlow Condensed — industrial / shop-floor pairing */
+  --font-sans: var(--font-app-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-display: var(--font-site-display), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-admin: var(--font-admin-sans), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-admin-display: var(--font-admin-display), var(--font-admin-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-app-display), var(--font-app-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-admin: var(--font-app-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-admin-display: var(--font-app-display), var(--font-app-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 html {
@@ -48,7 +49,8 @@ body {
 
 .site-shell .site-display {
   font-family: var(--font-display);
-  letter-spacing: -0.03em;
+  letter-spacing: 0.01em;
+  text-transform: none;
 }
 
 .site-hairline {
@@ -176,9 +178,10 @@ body {
 }
 
 .admin-shell h1,
-.admin-shell .admin-display {
+.admin-shell .admin-display,
+.admin-display {
   font-family: var(--font-admin-display);
-  letter-spacing: -0.03em;
+  letter-spacing: 0.02em;
 }
 
 .admin-glass {
@@ -313,10 +316,12 @@ body {
   width: fit-content;
   max-width: 100%;
   margin: 0;
-  padding: 0 0 0.45rem;
+  /* Extra bottom pad so underline sits below glyph descenders (g, y, p). */
+  padding: 0 0 0.65rem;
   border: 0;
   background: none;
   box-shadow: none;
+  overflow: visible;
 }
 
 .admin-glass-title::after {
@@ -324,14 +329,16 @@ body {
   position: absolute;
   left: 0;
   bottom: 0;
+  z-index: 0;
   width: min(3.25rem, 40%);
   height: 1px;
   border-radius: 999px;
+  pointer-events: none;
   background: linear-gradient(90deg, rgba(212, 175, 120, 0.85), rgba(212, 175, 120, 0.15), transparent);
 }
 
 .admin-glass-title--sm {
-  padding-bottom: 0.3rem;
+  padding-bottom: 0.45rem;
 }
 
 .admin-glass-title--sm::after {
@@ -343,20 +350,22 @@ body {
 }
 
 .admin-glass-title__text {
-  display: block;
-  font-size: clamp(1.75rem, 2.5vw, 2.35rem);
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  max-width: 100%;
+  font-size: clamp(1.85rem, 2.8vw, 2.5rem);
   font-weight: 600;
-  letter-spacing: -0.035em;
-  line-height: 1.15;
-  background: linear-gradient(180deg, #f4ebdc 0%, #dfc59a 55%, #c9a46a 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  /* Solid champagne — avoids background-clip:text clipping descenders (g/y/p). */
+  color: #e8d4b0;
+  text-shadow: 0 1px 0 rgba(120, 90, 45, 0.35);
 }
 
 .admin-glass-title--sm .admin-glass-title__text {
-  font-size: 1.05rem;
-  letter-spacing: -0.02em;
+  font-size: 1.15rem;
+  letter-spacing: 0.03em;
   line-height: 1.25;
 }
 
