@@ -79,6 +79,8 @@ function rowToWorkOrder(r: Record<string, unknown>): WorkOrder {
     notes: r.notes as string | undefined,
     internalNotes: (r.internal_notes as string) || undefined,
     revenue: r.revenue != null ? Number(r.revenue) : undefined,
+    paymentStatus: (r.payment_status as WorkOrder["paymentStatus"]) || "unpaid",
+    stripeCheckoutSessionId: (r.stripe_checkout_session_id as string) || undefined,
     scheduledDate: r.scheduled_date as string | undefined,
     documentData,
     createdAt: r.created_at as string,
@@ -110,6 +112,12 @@ function workOrderToRow(w: WorkOrder) {
   // Only send when present so older databases without the column can still save other fields.
   if (w.documentData !== undefined) {
     row.document_data = w.documentData ?? {};
+  }
+  if (w.paymentStatus !== undefined) {
+    row.payment_status = w.paymentStatus;
+  }
+  if (w.stripeCheckoutSessionId !== undefined) {
+    row.stripe_checkout_session_id = w.stripeCheckoutSessionId || null;
   }
 
   return row;
@@ -193,12 +201,14 @@ function rowToBooking(r: Record<string, unknown>): Booking {
     address: (r.address as string) || undefined,
     status: r.status as Booking["status"],
     notes: (r.notes as string) || undefined,
+    depositPaid: Boolean(r.deposit_paid),
+    stripeCheckoutSessionId: (r.stripe_checkout_session_id as string) || undefined,
     createdAt: r.created_at as string,
   };
 }
 
 function bookingToRow(b: Booking) {
-  return {
+  const row: Record<string, unknown> = {
     id: b.id,
     customer_id: b.customerId?.trim() || null,
     quote_id: b.quoteId?.trim() || null,
@@ -213,6 +223,13 @@ function bookingToRow(b: Booking) {
     notes: b.notes ?? "",
     created_at: b.createdAt,
   };
+  if (b.depositPaid !== undefined) {
+    row.deposit_paid = b.depositPaid;
+  }
+  if (b.stripeCheckoutSessionId !== undefined) {
+    row.stripe_checkout_session_id = b.stripeCheckoutSessionId || null;
+  }
+  return row;
 }
 
 function rowToInventory(r: Record<string, unknown>): InventoryItem {
@@ -338,6 +355,20 @@ export async function loadWorkOrders(): Promise<WorkOrder[]> {
   return readJson("work-orders.json", []);
 }
 
+function isMissingStripePaymentColumn(message?: string | null) {
+  if (!message) return false;
+  const lower = message.toLowerCase();
+  return (
+    (lower.includes("payment_status") ||
+      lower.includes("stripe_checkout_session_id") ||
+      lower.includes("deposit_paid")) &&
+    (lower.includes("schema cache") ||
+      lower.includes("could not find") ||
+      lower.includes("does not exist") ||
+      lower.includes("column"))
+  );
+}
+
 export async function upsertWorkOrder(item: WorkOrder) {
   if (useDatabase()) {
     const client = requireAdminClient();
@@ -359,6 +390,20 @@ export async function upsertWorkOrder(item: WorkOrder) {
           );
         }
       }
+      return;
+    }
+
+    if (error && isMissingStripePaymentColumn(error.message)) {
+      const {
+        payment_status: _paymentStatus,
+        stripe_checkout_session_id: _sessionId,
+        ...rowWithoutPayment
+      } = row;
+      const retry = await client.from("work_orders").upsert(rowWithoutPayment);
+      throwOnError(
+        retry.error,
+        "Could not save work order. Run supabase/add-stripe-payments.sql in the Supabase SQL editor, then try again.",
+      );
       return;
     }
 
@@ -655,7 +700,19 @@ export async function loadBookings(): Promise<Booking[]> {
 
 export async function upsertBooking(item: Booking) {
   if (useDatabase()) {
-    const { error } = await requireAdminClient().from("bookings").upsert(bookingToRow(item));
+    const client = requireAdminClient();
+    const row = bookingToRow(item);
+    const { error } = await client.from("bookings").upsert(row);
+    if (error && isMissingStripePaymentColumn(error.message)) {
+      const {
+        deposit_paid: _depositPaid,
+        stripe_checkout_session_id: _sessionId,
+        ...rowWithoutPayment
+      } = row;
+      const retry = await client.from("bookings").upsert(rowWithoutPayment);
+      throwOnError(retry.error, "Could not save booking");
+      return;
+    }
     throwOnError(error, "Could not save booking");
     return;
   }
@@ -664,6 +721,70 @@ export async function upsertBooking(item: Booking) {
   if (idx >= 0) items[idx] = item;
   else items.unshift(item);
   writeJson("bookings.json", items);
+}
+
+export async function markBookingDepositPaid(bookingId: string, sessionId: string) {
+  if (useDatabase()) {
+    const client = requireAdminClient();
+    const { data, error } = await client.from("bookings").select("*").eq("id", bookingId).maybeSingle();
+    throwOnError(error, "Could not load booking for deposit update");
+    if (!data) throw new Error("Booking not found.");
+    const booking = rowToBooking(data as Record<string, unknown>);
+    if (booking.depositPaid) return booking;
+    const next: Booking = {
+      ...booking,
+      depositPaid: true,
+      stripeCheckoutSessionId: sessionId,
+      status: booking.status === "pending" ? "confirmed" : booking.status,
+      notes: [booking.notes, "Deposit paid via Stripe."].filter(Boolean).join("\n"),
+    };
+    await upsertBooking(next);
+    return next;
+  }
+  const items = await loadBookings();
+  const idx = items.findIndex((b) => b.id === bookingId);
+  if (idx < 0) throw new Error("Booking not found.");
+  if (items[idx].depositPaid) return items[idx];
+  items[idx] = {
+    ...items[idx],
+    depositPaid: true,
+    stripeCheckoutSessionId: sessionId,
+    status: items[idx].status === "pending" ? "confirmed" : items[idx].status,
+    notes: [items[idx].notes, "Deposit paid via Stripe."].filter(Boolean).join("\n"),
+  };
+  writeJson("bookings.json", items);
+  return items[idx];
+}
+
+export async function markWorkOrderInvoicePaid(workOrderId: string, sessionId: string) {
+  if (useDatabase()) {
+    const client = requireAdminClient();
+    const { data, error } = await client.from("work_orders").select("*").eq("id", workOrderId).maybeSingle();
+    throwOnError(error, "Could not load work order for payment update");
+    if (!data) throw new Error("Work order not found.");
+    const order = rowToWorkOrder(data as Record<string, unknown>);
+    if (order.paymentStatus === "paid") return order;
+    const next: WorkOrder = {
+      ...order,
+      paymentStatus: "paid",
+      stripeCheckoutSessionId: sessionId,
+      updatedAt: new Date().toISOString(),
+    };
+    await upsertWorkOrder(next);
+    return next;
+  }
+  const items = await loadWorkOrders();
+  const idx = items.findIndex((w) => w.id === workOrderId);
+  if (idx < 0) throw new Error("Work order not found.");
+  if (items[idx].paymentStatus === "paid") return items[idx];
+  items[idx] = {
+    ...items[idx],
+    paymentStatus: "paid",
+    stripeCheckoutSessionId: sessionId,
+    updatedAt: new Date().toISOString(),
+  };
+  writeJson("work-orders.json", items);
+  return items[idx];
 }
 
 export async function deleteBooking(id: string) {

@@ -208,6 +208,9 @@ export function StatusBadge({ status }: { status: string }) {
     new: "admin-glass-chip--amber text-amber-100",
     read: "admin-glass-chip--slate text-slate-200",
     archived: "admin-glass-chip--slate text-slate-400",
+    unpaid: "admin-glass-chip--amber text-amber-100",
+    paid: "admin-glass-chip--emerald text-emerald-100",
+    deposit_paid: "admin-glass-chip--sky text-sky-100",
   };
   const label = status.replace(/_/g, " ");
   return (

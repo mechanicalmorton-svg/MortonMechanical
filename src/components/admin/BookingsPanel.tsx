@@ -182,6 +182,7 @@ export function BookingsPanel() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-semibold text-white">{b.customerName}</h3>
                     <StatusBadge status={b.status} />
+                    {b.depositPaid ? <StatusBadge status="deposit_paid" /> : null}
                     {b.quoteId ? (
                       <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300 ring-1 ring-sky-400/30">
                         Website

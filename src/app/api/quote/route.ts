@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { DatabaseError } from "@/lib/supabase/db";
 import { getContent } from "@/lib/content";
 import { addQuote } from "@/lib/quotes";
+import { getBookingDepositCents } from "@/lib/payment-settings";
 import { createId, findOrCreateCustomer, upsertBooking } from "@/lib/shop-data";
+import { formatUsdFromCents, getSiteUrl, getStripe, isStripeConfigured } from "@/lib/stripe";
 import type { Booking } from "@/lib/shop-types";
 
 export async function POST(req: Request) {
@@ -44,10 +46,66 @@ export async function POST(req: Request) {
       date: new Date().toISOString().slice(0, 10),
       time: "09:00",
       status: "pending",
+      depositPaid: false,
       notes: [rego ? `Rego: ${rego}` : "", message].filter(Boolean).join("\n") || undefined,
       createdAt: new Date().toISOString(),
     };
     await upsertBooking(booking);
+
+    if (!isStripeConfigured()) {
+      return NextResponse.json({ ok: true, quoteId: quote.id, bookingId: booking.id });
+    }
+
+    try {
+      const depositCents = await getBookingDepositCents();
+      if (depositCents <= 0) {
+        return NextResponse.json({ ok: true, quoteId: quote.id, bookingId: booking.id });
+      }
+
+      const siteUrl = getSiteUrl();
+      const stripe = getStripe();
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        success_url: `${siteUrl}/contact?paid=1`,
+        cancel_url: `${siteUrl}/contact?cancelled=1`,
+        customer_email: email || undefined,
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: "usd",
+              unit_amount: depositCents,
+              product_data: {
+                name: "Booking deposit",
+                description: `${service} — Morton's Mechanical`,
+              },
+            },
+          },
+        ],
+        metadata: {
+          type: "deposit",
+          bookingId: booking.id,
+          quoteId: quote.id,
+        },
+      });
+
+      if (session.url) {
+        await upsertBooking({
+          ...booking,
+          stripeCheckoutSessionId: session.id,
+        });
+        return NextResponse.json({
+          ok: true,
+          quoteId: quote.id,
+          bookingId: booking.id,
+          checkoutUrl: session.url,
+          depositCents,
+          depositLabel: formatUsdFromCents(depositCents),
+        });
+      }
+    } catch (stripeErr) {
+      console.error("[quote] Stripe Checkout failed; request still saved", stripeErr);
+    }
 
     return NextResponse.json({ ok: true, quoteId: quote.id, bookingId: booking.id });
   } catch (err) {

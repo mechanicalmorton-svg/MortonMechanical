@@ -11,6 +11,7 @@ import {
   Eye,
   FileText,
   Pencil,
+  CreditCard,
   Plus,
   Receipt,
   RefreshCw,
@@ -117,6 +118,7 @@ export function WorkOrdersPanel() {
     order: WorkOrder;
   } | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(null);
+  const [payNowLoadingId, setPayNowLoadingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterAssigned, setFilterAssigned] = useState("");
   const [createdOn, setCreatedOn] = useState("");
@@ -248,6 +250,41 @@ export function WorkOrdersPanel() {
       setViewOrder(null);
       load();
     }
+  }
+
+  async function createPayNowLink(order: WorkOrder) {
+    if (!(Number(order.revenue) > 0)) {
+      toast.error("Set a Total charge greater than $0 before creating a Pay Now link.");
+      return;
+    }
+    if (order.paymentStatus === "paid") {
+      toast.error("This work order is already paid.");
+      return;
+    }
+    setPayNowLoadingId(order.id);
+    const { data, error: message } = await adminSend<{ checkoutUrl?: string }>("/api/admin/payments/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workOrderId: order.id }),
+    });
+    setPayNowLoadingId(null);
+    if (message) {
+      toast.error(message);
+      return;
+    }
+    const url = data?.checkoutUrl;
+    if (!url) {
+      toast.error("No checkout URL returned.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Pay Now link copied. Opening Stripe…");
+    } catch {
+      toast.success("Pay Now link ready.");
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+    load();
   }
 
   return (
@@ -397,6 +434,7 @@ export function WorkOrdersPanel() {
               <StatusBadge status={statusBadgeKey(viewOrder.status)} />
               <StatusBadge status={viewOrder.priority === "urgent" ? "urgent" : "normal"} />
               {isOverdue(viewOrder) && <StatusBadge status="overdue" />}
+              <StatusBadge status={viewOrder.paymentStatus ?? "unpaid"} />
             </div>
             <dl className="grid gap-3 sm:grid-cols-2">
               <div>
@@ -418,6 +456,12 @@ export function WorkOrdersPanel() {
               <div>
                 <dt className="text-xs uppercase tracking-wide text-slate-500">Total charge</dt>
                 <dd className="mt-1 text-sm text-emerald-300">${(viewOrder.revenue ?? 0).toFixed(2)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Payment</dt>
+                <dd className="mt-1 text-sm capitalize text-slate-300">
+                  {(viewOrder.paymentStatus ?? "unpaid").replace(/_/g, " ")}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-wide text-slate-500">Due date</dt>
@@ -476,6 +520,17 @@ export function WorkOrdersPanel() {
               <button type="button" onClick={() => openDocument("invoice", viewOrder)} className={btnSecondary}>
                 <Receipt className="h-3.5 w-3.5" /> Invoice
               </button>
+              {Number(viewOrder.revenue) > 0 && viewOrder.paymentStatus !== "paid" ? (
+                <button
+                  type="button"
+                  onClick={() => createPayNowLink(viewOrder)}
+                  className={btnPrimary}
+                  disabled={payNowLoadingId === viewOrder.id}
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  {payNowLoadingId === viewOrder.id ? "Creating…" : "Pay Now"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {

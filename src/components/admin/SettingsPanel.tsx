@@ -30,6 +30,7 @@ type Props = {
     roleName?: string;
     roleColor?: string;
     avatarUrl?: string;
+    permissions?: { manageUsers?: boolean };
   };
 };
 
@@ -61,6 +62,13 @@ export function SettingsPanel({ user }: Props) {
   const toast = useAdminToast();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const canManagePayments = Boolean(
+    user.permissions?.manageUsers ||
+      user.roleIds?.includes("owner") ||
+      user.roleIds?.includes("admin") ||
+      user.role === "owner" ||
+      user.role === "admin",
+  );
 
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profile, setProfile] = useState<AccountProfile | null>(null);
@@ -76,6 +84,11 @@ export function SettingsPanel({ user }: Props) {
   const [confirm, setConfirm] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+
+  const [depositDollars, setDepositDollars] = useState("50");
+  const [stripeConfigured, setStripeConfigured] = useState(false);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [savingDeposit, setSavingDeposit] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -98,6 +111,28 @@ export function SettingsPanel({ user }: Props) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!canManagePayments) return;
+    let active = true;
+    setLoadingPayments(true);
+    adminGet<{ bookingDepositCents?: number; stripeConfigured?: boolean }>("/api/admin/payments/settings").then(
+      ({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          toast.error(error);
+        } else if (data) {
+          const cents = Number(data.bookingDepositCents ?? 5000);
+          setDepositDollars((cents / 100).toFixed(cents % 100 === 0 ? 0 : 2));
+          setStripeConfigured(Boolean(data.stripeConfigured));
+        }
+        setLoadingPayments(false);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [canManagePayments]);
 
   function refreshPortal() {
     router.refresh();
@@ -210,13 +245,42 @@ export function SettingsPanel({ user }: Props) {
     toast.success(data?.message ?? "Password reset email sent.");
   }
 
+  async function saveDeposit(e: React.FormEvent) {
+    e.preventDefault();
+    const dollars = Number(depositDollars);
+    if (!Number.isFinite(dollars) || dollars < 0) {
+      toast.error("Enter a valid deposit amount.");
+      return;
+    }
+    setSavingDeposit(true);
+    const { data, error } = await adminSend<{ bookingDepositCents?: number; stripeConfigured?: boolean }>(
+      "/api/admin/payments/settings",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingDepositDollars: dollars }),
+      },
+    );
+    setSavingDeposit(false);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    if (data?.bookingDepositCents != null) {
+      const cents = data.bookingDepositCents;
+      setDepositDollars((cents / 100).toFixed(cents % 100 === 0 ? 0 : 2));
+      setStripeConfigured(Boolean(data.stripeConfigured));
+    }
+    toast.success("Booking deposit updated.");
+  }
+
   const usesSupabaseAuth = profile?.usesSupabaseAuth ?? Boolean(user.email?.includes("@"));
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader
         title="Account Settings"
-        subtitle="Manage your profile, sign-in email, photo, and password."
+        subtitle="Manage your profile, sign-in email, photo, password, and payment settings."
       />
 
       {loadingProfile ? (
@@ -343,6 +407,44 @@ export function SettingsPanel({ user }: Props) {
               </div>
             </Section>
           </form>
+
+          {canManagePayments ? (
+            <form onSubmit={saveDeposit}>
+              <Section
+                title="Booking deposit"
+                description="Amount collected via Stripe Checkout when a customer submits the quote form."
+              >
+                {loadingPayments ? (
+                  <p className="text-sm text-slate-500">Loading payment settings…</p>
+                ) : (
+                  <>
+                    <label className="block text-sm text-slate-300">
+                      <span className="font-medium text-slate-200">Booking deposit ($)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className={`${inputClass} mt-1.5`}
+                        value={depositDollars}
+                        onChange={(e) => setDepositDollars(e.target.value)}
+                        required
+                      />
+                    </label>
+                    <p className="text-xs text-slate-500">
+                      {stripeConfigured
+                        ? "Stripe is configured — quote submissions will redirect to Checkout for this deposit."
+                        : "Stripe keys are not set yet. Quote submissions still save without payment until STRIPE_SECRET_KEY is configured."}
+                    </p>
+                    <div className="flex justify-end">
+                      <button type="submit" className={btnPrimary} disabled={savingDeposit}>
+                        {savingDeposit ? "Saving…" : "Save deposit"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </Section>
+            </form>
+          ) : null}
 
           <form onSubmit={handlePasswordSubmit}>
             <Section

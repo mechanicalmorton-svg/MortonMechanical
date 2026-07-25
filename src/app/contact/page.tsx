@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { Suspense } from "react";
 import { Clock, Mail, MapPin, Phone } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ContactForm } from "@/components/ContactForm";
 import { getContent } from "@/lib/content";
 import { emailHref, phoneHref } from "@/lib/content-types";
+import { getBookingDepositCents } from "@/lib/payment-settings";
+import { formatUsdFromCents, isStripeConfigured } from "@/lib/stripe";
 
 /** Always read latest Site Contents after owner saves. */
 export const dynamic = "force-dynamic";
@@ -20,6 +23,15 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function ContactPage() {
   const { site, whyUs, images, pages, serviceOptions } = await getContent();
+  const stripeEnabled = isStripeConfigured();
+  let depositLabel: string | undefined;
+  if (stripeEnabled) {
+    try {
+      depositLabel = formatUsdFromCents(await getBookingDepositCents());
+    } catch {
+      depositLabel = formatUsdFromCents(5000);
+    }
+  }
 
   return (
     <>
@@ -48,7 +60,14 @@ export default async function ContactPage() {
 
         <div className="mx-auto grid max-w-screen-xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-3">
           <div className="rounded-xl border border-slate-800/60 bg-slate-900/20 p-6 sm:p-8 lg:col-span-2">
-            <ContactForm serviceOptions={serviceOptions} form={pages.form} />
+            <Suspense fallback={<div className="text-sm text-slate-400">Loading form…</div>}>
+              <ContactForm
+                serviceOptions={serviceOptions}
+                form={pages.form}
+                stripeEnabled={stripeEnabled}
+                depositLabel={depositLabel}
+              />
+            </Suspense>
           </div>
 
           <aside className="space-y-5">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import type { SiteContent } from "@/lib/content-types";
 
@@ -18,9 +19,20 @@ type FormState = {
 type Props = {
   serviceOptions: string[];
   form: SiteContent["pages"]["form"];
+  stripeEnabled?: boolean;
+  depositLabel?: string;
 };
 
-export function ContactForm({ serviceOptions, form: formCopy }: Props) {
+export function ContactForm({
+  serviceOptions,
+  form: formCopy,
+  stripeEnabled = false,
+  depositLabel,
+}: Props) {
+  const searchParams = useSearchParams();
+  const depositPaid = searchParams.get("paid") === "1";
+  const cancelled = searchParams.get("cancelled") === "1";
+
   const initial: FormState = {
     name: "",
     phone: "",
@@ -33,7 +45,9 @@ export function ContactForm({ serviceOptions, form: formCopy }: Props) {
   };
 
   const [form, setForm] = useState<FormState>(initial);
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">(
+    depositPaid ? "success" : "idle",
+  );
   const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
@@ -49,6 +63,12 @@ export function ContactForm({ serviceOptions, form: formCopy }: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
+
+      if (typeof data.checkoutUrl === "string" && data.checkoutUrl) {
+        window.location.assign(data.checkoutUrl);
+        return;
+      }
+
       setStatus("success");
       setForm({ ...initial, service: serviceOptions[0] ?? "Other" });
     } catch (err) {
@@ -60,12 +80,21 @@ export function ContactForm({ serviceOptions, form: formCopy }: Props) {
   if (status === "success") {
     return (
       <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-8 text-center">
-        <h3 className="text-xl font-bold text-white">{formCopy.successTitle}</h3>
-        <p className="mt-2 text-slate-300">{formCopy.successMessage}</p>
+        <h3 className="text-xl font-bold text-white">
+          {depositPaid ? "Deposit received — you're booked in" : formCopy.successTitle}
+        </h3>
+        <p className="mt-2 text-slate-300">
+          {depositPaid
+            ? "Thanks for confirming with your deposit. We'll be in touch shortly to finalize details."
+            : formCopy.successMessage}
+        </p>
         <button
           type="button"
           className="mt-6 text-sm font-semibold text-amber-400 hover:text-amber-300"
-          onClick={() => setStatus("idle")}
+          onClick={() => {
+            setStatus("idle");
+            window.history.replaceState({}, "", "/contact");
+          }}
         >
           Submit another request
         </button>
@@ -76,8 +105,21 @@ export function ContactForm({ serviceOptions, form: formCopy }: Props) {
   const inputClass =
     "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20";
 
+  const submitLabel = stripeEnabled
+    ? depositLabel
+      ? `Pay ${depositLabel} deposit to confirm`
+      : "Pay deposit to confirm"
+    : formCopy.submitText;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {cancelled ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100" role="status">
+          Deposit payment was cancelled. Your request was still saved — submit again when you&apos;re ready to pay the
+          deposit, or call us to confirm.
+        </div>
+      ) : null}
+
       {status === "error" && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200" role="alert">
           {error}
@@ -223,9 +265,14 @@ export function ContactForm({ serviceOptions, form: formCopy }: Props) {
         disabled={status === "loading"}
         className="w-full rounded-lg bg-gradient-to-r from-amber-500 to-pink-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-amber-400 hover:to-pink-500 disabled:opacity-60 sm:w-auto"
       >
-        {status === "loading" ? "Sending…" : formCopy.submitText}
+        {status === "loading" ? (stripeEnabled ? "Redirecting to payment…" : "Sending…") : submitLabel}
       </button>
-      <p className="text-xs text-slate-500">{formCopy.footerNote}</p>
+      <p className="text-xs text-slate-500">
+        {formCopy.footerNote}
+        {stripeEnabled && depositLabel
+          ? ` Secure ${depositLabel} deposit collected via Stripe after you submit.`
+          : ""}
+      </p>
     </form>
   );
 }

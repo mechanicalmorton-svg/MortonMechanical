@@ -59,6 +59,8 @@ create table if not exists work_orders (
   notes text,
   internal_notes text default '',
   revenue numeric,
+  payment_status text not null default 'unpaid',
+  stripe_checkout_session_id text,
   scheduled_date text,
   document_data jsonb default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -103,6 +105,8 @@ create table if not exists bookings (
   address text,
   status text not null default 'pending',
   notes text,
+  deposit_paid boolean not null default false,
+  stripe_checkout_session_id text,
   created_at timestamptz not null default now()
 );
 

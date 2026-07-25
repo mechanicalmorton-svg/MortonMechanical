@@ -70,6 +70,7 @@ export async function POST(req: Request) {
         notes: body.notes,
         internalNotes: body.internalNotes ?? "",
         revenue: body.revenue,
+        paymentStatus: "unpaid",
         scheduledDate: body.scheduledDate,
         createdAt: now,
         updatedAt: now,

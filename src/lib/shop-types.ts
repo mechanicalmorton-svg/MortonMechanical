@@ -1,6 +1,7 @@
 export type WorkOrderStatus = "open" | "in_progress" | "completed" | "cancelled";
 export type Priority = "normal" | "urgent";
 export type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled";
+export type PaymentStatus = "unpaid" | "paid" | "deposit_paid";
 /** Built-in role ids plus any custom role ids created in User Management. */
 export type StaffRole = string;
 export type BuiltInStaffRole = "owner" | "mechanic" | "dispatcher" | "admin";
@@ -108,6 +109,8 @@ export type WorkOrder = {
   notes?: string;
   internalNotes?: string;
   revenue?: number;
+  paymentStatus?: PaymentStatus;
+  stripeCheckoutSessionId?: string;
   scheduledDate?: string;
   documentData?: WorkOrderDocumentData;
   createdAt: string;
@@ -127,6 +130,8 @@ export type Booking = {
   address?: string;
   status: BookingStatus;
   notes?: string;
+  depositPaid?: boolean;
+  stripeCheckoutSessionId?: string;
   createdAt: string;
 };
 
