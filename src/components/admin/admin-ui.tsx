@@ -14,7 +14,7 @@ export function RoleBadge({ role, className = "" }: { role: StaffRole; className
 export function PageHeader({
   title,
   subtitle,
-  eyebrow = "Morton’s Mechanical",
+  eyebrow,
   actions,
 }: {
   title: string;
@@ -26,9 +26,12 @@ export function PageHeader({
     <div className="admin-rise mb-8 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         {eyebrow ? (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-400/80">{eyebrow}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-200/55">{eyebrow}</p>
         ) : null}
-        <h1 className="admin-display mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">{title}</h1>
+        <h1 className={`admin-glass-title admin-display ${eyebrow ? "mt-2" : ""}`}>
+          <span className="admin-glass-title__sheen" aria-hidden />
+          <span className="admin-glass-title__text">{title}</span>
+        </h1>
         {subtitle ? <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400 sm:text-[15px]">{subtitle}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -115,7 +118,10 @@ export function Panel({
       <div className="flex items-start justify-between gap-3 border-b border-white/5 px-5 py-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold tracking-tight text-white">{title}</h2>
+            <h2 className="admin-glass-title admin-glass-title--sm admin-display">
+              <span className="admin-glass-title__sheen" aria-hidden />
+              <span className="admin-glass-title__text">{title}</span>
+            </h2>
             {badge !== undefined ? (
               <span className="admin-glass-chip admin-glass-chip--slate text-slate-200">
                 <span className="admin-glass-chip__sheen" aria-hidden />

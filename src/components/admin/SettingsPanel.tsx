@@ -42,7 +42,10 @@ function Section({ title, description, children }: { title: string; description?
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900/40">
       <div className="border-b border-slate-800 px-5 py-4">
-        <h2 className="font-semibold text-white">{title}</h2>
+        <h2 className="admin-glass-title admin-glass-title--sm admin-display">
+          <span className="admin-glass-title__sheen" aria-hidden />
+          <span className="admin-glass-title__text">{title}</span>
+        </h2>
         {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
       </div>
       <div className="space-y-4 p-5">{children}</div>

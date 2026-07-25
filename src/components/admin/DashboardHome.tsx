@@ -297,7 +297,10 @@ export function DashboardHome({ name, role, onNavigate }: Props) {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Shortcuts</p>
-            <h2 className="admin-display mt-1 text-xl font-semibold text-white">Quick actions</h2>
+            <h2 className="admin-glass-title admin-glass-title--sm admin-display mt-1">
+              <span className="admin-glass-title__sheen" aria-hidden />
+              <span className="admin-glass-title__text">Quick actions</span>
+            </h2>
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

@@ -55,8 +55,9 @@ export function AdminModal({ open, onClose, title, wide, stacked, children }: Pr
         <div className="flex shrink-0 items-center justify-between border-b border-slate-800/80 px-5 py-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-400/70">Portal</p>
-            <h2 id="admin-modal-title" className="admin-display mt-0.5 text-xl font-semibold tracking-tight text-white">
-              {title}
+            <h2 id="admin-modal-title" className="admin-glass-title admin-glass-title--sm admin-display mt-1">
+              <span className="admin-glass-title__sheen" aria-hidden />
+              <span className="admin-glass-title__text">{title}</span>
             </h2>
           </div>
           <button

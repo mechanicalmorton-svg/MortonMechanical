@@ -193,8 +193,11 @@ export function WorkOrderDocumentEditor({
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-400/80">
             Fillable document
           </p>
-          <h2 className="truncate text-lg font-semibold text-white">
-            {title} · {order.customerName}
+          <h2 className="admin-glass-title admin-glass-title--sm admin-display max-w-full">
+            <span className="admin-glass-title__sheen" aria-hidden />
+            <span className="admin-glass-title__text truncate">
+              {title} · {order.customerName}
+            </span>
           </h2>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">

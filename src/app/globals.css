@@ -294,6 +294,59 @@ body {
   border-color: rgba(240, 171, 252, 0.35);
 }
 
+.admin-glass-title {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 0 0.45rem;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.admin-glass-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: min(3.25rem, 40%);
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(212, 175, 120, 0.85), rgba(212, 175, 120, 0.15), transparent);
+}
+
+.admin-glass-title--sm {
+  padding-bottom: 0.3rem;
+}
+
+.admin-glass-title--sm::after {
+  width: min(2.25rem, 36%);
+}
+
+.admin-glass-title__sheen {
+  display: none;
+}
+
+.admin-glass-title__text {
+  display: block;
+  font-size: clamp(1.75rem, 2.5vw, 2.35rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  background: linear-gradient(180deg, #f4ebdc 0%, #dfc59a 55%, #c9a46a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.admin-glass-title--sm .admin-glass-title__text {
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
 .admin-nav-item {
   position: relative;
   transition:

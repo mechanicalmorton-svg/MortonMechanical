@@ -56,7 +56,10 @@ export function LoginForm({ useEmailLogin = false }: Props) {
             <SiteLogo size={84} />
           </div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-400/80">Staff access</p>
-          <h1 className="admin-display mt-2 text-3xl font-semibold tracking-tight text-white">Welcome back</h1>
+          <h1 className="admin-glass-title admin-display mt-2">
+            <span className="admin-glass-title__sheen" aria-hidden />
+            <span className="admin-glass-title__text">Welcome back</span>
+          </h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-400">
             {useEmailLogin
               ? "Sign in with your Morton’s Mechanical email to open the operations portal."
