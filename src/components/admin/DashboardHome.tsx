@@ -73,9 +73,9 @@ export function DashboardHome({ name, canManageUsers = false, onNavigate }: Prop
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="admin-rise admin-rise-delay-1">
           <StatCard
-            label="Open Work Orders"
+            label="Queued Work Orders"
             value={loading ? "—" : stats?.openWorkOrders ?? 0}
-            hint={`${stats?.inProgressWorkOrders ?? 0} in progress`}
+            hint={`${stats?.inProgressWorkOrders ?? 0} in shop`}
             icon={ClipboardList}
             accent="amber"
             active={statModal === "open-work-orders"}
@@ -126,7 +126,7 @@ export function DashboardHome({ name, canManageUsers = false, onNavigate }: Prop
         {loading ? (
           <p className="text-slate-500">Loading…</p>
         ) : !data?.openWorkOrders.length ? (
-          <EmptyState icon={ClipboardList} title="No open work orders" text="New jobs waiting to be started will appear here." />
+          <EmptyState icon={ClipboardList} title="No queued work orders" text="Draft and scheduled jobs waiting to start will appear here." />
         ) : (
           <ul className="space-y-3">
             {data.openWorkOrders.map((order) => (
@@ -212,7 +212,7 @@ export function DashboardHome({ name, canManageUsers = false, onNavigate }: Prop
                       <p className="font-medium text-white">{order.customerName}</p>
                       <p className="text-sm text-slate-400">{order.service}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {formatOrderNumber(order.id)} · <StatusBadge status={order.status === "open" ? "pending" : order.status} />
+                        {formatOrderNumber(order.id)} · <StatusBadge status={order.status} />
                       </p>
                     </li>
                   ))}

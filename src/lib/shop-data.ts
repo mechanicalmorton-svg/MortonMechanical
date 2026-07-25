@@ -42,6 +42,13 @@ import {
 } from "./role-definitions";
 import { auditDelete, auditUpsert } from "./audit-instrument";
 import { writeAuditEvent } from "./audit-log";
+import {
+  WORK_ORDER_DONE_STATUSES,
+  WORK_ORDER_IN_SHOP_STATUSES,
+  WORK_ORDER_QUEUED_STATUSES,
+  isWorkOrderActive,
+  normalizeWorkOrderStatus,
+} from "./work-order-status";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -90,7 +97,7 @@ function rowToWorkOrder(r: Record<string, unknown>): WorkOrder {
     vehicle: (r.vehicle as string) ?? "",
     customerConcern: (r.customer_concern as string) || undefined,
     service: r.service as string,
-    status: r.status as WorkOrder["status"],
+    status: normalizeWorkOrderStatus(r.status),
     priority: r.priority as WorkOrder["priority"],
     assignedTo: r.assigned_to as string | undefined,
     notes: r.notes as string | undefined,
@@ -374,7 +381,10 @@ export async function loadWorkOrders(): Promise<WorkOrder[]> {
     throwOnError(primary.error, "Could not load work orders");
     return (primary.data ?? []).map(rowToWorkOrder);
   }
-  return readJson("work-orders.json", []);
+  return readJson<WorkOrder[]>("work-orders.json", []).map((order) => ({
+    ...order,
+    status: normalizeWorkOrderStatus(order.status),
+  }));
 }
 
 function isMissingStripePaymentColumn(message?: string | null) {
@@ -392,6 +402,7 @@ function isMissingStripePaymentColumn(message?: string | null) {
 }
 
 export async function upsertWorkOrder(item: WorkOrder) {
+  item = { ...item, status: normalizeWorkOrderStatus(item.status) };
   const before =
     (await fetchDbRowById("work_orders", item.id, rowToWorkOrder)) ??
     (await loadWorkOrders()).find((w) => w.id === item.id) ??
@@ -1847,15 +1858,15 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const ms = monthStart();
 
   return {
-    openWorkOrders: workOrders.filter((w) => w.status === "open").length,
-    inProgressWorkOrders: workOrders.filter((w) => w.status === "in_progress").length,
+    openWorkOrders: workOrders.filter((w) => WORK_ORDER_QUEUED_STATUSES.includes(w.status)).length,
+    inProgressWorkOrders: workOrders.filter((w) => WORK_ORDER_IN_SHOP_STATUSES.includes(w.status)).length,
     todayBookings: bookings.filter((b) => b.date === t && b.status !== "cancelled").length,
     pendingBookings: bookings.filter((b) => b.status === "pending").length,
     urgentItems:
-      workOrders.filter((w) => w.priority === "urgent" && w.status !== "completed" && w.status !== "cancelled").length +
+      workOrders.filter((w) => w.priority === "urgent" && isWorkOrderActive(w.status)).length +
       inventory.filter((i) => i.minStock > 0 && i.quantity <= i.minStock).length,
     mtdRevenue: workOrders
-      .filter((w) => w.status === "completed" && w.updatedAt >= ms)
+      .filter((w) => WORK_ORDER_DONE_STATUSES.includes(w.status) && w.updatedAt >= ms)
       .reduce((sum, w) => sum + (w.revenue ?? 0), 0),
     lowStockCount: inventory.filter((i) => i.minStock > 0 && i.quantity <= i.minStock).length,
     activeFleet: fleet.filter((f) => f.status === "active").length,

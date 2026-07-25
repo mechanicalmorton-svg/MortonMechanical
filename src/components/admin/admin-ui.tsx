@@ -193,12 +193,17 @@ export function EmptyState({ icon: Icon, title, text }: { icon: LucideIcon; titl
 export function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: "admin-glass-chip--amber text-amber-100",
-    open: "admin-glass-chip--sky text-sky-100",
+    draft: "admin-glass-chip--slate text-slate-200",
+    scheduled: "admin-glass-chip--sky text-sky-100",
+    open: "admin-glass-chip--slate text-slate-200",
     normal: "admin-glass-chip--sky text-sky-100",
     overdue: "admin-glass-chip--red text-red-100",
     in_progress: "admin-glass-chip--fuchsia text-fuchsia-100",
+    waiting_on_parts: "admin-glass-chip--amber text-amber-100",
+    waiting_customer: "admin-glass-chip--violet text-violet-100",
     confirmed: "admin-glass-chip--emerald text-emerald-100",
-    completed: "admin-glass-chip--slate text-slate-200",
+    completed: "admin-glass-chip--emerald text-emerald-100",
+    delivered: "admin-glass-chip--sky text-sky-100",
     cancelled: "admin-glass-chip--red text-red-100",
     urgent: "admin-glass-chip--red text-red-100",
     active: "admin-glass-chip--emerald text-emerald-100",
@@ -219,7 +224,19 @@ export function StatusBadge({ status }: { status: string }) {
     failure: "admin-glass-chip--red text-red-100",
     denied: "admin-glass-chip--red text-red-100",
   };
-  const label = status.replace(/_/g, " ");
+  const labels: Record<string, string> = {
+    draft: "Draft",
+    scheduled: "Scheduled",
+    in_progress: "In Progress",
+    waiting_on_parts: "Waiting on Parts",
+    waiting_customer: "Waiting Customer",
+    completed: "Completed",
+    delivered: "Delivered",
+    cancelled: "Cancelled",
+    open: "Draft",
+    pending: "Draft",
+  };
+  const label = labels[status] ?? status.replace(/_/g, " ");
   return (
     <span className={`admin-glass-chip ${styles[status] ?? "admin-glass-chip--slate text-slate-300"}`}>
       <span className="admin-glass-chip__sheen" aria-hidden />

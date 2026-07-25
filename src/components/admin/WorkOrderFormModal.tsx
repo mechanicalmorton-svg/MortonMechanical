@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, MapPin, Plus, UserRound } from "lucide-react";
 import type { CustomerVehicle, Priority, StaffMember, WorkOrder, WorkOrderStatus } from "@/lib/shop-types";
+import {
+  WORK_ORDER_STATUSES,
+  WORK_ORDER_STATUS_LABELS,
+  normalizeWorkOrderStatus,
+} from "@/lib/work-order-status";
 import { formatCustomerVehicleOption, parseWorkOrderVehicleLabel } from "@/lib/customer-vehicles";
 import { adminGet, adminSend } from "./admin-fetch";
 import { CustomerPickerModal, type CustomerWithVehicles } from "./CustomerPickerModal";
@@ -31,7 +36,7 @@ const emptyForm = {
   customerAddress: "",
   customerConcern: "",
   service: "",
-  status: "open" as WorkOrderStatus,
+  status: "draft" as WorkOrderStatus,
   priority: "normal" as Priority,
   internalNotes: "",
   notes: "",
@@ -278,7 +283,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
         customerAddress,
         customerConcern: editingOrder.customerConcern ?? "",
         service: editingOrder.service,
-        status: editingOrder.status,
+        status: normalizeWorkOrderStatus(editingOrder.status),
         priority: editingOrder.priority,
         internalNotes: editingOrder.internalNotes ?? "",
         notes: editingOrder.notes ?? "",
@@ -672,10 +677,11 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                     value={form.status}
                     onChange={(e) => setForm({ ...form, status: e.target.value as WorkOrderStatus })}
                   >
-                    <option value="open">Pending</option>
-                    <option value="in_progress">In progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
+                    {WORK_ORDER_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {WORK_ORDER_STATUS_LABELS[status]}
+                      </option>
+                    ))}
                   </select>
                 </FormField>
                 <FormField label="Priority" htmlFor="wo-priority" required>

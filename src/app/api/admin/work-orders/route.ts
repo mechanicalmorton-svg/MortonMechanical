@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/admin-route";
 import { createId, deleteWorkOrder, loadWorkOrders, resolveWorkOrderLinks, upsertWorkOrder } from "@/lib/shop-data";
-import type { Priority, WorkOrder, WorkOrderStatus } from "@/lib/shop-types";
+import type { Priority, WorkOrder } from "@/lib/shop-types";
+import { normalizeWorkOrderStatus } from "@/lib/work-order-status";
 
-function parseStatus(value: unknown): WorkOrderStatus {
-  if (value === "in_progress" || value === "completed" || value === "cancelled" || value === "open") return value;
-  return "open";
+function parseStatus(value: unknown) {
+  return normalizeWorkOrderStatus(value);
 }
 
 function parsePriority(value: unknown): Priority {

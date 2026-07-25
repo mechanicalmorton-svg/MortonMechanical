@@ -53,7 +53,7 @@ create table if not exists work_orders (
   vehicle text default '',
   customer_concern text default '',
   service text not null,
-  status text not null default 'open',
+  status text not null default 'draft',
   priority text not null default 'normal',
   assigned_to text,
   notes text,

@@ -1,4 +1,12 @@
-export type WorkOrderStatus = "open" | "in_progress" | "completed" | "cancelled";
+export type WorkOrderStatus =
+  | "draft"
+  | "scheduled"
+  | "in_progress"
+  | "waiting_on_parts"
+  | "waiting_customer"
+  | "completed"
+  | "delivered"
+  | "cancelled";
 export type Priority = "normal" | "urgent";
 export type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled";
 export type PaymentStatus = "unpaid" | "paid" | "deposit_paid";

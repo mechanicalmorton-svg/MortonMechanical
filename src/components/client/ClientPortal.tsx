@@ -137,7 +137,7 @@ export function ClientPortal() {
                   <li key={order.id} className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium text-slate-100">{order.service}</p>
-                      <StatusBadge status={order.status === "open" ? "pending" : order.status} />
+                      <StatusBadge status={order.status} />
                       <StatusBadge status={order.paymentStatus ?? "unpaid"} />
                     </div>
                     <p className="mt-1 text-xs text-slate-500">{order.vehicle || "Vehicle on file"}</p>

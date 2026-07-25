@@ -20,6 +20,14 @@ import {
   UserRound,
 } from "lucide-react";
 import type { StaffMember, WorkOrder, WorkOrderDocumentKind, WorkOrderStatus } from "@/lib/shop-types";
+import {
+  WORK_ORDER_DONE_STATUSES,
+  WORK_ORDER_IN_SHOP_STATUSES,
+  WORK_ORDER_QUEUED_STATUSES,
+  WORK_ORDER_STATUSES,
+  WORK_ORDER_STATUS_LABELS,
+  isWorkOrderClosed,
+} from "@/lib/work-order-status";
 import { adminGet, adminSend, asStaffList } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
@@ -33,7 +41,7 @@ const actionBtn =
 const docActionBtn =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-slate-200 transition hover:border-cyan-500/35 hover:bg-slate-800/80 hover:text-cyan-100 active:scale-[0.98]";
 
-type StatusFilter = "pending" | "in_progress" | "completed" | "overdue" | null;
+type StatusFilter = "queued" | "in_shop" | "done" | "overdue" | WorkOrderStatus | null;
 
 function formatOrderNumber(id: string) {
   const compact = id.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
@@ -48,16 +56,12 @@ function formatDate(value?: string) {
 }
 
 function isOverdue(order: WorkOrder) {
-  if (!order.scheduledDate || order.status === "completed" || order.status === "cancelled") return false;
+  if (!order.scheduledDate || isWorkOrderClosed(order.status)) return false;
   const due = new Date(order.scheduledDate);
   const today = new Date();
   due.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
   return due < today;
-}
-
-function statusBadgeKey(status: WorkOrderStatus) {
-  return status === "open" ? "pending" : status;
 }
 
 function FilterStatCard({
@@ -142,9 +146,9 @@ export function WorkOrdersPanel() {
 
   const counts = useMemo(
     () => ({
-      pending: items.filter((w) => w.status === "open").length,
-      inProgress: items.filter((w) => w.status === "in_progress").length,
-      completed: items.filter((w) => w.status === "completed").length,
+      queued: items.filter((w) => WORK_ORDER_QUEUED_STATUSES.includes(w.status)).length,
+      inShop: items.filter((w) => WORK_ORDER_IN_SHOP_STATUSES.includes(w.status)).length,
+      done: items.filter((w) => WORK_ORDER_DONE_STATUSES.includes(w.status)).length,
       overdue: items.filter(isOverdue).length,
     }),
     [items],
@@ -154,10 +158,20 @@ export function WorkOrdersPanel() {
     const query = search.trim().toLowerCase();
 
     return items.filter((order) => {
-      if (statusFilter === "pending" && order.status !== "open") return false;
-      if (statusFilter === "in_progress" && order.status !== "in_progress") return false;
-      if (statusFilter === "completed" && order.status !== "completed") return false;
+      if (statusFilter === "queued" && !WORK_ORDER_QUEUED_STATUSES.includes(order.status)) return false;
+      if (statusFilter === "in_shop" && !WORK_ORDER_IN_SHOP_STATUSES.includes(order.status)) return false;
+      if (statusFilter === "done" && !WORK_ORDER_DONE_STATUSES.includes(order.status)) return false;
       if (statusFilter === "overdue" && !isOverdue(order)) return false;
+      if (
+        statusFilter &&
+        statusFilter !== "queued" &&
+        statusFilter !== "in_shop" &&
+        statusFilter !== "done" &&
+        statusFilter !== "overdue" &&
+        order.status !== statusFilter
+      ) {
+        return false;
+      }
 
       if (filterAssigned && order.assignedTo !== filterAssigned) return false;
 
@@ -304,28 +318,28 @@ export function WorkOrdersPanel() {
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <FilterStatCard
-          label="Pending"
-          value={counts.pending}
+          label="Draft / Scheduled"
+          value={counts.queued}
           icon={Clock}
           accent="blue"
-          active={statusFilter === "pending"}
-          onClick={() => toggleStatusFilter("pending")}
+          active={statusFilter === "queued"}
+          onClick={() => toggleStatusFilter("queued")}
         />
         <FilterStatCard
-          label="In Progress"
-          value={counts.inProgress}
+          label="In Shop"
+          value={counts.inShop}
           icon={AlertTriangle}
           accent="amber"
-          active={statusFilter === "in_progress"}
-          onClick={() => toggleStatusFilter("in_progress")}
+          active={statusFilter === "in_shop"}
+          onClick={() => toggleStatusFilter("in_shop")}
         />
         <FilterStatCard
-          label="Completed"
-          value={counts.completed}
+          label="Completed / Delivered"
+          value={counts.done}
           icon={CheckCircle2}
           accent="emerald"
-          active={statusFilter === "completed"}
-          onClick={() => toggleStatusFilter("completed")}
+          active={statusFilter === "done"}
+          onClick={() => toggleStatusFilter("done")}
         />
         <FilterStatCard
           label="Overdue"
@@ -338,7 +352,7 @@ export function WorkOrdersPanel() {
       </div>
 
       <div className="mb-6 rounded-2xl border border-slate-800/80 bg-slate-900/40 p-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_minmax(14rem,0.9fr)_minmax(12rem,0.7fr)]">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(12rem,0.8fr)_minmax(14rem,0.9fr)_minmax(12rem,0.7fr)]">
           <label className="relative block">
             <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Search
@@ -352,6 +366,35 @@ export function WorkOrdersPanel() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </span>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Status
+            </span>
+            <select
+              className={inputClass}
+              value={
+                statusFilter &&
+                statusFilter !== "queued" &&
+                statusFilter !== "in_shop" &&
+                statusFilter !== "done" &&
+                statusFilter !== "overdue"
+                  ? statusFilter
+                  : ""
+              }
+              onChange={(e) => {
+                const value = e.target.value;
+                setStatusFilter(value ? (value as WorkOrderStatus) : null);
+              }}
+            >
+              <option value="">All statuses</option>
+              {WORK_ORDER_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {WORK_ORDER_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="block">
@@ -431,7 +474,7 @@ export function WorkOrdersPanel() {
         {viewOrder && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={statusBadgeKey(viewOrder.status)} />
+              <StatusBadge status={viewOrder.status} />
               <StatusBadge status={viewOrder.priority === "urgent" ? "urgent" : "normal"} />
               {isOverdue(viewOrder) && <StatusBadge status="overdue" />}
               <StatusBadge status={viewOrder.paymentStatus ?? "unpaid"} />
@@ -491,8 +534,13 @@ export function WorkOrdersPanel() {
               ) : null}
             </dl>
             <div className="flex flex-wrap gap-2 border-t border-slate-800 pt-4">
-              {viewOrder.status === "open" && (
+              {(viewOrder.status === "draft" || viewOrder.status === "scheduled") && (
                 <>
+                  {viewOrder.status === "draft" ? (
+                    <button type="button" onClick={() => patch(viewOrder.id, { status: "scheduled" })} className={btnSecondary}>
+                      Mark scheduled
+                    </button>
+                  ) : null}
                   <button type="button" onClick={() => patch(viewOrder.id, { status: "in_progress" })} className={btnPrimary}>
                     Start job
                   </button>
@@ -501,8 +549,32 @@ export function WorkOrdersPanel() {
                   </button>
                 </>
               )}
-              {viewOrder.status === "in_progress" && (
+              {(viewOrder.status === "in_progress" ||
+                viewOrder.status === "waiting_on_parts" ||
+                viewOrder.status === "waiting_customer") && (
                 <>
+                  {viewOrder.status !== "in_progress" ? (
+                    <button type="button" onClick={() => patch(viewOrder.id, { status: "in_progress" })} className={btnSecondary}>
+                      Resume job
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => patch(viewOrder.id, { status: "waiting_on_parts" })}
+                        className={btnSecondary}
+                      >
+                        Waiting on parts
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => patch(viewOrder.id, { status: "waiting_customer" })}
+                        className={btnSecondary}
+                      >
+                        Waiting customer
+                      </button>
+                    </>
+                  )}
                   <button type="button" onClick={() => complete(viewOrder.id)} className={btnPrimary}>
                     Complete
                   </button>
@@ -510,6 +582,11 @@ export function WorkOrdersPanel() {
                     Cancel
                   </button>
                 </>
+              )}
+              {viewOrder.status === "completed" && (
+                <button type="button" onClick={() => patch(viewOrder.id, { status: "delivered" })} className={btnPrimary}>
+                  Mark delivered
+                </button>
               )}
               <button type="button" onClick={() => openDocument("work-order", viewOrder)} className={btnSecondary}>
                 <ClipboardList className="h-3.5 w-3.5" /> Work order
@@ -590,7 +667,7 @@ export function WorkOrdersPanel() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
-                        <StatusBadge status={statusBadgeKey(order.status)} />
+                        <StatusBadge status={order.status} />
                         {isOverdue(order) && <StatusBadge status="overdue" />}
                         <StatusBadge status={order.paymentStatus ?? "unpaid"} />
                       </div>
