@@ -74,6 +74,19 @@ function rejectedPortalResponse(portal: LoginPortal, cookieNames: string[]) {
   return response;
 }
 
+/** Last write wins so clears queued before sign-in cannot wipe the new session cookies. */
+function applyPendingCookies(response: NextResponse, pending: PendingCookie[]) {
+  const latest = new Map<string, PendingCookie>();
+  for (const cookie of pending) latest.set(cookie.name, cookie);
+  for (const { name, value, options } of latest.values()) {
+    response.cookies.set(name, value, {
+      path: "/",
+      sameSite: "lax",
+      ...options,
+    });
+  }
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
   const portal = parsePortal(body.portal);
@@ -100,16 +113,11 @@ export async function POST(req: Request) {
     const cookieStore = await cookies();
     const pendingCookies: PendingCookie[] = [];
 
-    // Clear stale auth cookies so an old ES256 token without `kid` is not sent as Authorization.
+    // Queue clears for stale auth cookies (applied on the response only).
+    // Do not mutate the request cookie store mid-flight — that can drop the new session.
     for (const cookie of cookieStore.getAll()) {
       if (!isAuthTokenCookie(cookie.name)) continue;
-      const clear = { path: "/", maxAge: 0 } as const;
-      pendingCookies.push({ name: cookie.name, value: "", options: clear });
-      try {
-        cookieStore.set(cookie.name, "", clear);
-      } catch {
-        /* ignore */
-      }
+      pendingCookies.push({ name: cookie.name, value: "", options: { path: "/", maxAge: 0 } });
     }
 
     const supabase = createServerClient(url, key, {
@@ -121,11 +129,6 @@ export async function POST(req: Request) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
             pendingCookies.push({ name, value, options });
-            try {
-              cookieStore.set(name, value, options);
-            } catch {
-              /* cookie store may be read-only in some runtimes */
-            }
           });
         },
       },
@@ -167,10 +170,7 @@ export async function POST(req: Request) {
       },
     });
 
-    for (const { name, value, options } of pendingCookies) {
-      response.cookies.set(name, value, options);
-    }
-
+    applyPendingCookies(response, pendingCookies);
     return response;
   }
 

@@ -146,6 +146,11 @@ type CookieSession = {
  */
 function parseSessionRaw(rawValue: string): CookieSession | null {
   let raw = rawValue;
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+    /* keep original */
+  }
   if (raw.startsWith("base64-")) raw = raw.slice("base64-".length);
 
   const attempts = [

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowRight, Lock, Mail, ShieldCheck, Truck, Wrench } from "lucide-react";
 import { SiteLogo } from "@/components/SiteLogo";
@@ -61,7 +60,6 @@ const PORTAL_COPY: Record<
 };
 
 export function LoginForm({ useEmailLogin = false, portal = "admin" }: Props) {
-  const router = useRouter();
   const toast = useAdminToast();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -81,13 +79,14 @@ export function LoginForm({ useEmailLogin = false, portal = "admin" }: Props) {
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    setLoading(false);
     if (!res.ok) {
+      setLoading(false);
       toast.error(data.error ?? "Login failed.");
       return;
     }
-    router.push("/admin");
-    router.refresh();
+    // Hard navigation so the browser sends the newly set auth cookies on /admin.
+    // Soft router.push/refresh can race and bounce back to the login screen.
+    window.location.assign("/admin");
   }
 
   return (
