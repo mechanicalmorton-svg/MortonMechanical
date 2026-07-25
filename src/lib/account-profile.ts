@@ -1,8 +1,9 @@
 import { updatePassword } from "./auth";
 import { isJwtKeyError, sanitizeAuthError } from "./auth-errors";
 import { getPublishableKey, getSupabaseAdmin, getSupabaseUrl, isSupabaseAuthConfigured } from "./supabase/server";
-import { createAuthServerClient, isAllowedAdminEmail } from "./supabase/server-auth";
+import { isAllowedAdminEmail } from "./supabase/server-auth";
 import { createClient } from "@supabase/supabase-js";
+import { normalizeRoleIds, pickPrimaryRoleId } from "./role-definitions";
 import type { StaffRole } from "./shop-types";
 
 function friendlyAuthAdminError(message: string | undefined, fallback: string) {
@@ -15,6 +16,7 @@ export type AccountProfile = {
   email: string;
   phone: string;
   role: StaffRole;
+  roleIds: StaffRole[];
   avatarUrl?: string;
   usesSupabaseAuth: boolean;
 };
@@ -62,22 +64,36 @@ async function upsertStaffProfile(userId: string, patch: Record<string, unknown>
     email: "",
     phone: "",
     role: "mechanic",
+    role_ids: ["mechanic"],
     active: true,
     created_at: new Date().toISOString(),
   };
 
-  const { error } = await admin.from("staff").upsert({ ...base, ...patch, id: base.id, auth_user_id: userId });
-  if (error) throw new Error(error.message);
+  const next = { ...base, ...patch, id: base.id, auth_user_id: userId };
+  const { error } = await admin.from("staff").upsert(next);
+  if (error) {
+    const lower = error.message.toLowerCase();
+    if (lower.includes("role_ids")) {
+      const { role_ids: _ignored, ...withoutRoleIds } = next as Record<string, unknown>;
+      const { error: fallbackError } = await admin.from("staff").upsert(withoutRoleIds);
+      if (fallbackError) throw new Error(fallbackError.message);
+      return;
+    }
+    throw new Error(error.message);
+  }
 }
 
 export async function getAccountProfile(userId: string, fallback?: Partial<AccountProfile>): Promise<AccountProfile> {
   if (!isSupabaseAuthConfigured()) {
+    const role = fallback?.role ?? "owner";
+    const roleIds = normalizeRoleIds(fallback?.roleIds, role);
     return {
       id: userId,
       name: fallback?.name ?? "Admin",
       email: fallback?.email ?? fallback?.name ?? "",
       phone: "",
-      role: fallback?.role ?? "owner",
+      role: pickPrimaryRoleId(roleIds) as StaffRole,
+      roleIds,
       usesSupabaseAuth: false,
     };
   }
@@ -111,6 +127,11 @@ export async function getAccountProfile(userId: string, fallback?: Partial<Accou
     "";
   if (!email) throw new Error(friendlyAuthAdminError(undefined, "User not found."));
 
+  const roleIds = normalizeRoleIds(
+    (staff as { role_ids?: unknown } | null)?.role_ids ?? fallback?.roleIds,
+    (staff?.role as StaffRole | undefined) || fallback?.role || "mechanic",
+  );
+
   return {
     id: userId,
     name:
@@ -120,7 +141,8 @@ export async function getAccountProfile(userId: string, fallback?: Partial<Accou
       email.split("@")[0],
     email,
     phone: (staff?.phone as string | undefined) || authPhone || "",
-    role: ((staff?.role as StaffRole | undefined) || fallback?.role || "mechanic") as StaffRole,
+    role: pickPrimaryRoleId(roleIds) as StaffRole,
+    roleIds,
     avatarUrl:
       (staff?.avatar_url as string | undefined) ||
       (typeof metadata.avatar_url === "string" ? metadata.avatar_url : undefined),
@@ -180,6 +202,7 @@ export async function updateAccountProfile(
     email: nextEmail,
     phone: nextPhone,
     role: current.role,
+    role_ids: current.roleIds,
     active: true,
   });
 
@@ -222,13 +245,19 @@ export async function sendAccountPasswordReset(email: string) {
     throw new Error("Only @mortonsmechanical.com email addresses can reset portal access.");
   }
 
-  const supabase = await createAuthServerClient();
-  if (!supabase) throw new Error("Auth is not configured.");
+  // Do not use the cookie-backed SSR client — a leftover ES256 session JWT without
+  // `kid` can be attached as Authorization and fail Auth before the reset is sent.
+  const url = getSupabaseUrl();
+  const key = getPublishableKey();
+  if (!url || !key) throw new Error("Auth is not configured.");
 
+  const supabase = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${siteUrl()}/admin/login`,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyAuthAdminError(error.message, "Could not send reset email."));
 }
 
 export async function uploadAccountAvatar(userId: string, file: File | Blob, contentType: string) {

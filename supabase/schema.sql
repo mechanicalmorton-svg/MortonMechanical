@@ -135,12 +135,31 @@ create table if not exists staff (
   email text not null,
   phone text default '',
   role text not null default 'mechanic',
+  role_ids text[],
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
 
+create table if not exists staff_roles (
+  id text primary key,
+  name text not null,
+  color text not null default 'slate',
+  system boolean not null default false,
+  permissions jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- Link staff records to Supabase Auth users on existing databases
 alter table staff add column if not exists auth_user_id uuid;
+
+-- Multi-role assignment (primary role remains in `role`)
+alter table staff add column if not exists role_ids text[];
+update staff
+set role_ids = array[role]
+where (role_ids is null or cardinality(role_ids) = 0)
+  and role is not null
+  and btrim(role) <> '';
 
 -- Backfill auth_user_id when id is already a Supabase Auth UUID
 update staff
@@ -237,6 +256,7 @@ alter table bookings enable row level security;
 alter table inventory enable row level security;
 alter table inventory_categories enable row level security;
 alter table staff enable row level security;
+alter table staff_roles enable row level security;
 alter table fleet enable row level security;
 alter table routes enable row level security;
 alter table customers enable row level security;

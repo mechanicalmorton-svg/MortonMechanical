@@ -20,7 +20,14 @@ export async function GET() {
 
 export async function POST(req: Request) {
   return withAdminAuth(async (user) => {
-    if (!canManageUsers(user.role)) {
+    if (
+      !(
+        user.permissions?.manageUsers ||
+        canManageUsers(user.role) ||
+        user.roleIds?.includes("owner") ||
+        user.roleIds?.includes("admin")
+      )
+    ) {
       return NextResponse.json(
         { error: "Only the owner or an admin can create inventory categories." },
         { status: 403 },
@@ -44,7 +51,14 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   return withAdminAuth(async (user) => {
-    if (!canManageUsers(user.role)) {
+    if (
+      !(
+        user.permissions?.manageUsers ||
+        canManageUsers(user.role) ||
+        user.roleIds?.includes("owner") ||
+        user.roleIds?.includes("admin")
+      )
+    ) {
       return NextResponse.json(
         { error: "Only the owner or an admin can delete inventory categories." },
         { status: 403 },

@@ -1,7 +1,9 @@
 export type WorkOrderStatus = "open" | "in_progress" | "completed" | "cancelled";
 export type Priority = "normal" | "urgent";
 export type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled";
-export type StaffRole = "owner" | "mechanic" | "dispatcher" | "admin";
+/** Built-in role ids plus any custom role ids created in User Management. */
+export type StaffRole = string;
+export type BuiltInStaffRole = "owner" | "mechanic" | "dispatcher" | "admin";
 export type FleetStatus = "active" | "maintenance" | "retired";
 export type RouteStatus = "planned" | "in_progress" | "completed";
 
@@ -151,7 +153,10 @@ export type StaffMember = {
   name: string;
   email: string;
   phone: string;
+  /** Primary / legacy single role (first or highest-priority of roleIds). */
   role: StaffRole;
+  /** All assigned role ids. Prefer this over `role` when reading. */
+  roleIds: StaffRole[];
   active: boolean;
   createdAt: string;
   lastSignIn?: string | null;

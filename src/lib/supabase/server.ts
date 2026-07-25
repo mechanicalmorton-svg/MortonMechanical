@@ -6,17 +6,31 @@ export function getSupabaseUrl() {
   return process.env.NEXT_PUBLIC_SUPABASE_URL;
 }
 
+function firstDefined(...values: Array<string | undefined>) {
+  for (const value of values) {
+    if (value?.trim()) return value.trim();
+  }
+  return undefined;
+}
+
 /** Publishable key (new `sb_publishable_...` or legacy anon JWT). */
 export function getPublishableKey() {
-  return (
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
+  const publishable = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  // Prefer opaque publishable keys when both are present.
+  if (publishable?.startsWith("sb_publishable_")) return publishable;
+  if (anon?.startsWith("sb_publishable_")) return anon;
+  return firstDefined(publishable, anon);
 }
 
 /** Secret key (new `sb_secret_...` or legacy service_role JWT). Server only. */
 export function getSecretKey() {
-  return process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secret = process.env.SUPABASE_SECRET_KEY?.trim();
+  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  // Prefer opaque secret keys — legacy service_role JWTs break Auth Admin under ES256.
+  if (secret?.startsWith("sb_secret_")) return secret;
+  if (serviceRole?.startsWith("sb_secret_")) return serviceRole;
+  return firstDefined(secret, serviceRole);
 }
 
 export function isSupabaseConfigured() {

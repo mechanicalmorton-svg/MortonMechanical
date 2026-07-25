@@ -294,6 +294,10 @@ body {
   border-color: rgba(240, 171, 252, 0.35);
 }
 
+.admin-glass-chip--custom {
+  color: #fff;
+}
+
 .admin-glass-title {
   position: relative;
   display: block;

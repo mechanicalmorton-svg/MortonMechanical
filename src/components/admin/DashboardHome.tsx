@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Calendar, ClipboardList, DollarSign, MapPin, Plus, Wrench } from "lucide-react";
 import type { Booking, DashboardStats, InventoryItem, StaffRole, WorkOrder } from "@/lib/shop-types";
-import { canManageUsers } from "@/lib/admin-roles";
 import { adminGet } from "./admin-fetch";
 import type { Tab } from "./AdminDashboard";
 import { AdminModal } from "./AdminModal";
@@ -13,6 +12,7 @@ import { EmptyState, PageHeader, Panel, StatCard, StatusBadge, btnSecondary } fr
 type Props = {
   name: string;
   role: StaffRole;
+  canManageUsers?: boolean;
   onNavigate: (tab: Tab) => void;
 };
 
@@ -34,7 +34,7 @@ function formatOrderNumber(id: string) {
   return `WO-${compact.slice(-12) || id.slice(0, 12).toUpperCase()}`;
 }
 
-export function DashboardHome({ name, role, onNavigate }: Props) {
+export function DashboardHome({ name, canManageUsers = false, onNavigate }: Props) {
   const toast = useAdminToast();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,7 +55,7 @@ export function DashboardHome({ name, role, onNavigate }: Props) {
     { label: "Quote Requests", tab: "quotes" },
     { label: "My Route Today", tab: "routes-today" },
   ];
-  if (canManageUsers(role)) quickActions.push({ label: "Add User", tab: "users" });
+  if (canManageUsers) quickActions.push({ label: "Add User", tab: "users" });
 
   const mtdTotal = data?.mtdCompletedJobs.reduce((sum, job) => sum + (job.revenue ?? 0), 0) ?? 0;
 

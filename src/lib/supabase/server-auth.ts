@@ -5,6 +5,10 @@ import type { User } from "@supabase/supabase-js";
 import { isJwtKeyError } from "../auth-errors";
 import { getPublishableKey, getSupabaseUrl, getSupabaseAdmin, isSupabaseAuthConfigured } from "./server";
 import type { StaffRole } from "../shop-types";
+import {
+  resolveUserRoles,
+  type RolePermissions,
+} from "../role-definitions";
 
 export async function createAuthServerClient() {
   if (!isSupabaseAuthConfigured()) return null;
@@ -59,12 +63,26 @@ export function isAllowedAdminEmail(email: string | undefined) {
   return email.toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`);
 }
 
+export type AdminUserRoleSummary = {
+  id: string;
+  name: string;
+  color: string;
+};
+
 export type AdminUser = {
   id: string;
   username: string;
   email: string;
   name: string;
+  /** Primary role (owner/admin priority, else first). */
   role: StaffRole;
+  /** All assigned role ids. */
+  roleIds: StaffRole[];
+  /** Display summaries for every assigned role. */
+  roles: AdminUserRoleSummary[];
+  roleName: string;
+  roleColor: string;
+  permissions: RolePermissions;
   phone?: string;
   avatarUrl?: string;
 };
@@ -195,47 +213,136 @@ async function loadStaffProfile(userId: string) {
   try {
     const { data: staffById, error: byIdError } = await admin
       .from("staff")
-      .select("name, email, role, phone, avatar_url")
+      .select("name, email, role, role_ids, phone, avatar_url")
       .eq("id", userId)
       .maybeSingle();
     if (!byIdError && staffById) return staffById;
 
+    // Older DBs may not have role_ids yet — retry without it.
+    if (byIdError?.message?.toLowerCase().includes("role_ids")) {
+      const { data: staffByIdLegacy, error: legacyError } = await admin
+        .from("staff")
+        .select("name, email, role, phone, avatar_url")
+        .eq("id", userId)
+        .maybeSingle();
+      if (!legacyError && staffByIdLegacy) return staffByIdLegacy;
+    }
+
     const { data: staffByAuth, error: byAuthError } = await admin
       .from("staff")
-      .select("name, email, role, phone, avatar_url")
+      .select("name, email, role, role_ids, phone, avatar_url")
       .eq("auth_user_id", userId)
       .maybeSingle();
     if (!byAuthError && staffByAuth) return staffByAuth;
+
+    if (byAuthError?.message?.toLowerCase().includes("role_ids")) {
+      const { data: staffByAuthLegacy, error: legacyAuthError } = await admin
+        .from("staff")
+        .select("name, email, role, phone, avatar_url")
+        .eq("auth_user_id", userId)
+        .maybeSingle();
+      if (!legacyAuthError && staffByAuthLegacy) return staffByAuthLegacy;
+    }
   } catch {
     /* admin key may be unverifiable — continue without staff row */
   }
   return null;
 }
 
-function buildAdminUser(
+async function buildAdminUser(
   user: { id: string; email: string; user_metadata?: Record<string, unknown> },
   staff?: {
     name?: string | null;
     email?: string | null;
     role?: string | null;
+    role_ids?: string[] | null;
     phone?: string | null;
     avatar_url?: string | null;
   } | null,
-): AdminUser | null {
+): Promise<AdminUser | null> {
   const email = (user.email || staff?.email || "").toLowerCase();
   if (!isAllowedAdminEmail(email)) return null;
 
   let name =
     (typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : undefined) ||
     emailToDisplayName(email);
-  let role: StaffRole = "mechanic";
   let phone = typeof staff?.phone === "string" ? staff.phone : "";
   let avatarUrl =
     (typeof staff?.avatar_url === "string" ? staff.avatar_url : undefined) ||
     (typeof user.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : undefined);
 
   if (staff?.name) name = staff.name;
-  if (staff?.role) role = staff.role as StaffRole;
+
+  let role: StaffRole = "mechanic";
+  let roleIds: StaffRole[] = ["mechanic"];
+  let roles: AdminUser["roles"] = [{ id: "mechanic", name: "Mechanic", color: "slate" }];
+  let roleName = "Mechanic";
+  let roleColor = "slate";
+  let permissions: RolePermissions = {
+    tabs: ["dashboard", "work-orders", "bookings", "routes-today"],
+    manageUsers: false,
+    editSiteContent: false,
+  };
+
+  try {
+    // Dynamic import avoids a circular dependency with shop-data/staff-auth.
+    const { loadRoleDefinitions } = await import("../shop-data");
+    const definitions = await loadRoleDefinitions();
+    const resolved = resolveUserRoles(definitions, staff?.role_ids, staff?.role);
+    role = resolved.primary.id;
+    roleIds = resolved.roleIds;
+    roles = resolved.roles.map((item) => ({
+      id: item.id,
+      name: item.name,
+      color: item.color,
+    }));
+    roleName = resolved.primary.name;
+    roleColor = resolved.primary.color;
+    permissions = resolved.permissions;
+  } catch {
+    const fallbackIds = Array.isArray(staff?.role_ids) && staff.role_ids.length
+      ? staff.role_ids.map(String)
+      : staff?.role
+        ? [String(staff.role)]
+        : ["mechanic"];
+    roleIds = fallbackIds;
+    role = (fallbackIds.includes("owner")
+      ? "owner"
+      : fallbackIds.includes("admin")
+        ? "admin"
+        : fallbackIds[0] || "mechanic") as StaffRole;
+    if (role === "owner" || role === "admin" || fallbackIds.includes("owner") || fallbackIds.includes("admin")) {
+      const elevated = role === "owner" || fallbackIds.includes("owner");
+      role = elevated ? "owner" : "admin";
+      roleName = elevated ? "Founder" : "Admin";
+      roleColor = elevated ? "sky" : "violet";
+      roles = fallbackIds.map((id) => ({
+        id,
+        name: id === "owner" ? "Founder" : id === "admin" ? "Admin" : id,
+        color: id === "owner" ? "sky" : id === "admin" ? "violet" : "slate",
+      }));
+      permissions = {
+        tabs: [
+          "dashboard",
+          "inventory-all",
+          "inventory-low",
+          "work-orders",
+          "bookings",
+          "quotes",
+          "users",
+          "fleet",
+          "routes-manager",
+          "routes-today",
+          "site-contents",
+        ],
+        manageUsers: true,
+        editSiteContent: true,
+      };
+    } else {
+      roles = fallbackIds.map((id) => ({ id, name: id, color: "slate" }));
+      roleName = role;
+    }
+  }
 
   return {
     id: user.id,
@@ -243,6 +350,11 @@ function buildAdminUser(
     username: email.split("@")[0],
     name,
     role,
+    roleIds,
+    roles,
+    roleName,
+    roleColor,
+    permissions,
     phone,
     avatarUrl,
   };
@@ -297,7 +409,7 @@ export async function getSupabaseAuthUser(): Promise<AdminUser | null> {
 
   if (!email) return null;
 
-  return buildAdminUser(
+  return await buildAdminUser(
     {
       id: userId,
       email,

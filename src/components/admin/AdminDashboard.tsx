@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { SiteLogo } from "@/components/SiteLogo";
-import { canAccessTab, canManageUsers } from "@/lib/admin-roles";
+import { userHasOwnerRole, type RolePermissions } from "@/lib/role-definitions";
 import type { StaffRole } from "@/lib/shop-types";
 import { RoleBadge } from "./admin-ui";
 import { BookingsPanel } from "./BookingsPanel";
@@ -58,9 +58,49 @@ type Props = {
     email?: string;
     phone?: string;
     role: StaffRole;
+    roleIds?: StaffRole[];
+    roles?: { id: string; name: string; color: string }[];
+    roleName?: string;
+    roleColor?: string;
+    permissions?: RolePermissions;
     avatarUrl?: string;
   };
 };
+
+function displayRoles(user: Props["user"]) {
+  if (user.roles?.length) return user.roles;
+  const ids = user.roleIds?.length ? user.roleIds : [user.role];
+  return ids.map((id) => ({
+    id,
+    name: id === user.role ? user.roleName || id : id,
+    color: id === user.role ? user.roleColor || "slate" : "slate",
+  }));
+}
+
+function userCanAccessTab(
+  user: Props["user"],
+  tab: string,
+) {
+  if (userHasOwnerRole(user)) return true;
+  if (tab === "settings") return true;
+  if (tab === "customizer") {
+    return Boolean(user.permissions?.editSiteContent || user.permissions?.tabs.includes("site-contents"));
+  }
+  if (!user.permissions) {
+    // Fallback for older sessions without embedded permissions.
+    return tab !== "users" && tab !== "site-contents" ? true : user.role === "admin" || Boolean(user.roleIds?.includes("admin"));
+  }
+  return user.permissions.tabs.includes(tab);
+}
+
+function userCanManageUsers(user: Props["user"]) {
+  return (
+    userHasOwnerRole(user) ||
+    Boolean(user.permissions?.manageUsers) ||
+    user.role === "admin" ||
+    Boolean(user.roleIds?.includes("admin"))
+  );
+}
 
 type NavItem = {
   id: Tab;
@@ -122,17 +162,17 @@ export function AdminDashboard({ user }: Props) {
   const visibleNav = useMemo(
     () =>
       nav.filter((item) => {
-        if (!canAccessTab(user.role, item.id)) return false;
-        if (item.children) return item.children.some((child) => canAccessTab(user.role, child.id));
+        if (!userCanAccessTab(user, item.id)) return false;
+        if (item.children) return item.children.some((child) => userCanAccessTab(user, child.id));
         return true;
       }),
-    [user.role],
+    [user],
   );
 
   useEffect(() => {
     const syncTab = () => {
       const next = readTabFromHash();
-      if (!canAccessTab(user.role, next)) {
+      if (!userCanAccessTab(user, next)) {
         setTab("dashboard");
         window.location.hash = "dashboard";
         return;
@@ -142,7 +182,7 @@ export function AdminDashboard({ user }: Props) {
     syncTab();
     window.addEventListener("hashchange", syncTab);
     return () => window.removeEventListener("hashchange", syncTab);
-  }, [user.role]);
+  }, [user]);
 
   useEffect(() => {
     if (!userMenuOpen) return;
@@ -156,7 +196,7 @@ export function AdminDashboard({ user }: Props) {
   }, [userMenuOpen]);
 
   function selectTab(id: Tab) {
-    if (!canAccessTab(user.role, id)) return;
+    if (!userCanAccessTab(user, id)) return;
     setTab(id);
     window.location.hash = id;
     setMobileOpen(false);
@@ -180,7 +220,9 @@ export function AdminDashboard({ user }: Props) {
   }
 
   function UserCard() {
-    const founderRing = user.role === "owner" ? "ring-sky-400/40" : "ring-amber-500/30";
+    const isOwner = userHasOwnerRole(user);
+    const founderRing = isOwner ? "ring-sky-400/40" : "ring-amber-500/30";
+    const roleBadges = displayRoles(user);
 
     return (
       <div ref={userMenuRef} className="relative">
@@ -189,8 +231,10 @@ export function AdminDashboard({ user }: Props) {
             <div className="border-b border-slate-800/80 px-4 py-3.5">
               <p className="truncate text-sm font-semibold text-white">{user.name}</p>
               <p className="mt-0.5 truncate text-xs text-slate-500">{user.email}</p>
-              <div className="mt-2.5">
-                <RoleBadge role={user.role} />
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {roleBadges.map((role) => (
+                  <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} />
+                ))}
               </div>
             </div>
             <div className="p-1.5">
@@ -246,7 +290,7 @@ export function AdminDashboard({ user }: Props) {
           ) : (
             <span
               className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ring-2 ${
-                user.role === "owner"
+                isOwner
                   ? "bg-sky-500/15 text-sky-200 ring-sky-400/40"
                   : "bg-gradient-to-br from-amber-500/20 to-pink-600/20 text-amber-200 ring-amber-500/30"
               }`}
@@ -256,8 +300,10 @@ export function AdminDashboard({ user }: Props) {
           )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-slate-100">{user.name}</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <RoleBadge role={user.role} />
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {roleBadges.map((role) => (
+                <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} />
+              ))}
             </div>
           </div>
           <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition ${userMenuOpen ? "rotate-180" : ""}`} />
@@ -301,7 +347,7 @@ export function AdminDashboard({ user }: Props) {
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         <p className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">Workspace</p>
         {visibleNav.map((item) => {
-          const children = item.children?.filter((child) => canAccessTab(user.role, child.id));
+          const children = item.children?.filter((child) => userCanAccessTab(user, child.id));
           return (
             <div key={item.id}>
               {children?.length ? (
@@ -390,13 +436,13 @@ export function AdminDashboard({ user }: Props) {
                         src={user.avatarUrl}
                         alt=""
                         className={`h-7 w-7 rounded-full object-cover ring-2 ${
-                          user.role === "owner" ? "ring-sky-400/40" : "ring-amber-500/35"
+                          userHasOwnerRole(user) ? "ring-sky-400/40" : "ring-amber-500/35"
                         }`}
                       />
                     ) : (
                       <span
                         className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold ring-2 ${
-                          user.role === "owner"
+                          userHasOwnerRole(user)
                             ? "bg-sky-500/15 text-sky-200 ring-sky-400/40"
                             : "bg-gradient-to-br from-amber-500/25 to-pink-600/20 text-amber-100 ring-amber-500/35"
                         }`}
@@ -418,7 +464,6 @@ export function AdminDashboard({ user }: Props) {
                     </span>
                   </span>
                 </button>
-                <RoleBadge role={user.role} />
               </div>
             </div>
           </header>
@@ -429,17 +474,28 @@ export function AdminDashboard({ user }: Props) {
               <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-pink-600/10 blur-3xl" />
             </div>
             <div key={tab} className="admin-rise relative p-4 sm:p-6 lg:p-8">
-              {tab === "dashboard" && <DashboardHome name={user.name} role={user.role} onNavigate={selectTab} />}
-              {tab === "inventory-all" && <InventoryPanel role={user.role} />}
-              {tab === "inventory-low" && <InventoryPanel lowStockOnly role={user.role} />}
+              {tab === "dashboard" && (
+                <DashboardHome
+                  name={user.name}
+                  role={user.role}
+                  canManageUsers={userCanManageUsers(user)}
+                  onNavigate={selectTab}
+                />
+              )}
+              {tab === "inventory-all" && (
+                <InventoryPanel role={user.role} canManageCategories={userCanManageUsers(user)} />
+              )}
+              {tab === "inventory-low" && (
+                <InventoryPanel lowStockOnly role={user.role} canManageCategories={userCanManageUsers(user)} />
+              )}
               {tab === "work-orders" && <WorkOrdersPanel />}
               {tab === "bookings" && <BookingsPanel />}
               {tab === "quotes" && <QuotesPanel />}
-              {tab === "users" && canManageUsers(user.role) && <StaffPanel />}
+              {tab === "users" && userCanManageUsers(user) && <StaffPanel currentUserId={user.id} />}
               {tab === "fleet" && <FleetPanel />}
               {tab === "routes-manager" && <RoutesPanel />}
               {tab === "routes-today" && <RoutesPanel todayOnly userId={user.id} />}
-              {tab === "site-contents" && canAccessTab(user.role, "site-contents") && <ContentEditor />}
+              {tab === "site-contents" && userCanAccessTab(user, "site-contents") && <ContentEditor />}
               {tab === "settings" && <SettingsPanel user={user} />}
             </div>
           </main>

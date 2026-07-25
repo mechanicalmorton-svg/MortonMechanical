@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Barcode, ExternalLink, FolderPlus, Minus, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import type { FleetVehicle, InventoryItem, StaffRole } from "@/lib/shop-types";
-import { canManageUsers } from "@/lib/admin-roles";
 import {
   DEFAULT_INVENTORY_CATEGORIES,
   isDefaultInventoryCategory,
@@ -22,7 +21,7 @@ import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { SearchableSelect } from "./SearchableSelect";
 
-type Props = { lowStockOnly?: boolean; role?: StaffRole };
+type Props = { lowStockOnly?: boolean; role?: StaffRole; canManageCategories?: boolean };
 
 const emptyForm = {
   name: "",
@@ -129,9 +128,8 @@ function FormField({
   );
 }
 
-export function InventoryPanel({ lowStockOnly, role }: Props) {
+export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Props) {
   const toast = useAdminToast();
-  const canManageCategories = role ? canManageUsers(role) : false;
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [categories, setCategories] = useState<string[]>([...DEFAULT_INVENTORY_CATEGORIES]);

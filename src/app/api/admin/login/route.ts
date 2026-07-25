@@ -2,8 +2,9 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { AUTH_COOKIE, isSetupComplete, login, logout, setupAdmin } from "@/lib/auth";
+import { normalizeRoleIds } from "@/lib/role-definitions";
 import { isAllowedAdminEmail } from "@/lib/supabase/server-auth";
-import { getPublishableKey, getSupabaseUrl, isSupabaseAuthConfigured } from "@/lib/supabase/server";
+import { getPublishableKey, getSupabaseAdmin, getSupabaseUrl, isSupabaseAuthConfigured } from "@/lib/supabase/server";
 import { isJwtKeyError, sanitizeAuthError } from "@/lib/auth-errors";
 
 type PendingCookie = {
@@ -12,12 +13,70 @@ type PendingCookie = {
   options?: Parameters<NextResponse["cookies"]["set"]>[2];
 };
 
+type LoginPortal = "admin" | "mechanic" | "dispatcher";
+
 function isAuthTokenCookie(name: string) {
   return /^(sb-.*-auth-token)(?:\.\d+)?$/.test(name) || name === AUTH_COOKIE;
 }
 
+function parsePortal(value: unknown): LoginPortal {
+  if (value === "mechanic" || value === "dispatcher" || value === "admin") return value;
+  return "admin";
+}
+
+function portalRoleError(portal: LoginPortal) {
+  if (portal === "mechanic") return "This login is for Mechanics only.";
+  if (portal === "dispatcher") return "This login is for Dispatchers only.";
+  return "You do not have access to this portal.";
+}
+
+async function fetchStaffRow(
+  admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  column: "id" | "auth_user_id" | "email",
+  value: string,
+) {
+  const withIds = await admin.from("staff").select("role, role_ids").eq(column, value).maybeSingle();
+  if (!withIds.error && withIds.data) return withIds.data;
+  if (withIds.error?.message?.toLowerCase().includes("role_ids")) {
+    const legacy = await admin.from("staff").select("role").eq(column, value).maybeSingle();
+    if (!legacy.error && legacy.data) return legacy.data;
+  }
+  return null;
+}
+
+async function loadStaffRoleIds(userId: string, email: string): Promise<string[]> {
+  const admin = getSupabaseAdmin();
+  if (!admin) return [];
+
+  try {
+    const row =
+      (await fetchStaffRow(admin, "id", userId)) ||
+      (await fetchStaffRow(admin, "auth_user_id", userId)) ||
+      (await fetchStaffRow(admin, "email", email));
+    if (!row) return [];
+    return normalizeRoleIds((row as { role_ids?: string[] }).role_ids, (row as { role?: string }).role);
+  } catch {
+    /* admin key may be unverifiable */
+  }
+  return [];
+}
+
+function portalAllowsRoles(portal: LoginPortal, roleIds: string[]) {
+  if (portal === "admin") return true;
+  return roleIds.includes(portal);
+}
+
+function rejectedPortalResponse(portal: LoginPortal, cookieNames: string[]) {
+  const response = NextResponse.json({ error: portalRoleError(portal) }, { status: 403 });
+  for (const name of cookieNames) {
+    response.cookies.set(name, "", { path: "/", maxAge: 0 });
+  }
+  return response;
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
+  const portal = parsePortal(body.portal);
 
   if (isSupabaseAuthConfigured()) {
     const email = (body.email ?? body.username ?? "").trim().toLowerCase();
@@ -82,6 +141,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: message }, { status: 401 });
     }
 
+    if (portal === "mechanic" || portal === "dispatcher") {
+      const roleIds = await loadStaffRoleIds(data.user.id, data.user.email.toLowerCase());
+      if (!portalAllowsRoles(portal, roleIds)) {
+        try {
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {
+          /* still clear cookies below */
+        }
+        const names = [
+          ...new Set([
+            ...pendingCookies.filter((c) => isAuthTokenCookie(c.name)).map((c) => c.name),
+            ...cookieStore.getAll().filter((c) => isAuthTokenCookie(c.name)).map((c) => c.name),
+          ]),
+        ];
+        return rejectedPortalResponse(portal, names);
+      }
+    }
+
     const response = NextResponse.json({
       user: {
         id: data.user.id,
@@ -115,6 +192,13 @@ export async function POST(req: Request) {
 
   const result = await login(body.username ?? "", body.password ?? "");
   if (!result) return NextResponse.json({ error: "Wrong username or password." }, { status: 401 });
+
+  if (portal === "mechanic" || portal === "dispatcher") {
+    const role = (result.user as { role?: string }).role ?? "owner";
+    if (!portalAllowsRoles(portal, normalizeRoleIds(undefined, role))) {
+      return NextResponse.json({ error: portalRoleError(portal) }, { status: 403 });
+    }
+  }
 
   const res = NextResponse.json({ user: result.user });
   res.cookies.set(AUTH_COOKIE, result.token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 7 });

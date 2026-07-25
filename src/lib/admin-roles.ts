@@ -1,29 +1,44 @@
 import type { StaffRole } from "./shop-types";
+import {
+  defaultRoleDefinitions,
+  findRoleDefinition,
+  roleCanAccessTab,
+  roleCanEditSiteContent,
+  roleCanManageUsers,
+  roleChipClassName,
+  type RoleDefinition,
+} from "./role-definitions";
 
-export function canManageUsers(role: StaffRole) {
-  return role === "owner" || role === "admin";
+/** @deprecated Prefer permission helpers with a RoleDefinition or AuthUser permissions. */
+export const roleLabels: Record<string, string> = Object.fromEntries(
+  defaultRoleDefinitions().map((role) => [role.id, role.name]),
+);
+
+/** @deprecated Prefer getRoleBadgeClass(roleId, roles). */
+export const roleBadgeClass: Record<string, string> = Object.fromEntries(
+  defaultRoleDefinitions().map((role) => [role.id, roleChipClassName(role.color)]),
+);
+
+export function getRoleLabel(roleId: StaffRole, roles?: RoleDefinition[]) {
+  return findRoleDefinition(roles ?? defaultRoleDefinitions(), roleId).name;
 }
 
-export function canEditSiteContent(role: StaffRole) {
-  return role === "owner" || role === "admin";
+export function getRoleBadgeClass(roleId: StaffRole, roles?: RoleDefinition[]) {
+  const role = findRoleDefinition(roles ?? defaultRoleDefinitions(), roleId);
+  return roleChipClassName(role.color);
 }
 
-export function canAccessTab(role: StaffRole, tab: string) {
-  if (tab === "users") return canManageUsers(role);
-  if (tab === "site-contents" || tab === "customizer") return canEditSiteContent(role);
-  return true;
+export function canManageUsers(role: StaffRole | RoleDefinition, roles?: RoleDefinition[]) {
+  const definition = typeof role === "string" ? findRoleDefinition(roles ?? defaultRoleDefinitions(), role) : role;
+  return roleCanManageUsers(definition);
 }
 
-export const roleLabels: Record<StaffRole, string> = {
-  owner: "Founder",
-  admin: "Admin",
-  mechanic: "Mechanic",
-  dispatcher: "Dispatcher",
-};
+export function canEditSiteContent(role: StaffRole | RoleDefinition, roles?: RoleDefinition[]) {
+  const definition = typeof role === "string" ? findRoleDefinition(roles ?? defaultRoleDefinitions(), role) : role;
+  return roleCanEditSiteContent(definition);
+}
 
-export const roleBadgeClass: Record<StaffRole, string> = {
-  owner: "admin-glass-chip--sky text-sky-100",
-  admin: "admin-glass-chip--violet text-violet-100",
-  mechanic: "admin-glass-chip--slate text-slate-100",
-  dispatcher: "admin-glass-chip--emerald text-emerald-100",
-};
+export function canAccessTab(role: StaffRole | RoleDefinition, tab: string, roles?: RoleDefinition[]) {
+  const definition = typeof role === "string" ? findRoleDefinition(roles ?? defaultRoleDefinitions(), role) : role;
+  return roleCanAccessTab(definition, tab);
+}

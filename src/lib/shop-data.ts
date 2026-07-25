@@ -30,6 +30,16 @@ import {
   normalizeCategoryName,
   sortInventoryCategories,
 } from "./inventory-categories";
+import {
+  defaultRoleDefinitions,
+  isProtectedRole,
+  mergeRoleDefinitions,
+  normalizeRoleDefinition,
+  normalizeRoleIds,
+  pickPrimaryRoleId,
+  slugifyRoleId,
+  type RoleDefinition,
+} from "./role-definitions";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -844,27 +854,271 @@ export async function deleteInventoryCategory(rawName: string): Promise<string[]
   return sortInventoryCategories(mergeInventoryCategories(nextCustom));
 }
 
+function isMissingStaffRolesTable(message?: string | null) {
+  if (!message) return false;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("staff_roles") &&
+    (lower.includes("schema cache") ||
+      lower.includes("could not find") ||
+      lower.includes("does not exist") ||
+      lower.includes("relation"))
+  );
+}
+
+function roleToRow(role: RoleDefinition) {
+  return {
+    id: role.id,
+    name: role.name,
+    color: role.color,
+    system: role.system,
+    permissions: role.permissions,
+    created_at: role.createdAt,
+    updated_at: role.updatedAt,
+  };
+}
+
+function rowToRole(row: Record<string, unknown>): RoleDefinition {
+  return normalizeRoleDefinition({
+    id: String(row.id ?? ""),
+    name: String(row.name ?? ""),
+    color: String(row.color ?? "slate") as RoleDefinition["color"],
+    system: Boolean(row.system),
+    permissions: row.permissions as RoleDefinition["permissions"],
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+  });
+}
+
+async function loadRolesFromStorage(): Promise<RoleDefinition[]> {
+  try {
+    const client = requireAdminClient();
+    const { data, error } = await client.storage.from("shop-settings").download("staff-roles.json");
+    if (error || !data) return [];
+    const parsed = JSON.parse(await data.text()) as unknown;
+    return Array.isArray(parsed)
+      ? parsed
+          .filter((item): item is RoleDefinition => Boolean(item && typeof item === "object"))
+          .map((item) => normalizeRoleDefinition(item))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveRolesToStorage(roles: RoleDefinition[]) {
+  const client = requireAdminClient();
+  const { data: buckets } = await client.storage.listBuckets();
+  if (!buckets?.some((bucket) => bucket.name === "shop-settings")) {
+    const created = await client.storage.createBucket("shop-settings", {
+      public: false,
+      fileSizeLimit: 512 * 1024,
+    });
+    if (created.error && !created.error.message.toLowerCase().includes("already exists")) {
+      throw created.error;
+    }
+  }
+  const { error } = await client.storage
+    .from("shop-settings")
+    .upload("staff-roles.json", JSON.stringify(roles, null, 2), {
+      contentType: "application/json",
+      upsert: true,
+    });
+  if (error) throw error;
+}
+
+export async function loadRoleDefinitions(): Promise<RoleDefinition[]> {
+  if (useDatabase()) {
+    const client = requireAdminClient();
+    const { data, error } = await client.from("staff_roles").select("*").order("name");
+    if (error && isMissingStaffRolesTable(error.message)) {
+      return mergeRoleDefinitions(await loadRolesFromStorage());
+    }
+    throwOnError(error, "Could not load roles");
+    const stored = (data ?? []).map((row) => rowToRole(row as Record<string, unknown>));
+    return mergeRoleDefinitions(stored);
+  }
+  return mergeRoleDefinitions(readJson<RoleDefinition[]>("staff-roles.json", []));
+}
+
+async function persistRoleDefinitions(roles: RoleDefinition[]) {
+  if (useDatabase()) {
+    const client = requireAdminClient();
+    const { error } = await client.from("staff_roles").upsert(roles.map(roleToRow));
+    if (error && isMissingStaffRolesTable(error.message)) {
+      await saveRolesToStorage(roles);
+      return;
+    }
+    throwOnError(error, "Could not save roles");
+    return;
+  }
+  writeJson("staff-roles.json", roles);
+}
+
+export async function upsertRoleDefinition(
+  input: Partial<RoleDefinition> & { name: string; id?: string },
+): Promise<RoleDefinition[]> {
+  const roles = await loadRoleDefinitions();
+  const stamp = new Date().toISOString();
+  const existing = input.id ? roles.find((role) => role.id === input.id) : undefined;
+
+  if (existing?.id === "owner") {
+    const next = roles.map((role) =>
+      role.id === "owner"
+        ? {
+            ...role,
+            name: input.name.trim() || role.name,
+            color: (input.color as RoleDefinition["color"]) || role.color,
+            permissions: { tabs: role.permissions.tabs, manageUsers: true, editSiteContent: true },
+            updatedAt: stamp,
+          }
+        : role,
+    );
+    await persistRoleDefinitions(next);
+    return mergeRoleDefinitions(next);
+  }
+
+  let id = (input.id || slugifyRoleId(input.name)).trim();
+  if (!existing) {
+    const reserved = new Set(roles.map((role) => role.id));
+    let candidate = id;
+    let n = 2;
+    while (reserved.has(candidate)) {
+      candidate = `${id}-${n}`;
+      n += 1;
+    }
+    id = candidate;
+  }
+
+  const nextRole = normalizeRoleDefinition({
+    id,
+    name: input.name,
+    color: input.color,
+    system: existing?.system ?? false,
+    permissions: input.permissions ?? existing?.permissions,
+    createdAt: existing?.createdAt || stamp,
+    updatedAt: stamp,
+  });
+
+  const next = existing
+    ? roles.map((role) => (role.id === existing.id ? nextRole : role))
+    : [...roles, nextRole];
+
+  await persistRoleDefinitions(next);
+  return mergeRoleDefinitions(next);
+}
+
+export async function deleteRoleDefinition(roleId: string): Promise<RoleDefinition[]> {
+  const id = roleId.trim();
+  const roles = await loadRoleDefinitions();
+  const target = roles.find((role) => role.id === id);
+  if (!target) throw new Error("Role not found.");
+  if (isProtectedRole(target.id)) {
+    throw new Error("The Founder role cannot be deleted.");
+  }
+
+  const staff = await loadStaff();
+  if (
+    staff.some((member) => {
+      const ids = Array.isArray(member.roleIds) && member.roleIds.length ? member.roleIds : [member.role];
+      return ids.includes(id);
+    })
+  ) {
+    throw new Error("Reassign users with this role before deleting it.");
+  }
+
+  const next = roles.filter((role) => role.id !== id);
+
+  if (useDatabase()) {
+    const client = requireAdminClient();
+    const { error } = await client.from("staff_roles").delete().eq("id", id);
+    if (error && isMissingStaffRolesTable(error.message)) {
+      await saveRolesToStorage(next);
+      return mergeRoleDefinitions(next);
+    }
+    throwOnError(error, "Could not delete role");
+    // Keep remaining custom/system overrides persisted for name/color edits.
+    await persistRoleDefinitions(next);
+    return mergeRoleDefinitions(next);
+  }
+
+  writeJson("staff-roles.json", next);
+  return mergeRoleDefinitions(next);
+}
+
+export async function ensureDefaultRolesSeeded() {
+  if (!useDatabase()) return;
+  const roles = defaultRoleDefinitions();
+  try {
+    const client = requireAdminClient();
+    const { count, error } = await client
+      .from("staff_roles")
+      .select("id", { count: "exact", head: true });
+    if (error && isMissingStaffRolesTable(error.message)) return;
+    if (error || (count ?? 0) > 0) return;
+    await client.from("staff_roles").upsert(roles.map(roleToRow));
+  } catch {
+    /* optional seed */
+  }
+}
+
 export async function loadStaff(): Promise<StaffMember[]> {
   if (useDatabase()) return loadStaffFromAuth();
-  return readJson<StaffMember[]>("staff.json", []);
+  return readJson<StaffMember[]>("staff.json", []).map((member) => {
+    const roleIds = normalizeRoleIds(member.roleIds, member.role);
+    return {
+      ...member,
+      roleIds,
+      role: pickPrimaryRoleId(roleIds),
+    };
+  });
+}
+
+export async function updateStaffMember(
+  id: string,
+  patch: Partial<Pick<StaffMember, "name" | "email" | "phone" | "role" | "roleIds" | "active">> & {
+    password?: string;
+  },
+) {
+  if (useDatabase()) {
+    return updatePortalUser(id, patch);
+  }
+  const items = await loadStaff();
+  const idx = items.findIndex((s) => s.id === id);
+  if (idx < 0) throw new Error("User not found.");
+  const current = items[idx];
+  const roleIds =
+    patch.roleIds !== undefined || patch.role !== undefined
+      ? normalizeRoleIds(patch.roleIds, patch.role ?? current.role)
+      : normalizeRoleIds(current.roleIds, current.role);
+  const saved: StaffMember = {
+    ...current,
+    ...patch,
+    name: patch.name !== undefined ? patch.name.trim() : current.name,
+    email: patch.email !== undefined ? patch.email.trim().toLowerCase() : current.email,
+    phone: patch.phone !== undefined ? patch.phone.trim() : current.phone,
+    active: patch.active !== undefined ? Boolean(patch.active) : current.active,
+    roleIds,
+    role: pickPrimaryRoleId(roleIds),
+  };
+  if (patch.password) {
+    const { updatePassword } = await import("./auth");
+    await updatePassword(id, patch.password);
+  }
+  items[idx] = saved;
+  writeJson("staff.json", items);
+  return saved;
 }
 
 export async function upsertStaffMember(item: StaffMember) {
-  if (useDatabase()) {
-    return updatePortalUser(item.id, {
-      name: item.name,
-      phone: item.phone,
-      role: item.role,
-      active: item.active,
-    });
-  }
-  const items = await loadStaff();
-  const idx = items.findIndex((s) => s.id === item.id);
-  const saved = idx >= 0 ? { ...items[idx], ...item } : item;
-  if (idx >= 0) items[idx] = saved;
-  else items.push(saved);
-  writeJson("staff.json", items);
-  return saved;
+  return updateStaffMember(item.id, {
+    name: item.name,
+    email: item.email,
+    phone: item.phone,
+    role: item.role,
+    roleIds: item.roleIds,
+    active: item.active,
+  });
 }
 
 export async function deleteStaffMember(id: string) {

@@ -7,9 +7,13 @@ let browserClient: ReturnType<typeof createClient> | null = null;
 export function getSupabaseBrowser() {
   if (typeof window === "undefined") return null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishable = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    (publishable?.startsWith("sb_publishable_") ? publishable : undefined) ||
+    (anon?.startsWith("sb_publishable_") ? anon : undefined) ||
+    publishable ||
+    anon;
   if (!url || !key) return null;
   if (!browserClient) {
     // Public realtime only — do not persist/verify user JWTs in the browser

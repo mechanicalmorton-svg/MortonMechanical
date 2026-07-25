@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { isJwtKeyError, sanitizeAuthError } from "./auth-errors";
+import { normalizeRoleIds, pickPrimaryRoleId } from "./role-definitions";
 import { getSupabaseAdmin, getPublishableKey, getSupabaseUrl, isSupabaseConfigured } from "./supabase/server";
 import { throwOnError } from "./supabase/db";
 import { isAllowedAdminEmail } from "./supabase/server-auth";
@@ -18,14 +19,33 @@ export function friendlyAuthAdminError(message: string | undefined, fallback: st
   return sanitizeAuthError(message, fallback);
 }
 
+function isMissingRoleIdsColumn(message?: string | null) {
+  if (!message) return false;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("role_ids") &&
+    (lower.includes("schema cache") ||
+      lower.includes("could not find") ||
+      lower.includes("does not exist") ||
+      lower.includes("column"))
+  );
+}
+
+function roleIdsFromRow(r: Record<string, unknown>): string[] {
+  return normalizeRoleIds(r.role_ids, r.role);
+}
+
 function rowToStaffRecord(r: Record<string, unknown>) {
+  const roleIds = roleIdsFromRow(r);
+  const role = (pickPrimaryRoleId(roleIds) || (r.role as string) || "mechanic") as StaffRole;
   return {
     id: r.id as string,
     authUserId: (r.auth_user_id as string | undefined) ?? (r.id as string),
     name: r.name as string,
     email: r.email as string,
     phone: (r.phone as string) ?? "",
-    role: r.role as StaffRole,
+    role,
+    roleIds,
     active: Boolean(r.active),
     createdAt: r.created_at as string,
   };
@@ -63,17 +83,33 @@ async function loadStaffFromTable(): Promise<StaffMember[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function staffToRow(member: StaffMember) {
-  return {
+function staffToRow(member: StaffMember, includeRoleIds = true) {
+  const roleIds = normalizeRoleIds(member.roleIds, member.role);
+  const role = pickPrimaryRoleId(roleIds);
+  const row: Record<string, unknown> = {
     id: member.id,
     auth_user_id: member.authUserId ?? member.id,
     name: member.name,
     email: member.email,
     phone: member.phone,
-    role: member.role,
+    role,
     active: member.active,
     created_at: member.createdAt,
   };
+  if (includeRoleIds) row.role_ids = roleIds;
+  return row;
+}
+
+async function upsertStaffRow(member: StaffMember) {
+  const sb = getSupabaseAdmin()!;
+  const withIds = staffToRow(member, true);
+  const { error } = await sb.from("staff").upsert(withIds);
+  if (error && isMissingRoleIdsColumn(error.message)) {
+    const { error: fallbackError } = await sb.from("staff").upsert(staffToRow(member, false));
+    throwOnError(fallbackError, "Could not save staff record");
+    return;
+  }
+  throwOnError(error, "Could not save staff record");
 }
 
 export async function loadStaffFromAuth(): Promise<StaffMember[]> {
@@ -98,21 +134,22 @@ export async function loadStaffFromAuth(): Promise<StaffMember[]> {
     for (const user of authUsers) {
       const email = user.email!.toLowerCase();
       const existing = byAuthId.get(user.id) ?? byEmail.get(email);
+      const roleIds = normalizeRoleIds(existing?.roleIds, existing?.role || "mechanic");
       const member: StaffMember = {
         id: user.id,
         authUserId: user.id,
         name: existing?.name || (user.user_metadata?.full_name as string | undefined) || emailToDisplayName(email),
         email: user.email!,
         phone: existing?.phone || user.phone || "",
-        role: existing?.role || "mechanic",
+        role: pickPrimaryRoleId(roleIds) as StaffRole,
+        roleIds,
         active: existing?.active ?? !user.banned_until,
         createdAt: existing?.createdAt || user.created_at,
         lastSignIn: user.last_sign_in_at ?? null,
       };
 
       if (!existing || existing.authUserId !== user.id || existing.id !== user.id) {
-        const { error } = await sb.from("staff").upsert(staffToRow(member));
-        throwOnError(error, `Could not sync staff record for ${email}`);
+        await upsertStaffRow(member);
       }
 
       members.push(member);
@@ -135,6 +172,7 @@ export async function createPortalUser(input: {
   password: string;
   phone?: string;
   role?: StaffRole;
+  roleIds?: StaffRole[];
 }) {
   if (!isSupabaseConfigured()) throw new Error("Supabase is not configured.");
   if (!isAllowedAdminEmail(input.email)) {
@@ -142,6 +180,7 @@ export async function createPortalUser(input: {
   }
   if (input.password.length < 8) throw new Error("Password must be at least 8 characters.");
 
+  const roleIds = normalizeRoleIds(input.roleIds, input.role ?? "mechanic");
   const sb = getSupabaseAdmin()!;
   const { data, error } = await sb.auth.admin.createUser({
     email: input.email.trim().toLowerCase(),
@@ -160,20 +199,56 @@ export async function createPortalUser(input: {
     name: input.name.trim(),
     email: data.user.email!,
     phone: input.phone?.trim() || "",
-    role: input.role ?? "mechanic",
+    role: pickPrimaryRoleId(roleIds) as StaffRole,
+    roleIds,
     active: true,
     createdAt: data.user.created_at,
     lastSignIn: null,
   };
 
-  const { error: upsertError } = await sb.from("staff").upsert(staffToRow(member));
-  throwOnError(upsertError, "Could not save staff record");
+  await upsertStaffRow(member);
   return member;
+}
+
+export function memberHasOwnerRole(member: Pick<StaffMember, "role" | "roleIds">) {
+  return normalizeRoleIds(member.roleIds, member.role).includes("owner");
+}
+
+/** Shared guards for delete / deactivate / demote of Founder accounts. */
+export function assertStaffMutationAllowed(
+  actorId: string,
+  target: StaffMember,
+  allMembers: StaffMember[],
+  next: { active?: boolean; roleIds?: string[]; role?: string; deleting?: boolean },
+) {
+  const otherActiveOwners = allMembers.filter(
+    (member) => member.id !== target.id && member.active && memberHasOwnerRole(member),
+  );
+  const isLastActiveOwner = target.active && memberHasOwnerRole(target) && otherActiveOwners.length === 0;
+
+  if (next.deleting || next.active === false) {
+    if (target.id === actorId) {
+      throw new Error("You cannot deactivate or delete your own account.");
+    }
+    if (isLastActiveOwner) {
+      throw new Error("Cannot remove the last Founder account.");
+    }
+  }
+
+  if (next.roleIds !== undefined || next.role !== undefined) {
+    const nextRoleIds = normalizeRoleIds(next.roleIds, next.role ?? target.role);
+    const nextHasOwner = nextRoleIds.includes("owner");
+    if (isLastActiveOwner && !nextHasOwner) {
+      throw new Error("Cannot remove the Founder role from the last Founder.");
+    }
+  }
 }
 
 export async function updatePortalUser(
   id: string,
-  patch: Partial<Pick<StaffMember, "name" | "phone" | "role" | "active">>,
+  patch: Partial<Pick<StaffMember, "name" | "email" | "phone" | "role" | "roleIds" | "active">> & {
+    password?: string;
+  },
 ) {
   if (!isSupabaseConfigured()) throw new Error("Supabase is not configured.");
 
@@ -182,35 +257,81 @@ export async function updatePortalUser(
   const member = members.find((item) => item.id === id);
   if (!member) throw new Error("User not found.");
 
+  const nextRoleIds =
+    patch.roleIds !== undefined
+      ? normalizeRoleIds(patch.roleIds, patch.role ?? member.role)
+      : patch.role !== undefined
+        ? normalizeRoleIds([patch.role], patch.role)
+        : normalizeRoleIds(member.roleIds, member.role);
+
+  const nextName = patch.name !== undefined ? patch.name.trim() : member.name;
+  if (!nextName) throw new Error("Name is required.");
+
+  const nextEmail =
+    patch.email !== undefined ? patch.email.trim().toLowerCase() : member.email.toLowerCase();
+  if (patch.email !== undefined) {
+    if (!nextEmail) throw new Error("Email is required.");
+    if (!isAllowedAdminEmail(nextEmail)) {
+      throw new Error("Only @mortonsmechanical.com email addresses can be used.");
+    }
+  }
+
+  const nextPhone = patch.phone !== undefined ? patch.phone.trim() : member.phone;
+  const nextActive = patch.active !== undefined ? Boolean(patch.active) : member.active;
+  const nextPassword = typeof patch.password === "string" ? patch.password : undefined;
+  if (nextPassword !== undefined && nextPassword.length > 0 && nextPassword.length < 8) {
+    throw new Error("Password must be at least 8 characters.");
+  }
+
   const updated: StaffMember = {
     ...member,
-    ...patch,
-    name: patch.name?.trim() || member.name,
-    phone: patch.phone?.trim() ?? member.phone,
+    name: nextName,
+    email: nextEmail,
+    phone: nextPhone,
+    active: nextActive,
+    roleIds: nextRoleIds,
+    role: pickPrimaryRoleId(nextRoleIds) as StaffRole,
   };
 
-  if (patch.active === false) {
-    const { error } = await sb.auth.admin.updateUserById(id, { ban_duration: "876000h" });
-    if (error) throw new Error(friendlyAuthAdminError(error.message, "Could not deactivate user."));
-  } else if (patch.active === true) {
-    const { error } = await sb.auth.admin.updateUserById(id, { ban_duration: "none" });
-    if (error) throw new Error(friendlyAuthAdminError(error.message, "Could not activate user."));
+  const authPatch: {
+    email?: string;
+    phone?: string;
+    password?: string;
+    ban_duration?: string;
+    email_confirm?: boolean;
+    user_metadata?: Record<string, unknown>;
+  } = {};
+
+  if (patch.active !== undefined && nextActive !== member.active) {
+    authPatch.ban_duration = nextActive ? "none" : "876000h";
+  }
+  if (patch.name !== undefined && nextName !== member.name) {
+    authPatch.user_metadata = { full_name: nextName };
+  }
+  if (patch.email !== undefined && nextEmail !== member.email.toLowerCase()) {
+    authPatch.email = nextEmail;
+    authPatch.email_confirm = true;
+  }
+  if (patch.phone !== undefined && nextPhone !== member.phone) {
+    authPatch.phone = nextPhone || undefined;
+  }
+  if (nextPassword) {
+    authPatch.password = nextPassword;
   }
 
-  if (patch.name) {
-    const { error } = await sb.auth.admin.updateUserById(id, {
-      user_metadata: { full_name: updated.name },
-    });
-    if (error) throw new Error(friendlyAuthAdminError(error.message, "Could not update user name."));
+  if (Object.keys(authPatch).length) {
+    const { data: existingAuth } = await sb.auth.admin.getUserById(id);
+    if (authPatch.user_metadata) {
+      authPatch.user_metadata = {
+        ...(existingAuth.user?.user_metadata ?? {}),
+        ...authPatch.user_metadata,
+      };
+    }
+    const { error } = await sb.auth.admin.updateUserById(id, authPatch);
+    if (error) throw new Error(friendlyAuthAdminError(error.message, "Could not update user."));
   }
 
-  if (patch.phone !== undefined) {
-    const { error } = await sb.auth.admin.updateUserById(id, { phone: updated.phone || undefined });
-    if (error) throw new Error(friendlyAuthAdminError(error.message, "Could not update user phone."));
-  }
-
-  const { error: upsertError } = await sb.from("staff").upsert(staffToRow(updated));
-  throwOnError(upsertError, "Could not save staff record");
+  await upsertStaffRow(updated);
   return updated;
 }
 

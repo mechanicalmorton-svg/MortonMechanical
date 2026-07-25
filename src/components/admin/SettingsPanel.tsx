@@ -25,6 +25,10 @@ type Props = {
     email?: string;
     phone?: string;
     role: StaffRole;
+    roleIds?: StaffRole[];
+    roles?: { id: string; name: string; color: string }[];
+    roleName?: string;
+    roleColor?: string;
     avatarUrl?: string;
   };
 };
@@ -317,10 +321,19 @@ export function SettingsPanel({ user }: Props) {
               </label>
 
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm text-slate-400">
-                <span>Role</span>
-                <RoleBadge role={user.role} />
+                <span>{(user.roles?.length ?? user.roleIds?.length ?? 1) > 1 ? "Roles" : "Role"}</span>
+                {(user.roles?.length
+                  ? user.roles
+                  : (user.roleIds?.length ? user.roleIds : [user.role]).map((id) => ({
+                      id,
+                      name: id === user.role ? user.roleName || id : id,
+                      color: id === user.role ? user.roleColor || "slate" : "slate",
+                    }))
+                ).map((role) => (
+                  <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} />
+                ))}
                 <span className="text-slate-600">·</span>
-                <span>Contact an admin to change your role.</span>
+                <span>Contact an admin to change your roles.</span>
               </div>
 
               <div className="flex justify-end">
