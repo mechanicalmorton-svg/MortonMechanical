@@ -279,9 +279,9 @@ export function WorkOrdersPanel() {
     }
     try {
       await navigator.clipboard.writeText(url);
-      toast.success("Pay Now link copied. Opening Stripe…");
+      toast.success("Stripe invoice link copied. Opening Checkout…");
     } catch {
-      toast.success("Pay Now link ready.");
+      toast.success("Stripe invoice link ready.");
     }
     window.open(url, "_blank", "noopener,noreferrer");
     load();
@@ -517,20 +517,23 @@ export function WorkOrdersPanel() {
               <button type="button" onClick={() => openDocument("estimate", viewOrder)} className={btnSecondary}>
                 <FileText className="h-3.5 w-3.5" /> Estimate
               </button>
-              <button type="button" onClick={() => openDocument("invoice", viewOrder)} className={btnSecondary}>
-                <Receipt className="h-3.5 w-3.5" /> Invoice
-              </button>
-              {Number(viewOrder.revenue) > 0 && viewOrder.paymentStatus !== "paid" ? (
+              {viewOrder.paymentStatus === "paid" ? (
+                <span className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-200">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Invoice paid
+                </span>
+              ) : (
                 <button
                   type="button"
                   onClick={() => createPayNowLink(viewOrder)}
                   className={btnPrimary}
-                  disabled={payNowLoadingId === viewOrder.id}
+                  disabled={payNowLoadingId === viewOrder.id || !(Number(viewOrder.revenue) > 0)}
+                  title={Number(viewOrder.revenue) > 0 ? "Create Stripe invoice payment link" : "Set Total charge before invoicing"}
                 >
                   <CreditCard className="h-3.5 w-3.5" />
-                  {payNowLoadingId === viewOrder.id ? "Creating…" : "Pay Now"}
+                  {payNowLoadingId === viewOrder.id ? "Creating…" : "Stripe invoice"}
                 </button>
-              ) : null}
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -628,15 +631,26 @@ export function WorkOrdersPanel() {
                           >
                             <FileText className="h-3.5 w-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => openDocument("invoice", order)}
-                            className={docActionBtn}
-                            title="Invoice"
-                            aria-label={`Open invoice for ${order.customerName}`}
-                          >
-                            <Receipt className="h-3.5 w-3.5" />
-                          </button>
+                          {order.paymentStatus === "paid" ? (
+                            <span
+                              className="inline-flex h-8 w-8 items-center justify-center text-emerald-300"
+                              title="Invoice paid"
+                              aria-label={`Invoice paid for ${order.customerName}`}
+                            >
+                              <CreditCard className="h-3.5 w-3.5" />
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => createPayNowLink(order)}
+                              className={docActionBtn}
+                              title={Number(order.revenue) > 0 ? "Stripe invoice" : "Set Total charge before invoicing"}
+                              aria-label={`Create Stripe invoice for ${order.customerName}`}
+                              disabled={payNowLoadingId === order.id || !(Number(order.revenue) > 0)}
+                            >
+                              <Receipt className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                         <button type="button" onClick={() => remove(order.id)} className={btnDanger} title="Delete" aria-label={`Delete ${order.customerName}`}>
                           <Trash2 className="h-3.5 w-3.5" />
