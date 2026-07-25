@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, Lock, Mail, ShieldCheck, Truck, Wrench } from "lucide-react";
+import { PortalNavLinks } from "@/components/auth/PortalNavLinks";
 import { SiteLogo } from "@/components/SiteLogo";
 import { useAdminToast } from "./AdminToast";
 import { btnPrimary, inputClass } from "./admin-ui";
@@ -170,44 +171,7 @@ export function LoginForm({ useEmailLogin = false, portal = "admin" }: Props) {
           </button>
         </form>
 
-        {portal === "mechanic" || portal === "dispatcher" ? (
-          <p className="mt-5 text-center text-sm text-slate-500">
-            {portal === "mechanic" ? (
-              <>
-                Dispatching today?{" "}
-                <Link href="/dispatcher/login" className="text-emerald-400/90 transition hover:text-emerald-300">
-                  Dispatcher sign-in
-                </Link>
-              </>
-            ) : (
-              <>
-                On the shop floor?{" "}
-                <Link href="/mechanic/login" className="text-slate-300 transition hover:text-white">
-                  Mechanic sign-in
-                </Link>
-              </>
-            )}
-            <span className="mx-2 text-slate-700">·</span>
-            <Link href="/client/login" className="text-cyan-300/90 transition hover:text-cyan-200">
-              Client portal
-            </Link>
-          </p>
-        ) : (
-          <p className="mt-5 text-center text-xs text-slate-600">
-            Staff portals:{" "}
-            <Link href="/mechanic/login" className="text-slate-400 transition hover:text-slate-200">
-              Mechanic
-            </Link>
-            {" · "}
-            <Link href="/dispatcher/login" className="text-slate-400 transition hover:text-slate-200">
-              Dispatcher
-            </Link>
-            {" · "}
-            <Link href="/client/login" className="text-cyan-400/90 transition hover:text-cyan-300">
-              Client
-            </Link>
-          </p>
-        )}
+        <PortalNavLinks current={portal} />
 
         <p className="mt-4 text-center sm:hidden">
           <Link href="/" className="text-sm text-slate-500 transition hover:text-slate-300">

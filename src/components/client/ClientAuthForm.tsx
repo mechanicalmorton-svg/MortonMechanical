@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, Lock, Mail, Phone, UserRound } from "lucide-react";
+import { PortalNavLinks } from "@/components/auth/PortalNavLinks";
 import { SiteLogo } from "@/components/SiteLogo";
 import { useAdminToast } from "@/components/admin/AdminToast";
 import { btnPrimary, inputClass } from "@/components/admin/admin-ui";
@@ -198,20 +199,7 @@ export function ClientAuthForm({ mode }: Props) {
           )}
         </p>
 
-        <p className="mt-3 text-center text-xs text-slate-600">
-          Staff?{" "}
-          <Link href="/admin/login" className="text-slate-400 transition hover:text-slate-200">
-            Staff portal
-          </Link>
-          {" · "}
-          <Link href="/mechanic/login" className="text-slate-400 transition hover:text-slate-200">
-            Mechanic
-          </Link>
-          {" · "}
-          <Link href="/dispatcher/login" className="text-slate-400 transition hover:text-slate-200">
-            Dispatcher
-          </Link>
-        </p>
+        <PortalNavLinks current="client" className="mt-4" />
 
         <p className="mt-4 text-center sm:hidden">
           <Link href="/" className="text-sm text-slate-500 transition hover:text-slate-300">
