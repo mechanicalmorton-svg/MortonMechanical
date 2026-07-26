@@ -7,7 +7,7 @@ import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
-import { Can } from "./permissions";
+import { Can, usePermissions } from "./permissions";
 
 const emptyService = {
   mileage: "",
@@ -39,6 +39,8 @@ function formatDate(iso: string) {
 
 export function VehicleManagerPanel() {
   const toast = useAdminToast();
+  const { hasPermission, isFounder } = usePermissions();
+  const canReturnService = isFounder || hasPermission("vehicle_manager.return_service");
   const [vehicles, setVehicles] = useState<VmVehicle[]>([]);
   const [parts, setParts] = useState<VmPart[]>([]);
   const [activities, setActivities] = useState<VmActivity[]>([]);
@@ -60,10 +62,11 @@ export function VehicleManagerPanel() {
 
   const loadBase = useCallback(async () => {
     setLoading(true);
-    const [vRes, pRes, aRes] = await Promise.all([
+    const [vRes, pRes, aRes, oRes] = await Promise.all([
       adminGet<VmVehicle[]>("/api/admin/vehicle-manager/vehicles"),
       adminGet<VmPart[]>("/api/admin/vehicle-manager/parts"),
       adminGet<VmActivity[]>("/api/admin/vehicle-manager/activities"),
+      adminGet<VmServiceOrder[]>("/api/admin/vehicle-manager/service-orders"),
     ]);
     if (vRes.error) toast.error(vRes.error);
     else setVehicles(vRes.data ?? []);
@@ -71,6 +74,8 @@ export function VehicleManagerPanel() {
     else setParts(pRes.data ?? []);
     if (aRes.error) toast.error(aRes.error);
     else setActivities(aRes.data ?? []);
+    if (oRes.error) toast.error(oRes.error);
+    else setOrders(oRes.data ?? []);
     setLoading(false);
   }, [toast]);
 
@@ -92,13 +97,32 @@ export function VehicleManagerPanel() {
   }, [loadBase]);
 
   useEffect(() => {
-    if (selectedId) loadOrders(selectedId);
-  }, [selectedId, loadOrders]);
+    if (selectedId) {
+      loadOrders(selectedId);
+      return;
+    }
+    // Returning to the grid — refresh all orders for last-activity / logged-by cards.
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await adminGet<VmServiceOrder[]>(
+        "/api/admin/vehicle-manager/service-orders",
+      );
+      if (cancelled) return;
+      if (error) toast.error(error);
+      else setOrders(data ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, loadOrders, toast]);
 
   const lastWorkByVehicle = useMemo(() => {
     const map = new Map<string, VmServiceOrder>();
     for (const order of orders) {
-      if (!map.has(order.vehicleId)) map.set(order.vehicleId, order);
+      const prev = map.get(order.vehicleId);
+      if (!prev || new Date(order.createdAt).getTime() > new Date(prev.createdAt).getTime()) {
+        map.set(order.vehicleId, order);
+      }
     }
     return map;
   }, [orders]);
@@ -128,11 +152,27 @@ export function VehicleManagerPanel() {
 
   function toggleCardStatus(vehicle: VmVehicle) {
     if (vehicle.status === "out_of_service") {
+      if (!canReturnService) {
+        toast.error("Only authorized roles can return a vehicle to service.");
+        return;
+      }
       void updateStatus(vehicle.id, "active");
       return;
     }
     const next: VmVehicleStatus = vehicle.status === "maintenance" ? "active" : "maintenance";
     void updateStatus(vehicle.id, next);
+  }
+
+  function toggleOutOfService(vehicle: VmVehicle) {
+    if (vehicle.status === "out_of_service") {
+      if (!canReturnService) {
+        toast.error("Only authorized roles can return a vehicle to service.");
+        return;
+      }
+      void updateStatus(vehicle.id, "active");
+      return;
+    }
+    void updateStatus(vehicle.id, "out_of_service");
   }
 
   async function saveActivity(e: React.FormEvent) {
@@ -235,19 +275,6 @@ export function VehicleManagerPanel() {
     }
   }
 
-  // Prefetch last-service snippets for the vehicle grid
-  useEffect(() => {
-    if (selectedId || !vehicles.length) return;
-    let cancelled = false;
-    (async () => {
-      const { data } = await adminGet<VmServiceOrder[]>("/api/admin/vehicle-manager/service-orders");
-      if (!cancelled && data) setOrders(data);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [vehicles, selectedId]);
-
   if (selected) {
     const activityName = (id?: string) => activities.find((a) => a.id === id)?.name ?? "—";
     const partName = (id: string) => parts.find((p) => p.id === id)?.name ?? id;
@@ -331,6 +358,10 @@ export function VehicleManagerPanel() {
                   <div>
                     <dt className="text-xs text-slate-500">Activity</dt>
                     <dd className="text-slate-300">{activityName(order.activityId)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">Logged by</dt>
+                    <dd className="text-slate-300">{order.createdBy || "—"}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-slate-500">DVIR</dt>
@@ -483,6 +514,13 @@ export function VehicleManagerPanel() {
               : last
                 ? new Date(last.createdAt).toLocaleDateString()
                 : "—";
+            const lastActivityDisplay =
+              (last?.activityId
+                ? activities.find((a) => a.id === last.activityId)?.name
+                : undefined) ||
+              last?.workNeeded?.trim() ||
+              "—";
+            const lastLoggedBy = last?.createdBy?.trim() || "—";
             const statusLabel =
               vehicle.status === "maintenance"
                 ? "Maintenance"
@@ -507,10 +545,18 @@ export function VehicleManagerPanel() {
                     <div>
                       <dt className="text-[10px] uppercase tracking-wide text-slate-500">Mileage</dt>
                       <dd className="text-slate-300">{vehicle.mileage?.toLocaleString() ?? "—"}</dd>
+                      <dt className="mt-2 text-[10px] uppercase tracking-wide text-slate-500">Last activity</dt>
+                      <dd className="truncate text-slate-300" title={lastActivityDisplay}>
+                        {lastActivityDisplay}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-[10px] uppercase tracking-wide text-slate-500">Last service</dt>
                       <dd className="text-slate-300">{lastServiceDisplay}</dd>
+                      <dt className="mt-2 text-[10px] uppercase tracking-wide text-slate-500">Logged by</dt>
+                      <dd className="truncate text-slate-300" title={lastLoggedBy}>
+                        {lastLoggedBy}
+                      </dd>
                     </div>
                   </dl>
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -518,14 +564,21 @@ export function VehicleManagerPanel() {
                       <button
                         type="button"
                         onClick={() => toggleCardStatus(vehicle)}
-                        className={`inline-flex h-7 flex-1 items-center justify-center rounded-lg border px-2 text-[11px] font-semibold transition active:scale-[0.98] ${
+                        disabled={vehicle.status === "out_of_service" && !canReturnService}
+                        className={`inline-flex h-7 flex-1 items-center justify-center rounded-lg border px-2 text-[11px] font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
                           vehicle.status === "out_of_service"
                             ? "border-slate-700/70 bg-slate-900/50 text-slate-400 hover:border-slate-600 hover:text-slate-200"
                             : vehicle.status === "maintenance"
                               ? "border-amber-500/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/20"
                               : "border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/20"
                         }`}
-                        aria-label={`Status ${statusLabel}. Click to switch Active and Maintenance.`}
+                        aria-label={
+                          vehicle.status === "out_of_service"
+                            ? canReturnService
+                              ? "Return vehicle to Active"
+                              : "Out of service — only authorized roles can return this vehicle"
+                            : `Status ${statusLabel}. Click to switch Active and Maintenance.`
+                        }
                       >
                         {vehicle.status === "maintenance" ? "Maintenance" : "Active"}
                       </button>
@@ -537,25 +590,43 @@ export function VehicleManagerPanel() {
                     >
                       <Wrench className="h-3 w-3" /> Service
                     </button>
-                    <Can permission="vehicle_manager.edit">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateStatus(
-                            vehicle.id,
-                            vehicle.status === "out_of_service" ? "active" : "out_of_service",
-                          )
+                    {vehicle.status === "out_of_service" ? (
+                      <Can
+                        permission="vehicle_manager.return_service"
+                        fallback={
+                          <button
+                            type="button"
+                            disabled
+                            className="inline-flex h-7 flex-1 cursor-not-allowed items-center justify-center rounded-lg border border-red-500/45 bg-red-500/20 px-2 text-[11px] font-semibold text-red-100 opacity-80"
+                            aria-label="Out of service — only authorized roles can return this vehicle"
+                            title="Only authorized roles can return this vehicle to service"
+                          >
+                            Out of service
+                          </button>
                         }
-                        className={`inline-flex h-7 flex-1 items-center justify-center rounded-lg border px-2 text-[11px] font-semibold transition active:scale-[0.98] ${
-                          vehicle.status === "out_of_service"
-                            ? "border-red-500/45 bg-red-500/20 text-red-100 hover:bg-red-500/25"
-                            : "border-red-900/50 bg-red-950/20 text-red-300 hover:bg-red-500/15 hover:text-red-100"
-                        }`}
-                        aria-label="Out of service"
                       >
-                        Out of service
-                      </button>
-                    </Can>
+                        <button
+                          type="button"
+                          onClick={() => toggleOutOfService(vehicle)}
+                          className="inline-flex h-7 flex-1 items-center justify-center rounded-lg border border-red-500/45 bg-red-500/20 px-2 text-[11px] font-semibold text-red-100 transition hover:bg-red-500/25 active:scale-[0.98]"
+                          aria-label="Return vehicle to service"
+                          title="Click to return to Active"
+                        >
+                          Out of service
+                        </button>
+                      </Can>
+                    ) : (
+                      <Can permission="vehicle_manager.edit">
+                        <button
+                          type="button"
+                          onClick={() => toggleOutOfService(vehicle)}
+                          className="inline-flex h-7 flex-1 items-center justify-center rounded-lg border border-red-900/50 bg-red-950/20 px-2 text-[11px] font-semibold text-red-300 transition hover:bg-red-500/15 hover:text-red-100 active:scale-[0.98]"
+                          aria-label="Mark out of service"
+                        >
+                          Out of service
+                        </button>
+                      </Can>
+                    )}
                   </div>
                 </div>
               </article>

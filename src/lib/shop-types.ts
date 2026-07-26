@@ -234,6 +234,8 @@ export type VmServiceOrder = {
   activityId?: string;
   parts: VmServiceOrderPart[];
   createdAt: string;
+  createdBy?: string;
+  createdByUserId?: string;
 };
 
 export type VmChecklistItem = {

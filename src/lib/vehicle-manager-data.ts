@@ -101,8 +101,30 @@ function vmActivityToRow(a: VmActivity) {
   return { id: a.id, name: a.name };
 }
 
+type VmPartsPayload = {
+  items: VmServiceOrderPart[];
+  createdBy?: string;
+  createdByUserId?: string;
+};
+
+function parsePartsPayload(raw: unknown): VmPartsPayload {
+  if (Array.isArray(raw)) {
+    return { items: raw as VmServiceOrderPart[] };
+  }
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    const items = Array.isArray(obj.items) ? (obj.items as VmServiceOrderPart[]) : [];
+    return {
+      items,
+      createdBy: typeof obj.createdBy === "string" ? obj.createdBy : undefined,
+      createdByUserId: typeof obj.createdByUserId === "string" ? obj.createdByUserId : undefined,
+    };
+  }
+  return { items: [] };
+}
+
 function rowToVmServiceOrder(r: Record<string, unknown>): VmServiceOrder {
-  const parts = Array.isArray(r.parts) ? (r.parts as VmServiceOrderPart[]) : [];
+  const payload = parsePartsPayload(r.parts);
   return {
     id: r.id as string,
     vehicleId: r.vehicle_id as string,
@@ -112,12 +134,20 @@ function rowToVmServiceOrder(r: Record<string, unknown>): VmServiceOrder {
     description: (r.description as string) ?? "",
     hours: Number(r.hours) || 0,
     activityId: (r.activity_id as string) || undefined,
-    parts,
+    parts: payload.items,
     createdAt: (r.created_at as string) ?? new Date().toISOString(),
+    createdBy: (r.created_by as string) || payload.createdBy || undefined,
+    createdByUserId: (r.created_by_user_id as string) || payload.createdByUserId || undefined,
   };
 }
 
 function vmServiceOrderToRow(o: VmServiceOrder) {
+  // Keep creator inside parts JSON so it persists even before created_by columns exist.
+  const partsPayload: VmPartsPayload = {
+    items: o.parts,
+    ...(o.createdBy ? { createdBy: o.createdBy } : {}),
+    ...(o.createdByUserId ? { createdByUserId: o.createdByUserId } : {}),
+  };
   return {
     id: o.id,
     vehicle_id: o.vehicleId,
@@ -127,8 +157,10 @@ function vmServiceOrderToRow(o: VmServiceOrder) {
     description: o.description,
     hours: o.hours,
     activity_id: o.activityId ?? null,
-    parts: o.parts,
+    parts: partsPayload,
     created_at: o.createdAt,
+    created_by: o.createdBy ?? null,
+    created_by_user_id: o.createdByUserId ?? null,
   };
 }
 
@@ -412,7 +444,15 @@ export async function upsertVmServiceOrder(item: VmServiceOrder) {
     (await loadVmServiceOrders()).find((o) => o.id === item.id) ??
     null;
   if (useDatabase()) {
-    const { error } = await requireAdminClient().from("vm_service_orders").upsert(vmServiceOrderToRow(item));
+    const full = vmServiceOrderToRow(item);
+    const client = requireAdminClient();
+    let { error } = await client.from("vm_service_orders").upsert(full);
+    // Older tables may not have created_by columns yet; parts JSON still carries the creator.
+    if (error?.code === "PGRST204") {
+      const { created_by: _cb, created_by_user_id: _cbu, ...withoutCreatorCols } = full;
+      const retry = await client.from("vm_service_orders").upsert(withoutCreatorCols);
+      error = retry.error;
+    }
     throwOnError(error, "Could not save service order");
   } else {
     const items = await loadVmServiceOrders();

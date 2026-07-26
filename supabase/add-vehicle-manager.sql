@@ -39,7 +39,9 @@ create table if not exists vm_service_orders (
   hours numeric not null default 0,
   activity_id text,
   parts jsonb not null default '[]',
-  created_at text not null
+  created_at text not null,
+  created_by text,
+  created_by_user_id text
 );
 
 create table if not exists vm_checklists (

@@ -46,10 +46,11 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return withPermission("vehicle_manager.create", async () => {
+  return withPermission("vehicle_manager.create", async (user) => {
     const body = await req.json();
     const vehicleId = String(body.vehicleId ?? "").trim();
     if (!vehicleId) return NextResponse.json({ error: "Vehicle is required." }, { status: 400 });
+    const createdBy = (user.name || user.email || "").trim() || undefined;
     const order: VmServiceOrder = {
       id: createVmId(),
       vehicleId,
@@ -61,6 +62,8 @@ export async function POST(req: Request) {
       activityId: body.activityId ? String(body.activityId) : undefined,
       parts: normalizeParts(body.parts),
       createdAt: new Date().toISOString(),
+      createdBy,
+      createdByUserId: user.id,
     };
     await upsertVmServiceOrder(order);
     await syncVehicleFromOrder(order);

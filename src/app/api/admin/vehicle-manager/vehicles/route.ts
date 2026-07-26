@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withPermission } from "@/lib/admin-route";
+import { hasPermission, isFounder } from "@/lib/permissions/service";
 import {
   createVmId,
   deleteVmVehicle,
@@ -40,11 +41,23 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withPermission("vehicle_manager.edit", async () => {
+  return withPermission("vehicle_manager.edit", async (user) => {
     const body = await req.json();
     const items = await loadVmVehicles();
     const item = items.find((v) => v.id === body.id);
     if (!item) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    const nextStatus = body.status != null ? parseStatus(body.status, item.status) : item.status;
+    if (
+      item.status === "out_of_service" &&
+      nextStatus !== "out_of_service" &&
+      !isFounder(user) &&
+      !hasPermission(user, "vehicle_manager.return_service")
+    ) {
+      return NextResponse.json(
+        { error: "Only authorized roles can return a vehicle to service." },
+        { status: 403 },
+      );
+    }
     const updated: VmVehicle = {
       ...item,
       name: body.name != null ? String(body.name).trim() || item.name : item.name,
@@ -52,7 +65,7 @@ export async function PATCH(req: Request) {
       year: body.year != null ? Number(body.year) || item.year : item.year,
       make: body.make != null ? String(body.make).trim() : item.make,
       model: body.model != null ? String(body.model).trim() : item.model,
-      status: body.status != null ? parseStatus(body.status, item.status) : item.status,
+      status: nextStatus,
       mileage:
         body.mileage !== undefined
           ? body.mileage === "" || body.mileage == null

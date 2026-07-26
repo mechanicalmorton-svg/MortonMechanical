@@ -176,6 +176,11 @@ function seedCatalog() {
       { action: "create", label: "Create" },
       { action: "edit", label: "Edit" },
       { action: "delete", label: "Delete" },
+      {
+        action: "return_service",
+        label: "Return from out of service",
+        description: "Allow putting an out-of-service vehicle back into Active / Maintenance",
+      },
     ],
   });
 
