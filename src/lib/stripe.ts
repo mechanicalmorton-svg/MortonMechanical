@@ -10,23 +10,59 @@ export function getSiteUrl() {
   return PRODUCTION_SITE_URL;
 }
 
+function stripeSecretKey() {
+  return process.env.STRIPE_SECRET_KEY?.trim() || "";
+}
+
+function stripePublishableKey() {
+  return process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() || "";
+}
+
 export function isStripeConfigured() {
-  return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
+  return Boolean(stripeSecretKey());
 }
 
 export function isStripePublishableConfigured() {
-  return Boolean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim());
+  return Boolean(stripePublishableKey());
+}
+
+/** `test` | `live` | `unknown` based on the secret key prefix. */
+export function getStripeMode(): "test" | "live" | "unknown" {
+  const key = stripeSecretKey();
+  if (key.startsWith("sk_test_")) return "test";
+  if (key.startsWith("sk_live_")) return "live";
+  return "unknown";
+}
+
+function assertStripeKeyPair() {
+  const secret = stripeSecretKey();
+  const publishable = stripePublishableKey();
+  if (!secret) return;
+  if (publishable) {
+    const secretTest = secret.startsWith("sk_test_");
+    const secretLive = secret.startsWith("sk_live_");
+    const pubTest = publishable.startsWith("pk_test_");
+    const pubLive = publishable.startsWith("pk_live_");
+    if ((secretTest && pubLive) || (secretLive && pubTest)) {
+      throw new Error(
+        "Stripe key mismatch: STRIPE_SECRET_KEY and NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY must both be test or both be live.",
+      );
+    }
+  }
 }
 
 let stripeClient: Stripe | null = null;
+let stripeClientKey: string | null = null;
 
 export function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY?.trim();
+  const key = stripeSecretKey();
   if (!key) {
     throw new Error("Stripe is not configured. Set STRIPE_SECRET_KEY.");
   }
-  if (!stripeClient) {
+  assertStripeKeyPair();
+  if (!stripeClient || stripeClientKey !== key) {
     stripeClient = new Stripe(key);
+    stripeClientKey = key;
   }
   return stripeClient;
 }

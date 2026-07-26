@@ -82,6 +82,7 @@ export function SettingsPanel({ user }: Props) {
 
   const [depositDollars, setDepositDollars] = useState("50");
   const [stripeConfigured, setStripeConfigured] = useState(false);
+  const [stripeMode, setStripeMode] = useState<"test" | "live" | "unknown">("unknown");
   const [paymentsReady, setPaymentsReady] = useState(false);
   const [paymentsHealthNote, setPaymentsHealthNote] = useState("");
   const [loadingPayments, setLoadingPayments] = useState(false);
@@ -114,15 +115,21 @@ export function SettingsPanel({ user }: Props) {
     let active = true;
     setLoadingPayments(true);
     Promise.all([
-      adminGet<{ bookingDepositCents?: number; stripeConfigured?: boolean }>("/api/admin/payments/settings"),
+      adminGet<{
+        bookingDepositCents?: number;
+        stripeConfigured?: boolean;
+        stripeMode?: "test" | "live" | "unknown";
+      }>("/api/admin/payments/settings"),
       adminGet<{
         ready?: boolean;
         stripeConfigured?: boolean;
+        stripeMode?: "test" | "live" | "unknown";
         webhookConfigured?: boolean;
         workOrderPaymentsReady?: boolean;
         bookingDepositsReady?: boolean;
         sqlHint?: string;
         dbMessage?: string;
+        hint?: string;
       }>("/api/admin/payments/health"),
     ]).then(([settingsRes, healthRes]) => {
       if (!active) return;
@@ -131,19 +138,36 @@ export function SettingsPanel({ user }: Props) {
         const cents = Number(settingsRes.data.bookingDepositCents ?? 5000);
         setDepositDollars((cents / 100).toFixed(cents % 100 === 0 ? 0 : 2));
         setStripeConfigured(Boolean(settingsRes.data.stripeConfigured));
+        if (settingsRes.data.stripeMode) setStripeMode(settingsRes.data.stripeMode);
       }
       if (healthRes.data) {
         setPaymentsReady(Boolean(healthRes.data.ready));
+        if (healthRes.data.stripeMode) setStripeMode(healthRes.data.stripeMode);
+        const modeLabel =
+          healthRes.data.stripeMode === "test"
+            ? "test mode"
+            : healthRes.data.stripeMode === "live"
+              ? "live mode"
+              : null;
         const parts = [
-          healthRes.data.stripeConfigured ? "Stripe keys" : "Stripe keys missing",
+          healthRes.data.stripeConfigured
+            ? modeLabel
+              ? `Stripe keys (${modeLabel})`
+              : "Stripe keys"
+            : "Stripe keys missing",
           healthRes.data.webhookConfigured ? "webhook" : "webhook missing",
           healthRes.data.workOrderPaymentsReady ? "work-order columns" : "work-order columns missing",
           healthRes.data.bookingDepositsReady ? "booking columns" : "booking columns missing",
         ];
         setPaymentsHealthNote(
-          healthRes.data.ready
-            ? `Payments ready (${parts.join(", ")}).`
-            : `Not fully ready: ${parts.join(", ")}.${healthRes.data.sqlHint ? ` ${healthRes.data.sqlHint}` : ""}`,
+          [
+            healthRes.data.ready
+              ? `Payments ready (${parts.join(", ")}).`
+              : `Not fully ready: ${parts.join(", ")}.${healthRes.data.sqlHint ? ` ${healthRes.data.sqlHint}` : ""}`,
+            healthRes.data.hint,
+          ]
+            .filter(Boolean)
+            .join(" "),
         );
       } else if (healthRes.error) {
         setPaymentsReady(false);

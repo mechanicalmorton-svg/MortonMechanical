@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { withPermission } from "@/lib/admin-route";
 import { getBookingDepositCents } from "@/lib/payment-settings";
-import { formatUsdFromCents, isStripeConfigured } from "@/lib/stripe";
+import { formatUsdFromCents, getStripeMode, isStripeConfigured } from "@/lib/stripe";
 import { requireAdminClient } from "@/lib/supabase/db";
 
 export async function GET() {
   return withPermission("payments.view", async () => {
     const stripeConfigured = isStripeConfigured();
+    const stripeMode = getStripeMode();
     const webhookConfigured = Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim());
     const depositCents = await getBookingDepositCents();
 
@@ -41,6 +42,7 @@ export async function GET() {
     return NextResponse.json({
       ready,
       stripeConfigured,
+      stripeMode,
       webhookConfigured,
       workOrderPaymentsReady,
       bookingDepositsReady,
@@ -50,6 +52,10 @@ export async function GET() {
       sqlHint:
         !workOrderPaymentsReady || !bookingDepositsReady
           ? "Run supabase/add-stripe-payments.sql in the Supabase SQL editor."
+          : undefined,
+      hint:
+        stripeMode === "test"
+          ? "Stripe is in test mode. Use card 4242 4242 4242 4242 for Checkout. After payment, mark-as-paid needs a test-mode webhook secret in STRIPE_WEBHOOK_SECRET."
           : undefined,
     });
   });

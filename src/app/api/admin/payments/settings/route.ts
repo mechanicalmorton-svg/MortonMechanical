@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withPermission } from "@/lib/admin-route";
 import { loadPaymentSettings, savePaymentSettings } from "@/lib/payment-settings";
-import { formatUsdFromCents, isStripeConfigured } from "@/lib/stripe";
+import { formatUsdFromCents, getStripeMode, isStripeConfigured } from "@/lib/stripe";
 
 export async function GET() {
   return withPermission("payments.view", async () => {
@@ -10,6 +10,7 @@ export async function GET() {
       ...settings,
       bookingDepositLabel: formatUsdFromCents(settings.bookingDepositCents),
       stripeConfigured: isStripeConfigured(),
+      stripeMode: getStripeMode(),
     });
   });
 }
@@ -52,6 +53,7 @@ export async function PATCH(req: Request) {
       ...settings,
       bookingDepositLabel: formatUsdFromCents(settings.bookingDepositCents),
       stripeConfigured: isStripeConfigured(),
+      stripeMode: getStripeMode(),
     });
   });
 }
