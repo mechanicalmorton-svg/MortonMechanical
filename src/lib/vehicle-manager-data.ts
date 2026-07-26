@@ -1,6 +1,11 @@
 import { readJson, writeJson, newId } from "./store";
 import { isSupabaseConfigured } from "./supabase/server";
-import { requireAdminClient, requireDatabaseInProduction, throwOnError } from "./supabase/db";
+import {
+  DatabaseError,
+  requireAdminClient,
+  requireDatabaseInProduction,
+  throwOnError,
+} from "./supabase/db";
 import { auditDelete, auditUpsert } from "./audit-instrument";
 import type {
   VmActivity,
@@ -171,7 +176,36 @@ export async function upsertVmVehicle(item: VmVehicle) {
     (await loadVmVehicles()).find((v) => v.id === item.id) ??
     null;
   if (useDatabase()) {
-    const { error } = await requireAdminClient().from("vm_vehicles").upsert(vmVehicleToRow(item));
+    const full = vmVehicleToRow(item);
+    const client = requireAdminClient();
+    let { error } = await client.from("vm_vehicles").upsert(full);
+
+    // Older Supabase tables may lack newer columns until migration is applied.
+    if (error?.code === "PGRST204") {
+      const { last_service: _ls, mileage, name, status, ...core } = full;
+      const fallbacks = [
+        { ...core, name, status, mileage },
+        { ...core, name, status },
+        { ...core, status },
+        core,
+      ];
+      for (const row of fallbacks) {
+        const retry = await client.from("vm_vehicles").upsert(row);
+        if (!retry.error) {
+          error = null;
+          break;
+        }
+        error = retry.error;
+        if (retry.error.code !== "PGRST204") break;
+      }
+    }
+
+    if (error?.code === "PGRST204") {
+      throw new DatabaseError(
+        "Could not save vehicle: database is missing Vehicle Manager columns. Run supabase/add-vm-vehicles-columns.sql in the Supabase SQL Editor, then try again.",
+        error,
+      );
+    }
     throwOnError(error, "Could not save vehicle");
   } else {
     const items = await loadVmVehicles();

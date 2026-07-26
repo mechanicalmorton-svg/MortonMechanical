@@ -10,12 +10,23 @@ export function asStaffList<T = unknown>(data: unknown): T[] {
 function normalizeAdminError(status: number, payload: { error?: string } | null) {
   const raw = payload?.error?.trim() || "";
   const lower = raw.toLowerCase();
+  // Keep DB / schema problems visible — do not remap them to a session warning.
+  if (
+    lower.includes("schema cache") ||
+    lower.includes("column") ||
+    lower.includes("could not save") ||
+    lower.includes("missing vehicle manager columns")
+  ) {
+    return raw || "Server error. Please try again.";
+  }
   if (
     status === 401 ||
     lower.includes("not signed in") ||
     lower === "unauthorized" ||
-    lower.includes("jwt") ||
-    lower.includes("session")
+    lower.includes("jwt expired") ||
+    lower.includes("invalid jwt") ||
+    lower.includes("verify your session") ||
+    (lower.includes("session") && (lower.includes("expired") || lower.includes("not found") || lower.includes("verify")))
   ) {
     // Avoid scaring a still-open dashboard with a fake "log in" alarm while auth recovers.
     return "Could not verify your session for that request. Refresh the page if this keeps happening.";
