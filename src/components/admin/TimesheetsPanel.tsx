@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Clock, Pencil, Trash2 } from "lucide-react";
+import { Clock, Eye, Pencil, Trash2 } from "lucide-react";
 import type { StaffMember, TimeEntry } from "@/lib/shop-types";
 import { adminGet, adminSend, asStaffList } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
@@ -9,12 +9,31 @@ import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { Can } from "./permissions";
 
+type DaySheet = {
+  key: string;
+  staffId: string;
+  day: string;
+  punches: TimeEntry[];
+  firstIn: string;
+  lastOut?: string;
+  totalMinutes: number;
+  hasOpen: boolean;
+  editedAt?: string;
+};
+
 function toLocalInput(iso?: string) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function dayKey(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function formatStamp(iso?: string) {
@@ -31,16 +50,81 @@ function formatStamp(iso?: string) {
   }
 }
 
-function formatDuration(entry: TimeEntry) {
-  if (!entry.clockOutAt) return "Open";
-  const start = new Date(entry.clockInAt).getTime();
-  const end = new Date(entry.clockOutAt).getTime();
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "—";
-  const mins = Math.round((end - start) / 60000);
+function formatDayLabel(day: string) {
+  try {
+    return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return day;
+  }
+}
+
+function formatMinutes(mins: number, hasOpen?: boolean) {
+  if (!Number.isFinite(mins) || mins < 0) return "—";
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  if (h <= 0) return `${m}m`;
-  return `${h}h ${m}m`;
+  const base = h <= 0 ? `${m}m` : `${h}h ${m}m`;
+  return hasOpen ? `${base} · open` : base;
+}
+
+function punchMinutes(entry: TimeEntry) {
+  const start = new Date(entry.clockInAt).getTime();
+  const end = entry.clockOutAt ? new Date(entry.clockOutAt).getTime() : Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+  return Math.round((end - start) / 60000);
+}
+
+function formatDuration(entry: TimeEntry) {
+  if (!entry.clockOutAt) return "Open";
+  return formatMinutes(punchMinutes(entry));
+}
+
+function groupByStaffDay(entries: TimeEntry[]): DaySheet[] {
+  const map = new Map<string, TimeEntry[]>();
+  for (const entry of entries) {
+    const key = `${entry.staffId}::${dayKey(entry.clockInAt)}`;
+    const list = map.get(key) ?? [];
+    list.push(entry);
+    map.set(key, list);
+  }
+
+  const sheets: DaySheet[] = [];
+  for (const [key, punches] of map) {
+    const sorted = [...punches].sort((a, b) => a.clockInAt.localeCompare(b.clockInAt));
+    const [staffId, day] = key.split("::");
+    const firstIn = sorted[0]?.clockInAt ?? "";
+    const closedOuts = sorted.map((p) => p.clockOutAt).filter(Boolean) as string[];
+    const lastOut = closedOuts.length
+      ? closedOuts.sort((a, b) => b.localeCompare(a))[0]
+      : undefined;
+    const hasOpen = sorted.some((p) => !p.clockOutAt);
+    const totalMinutes = sorted.reduce((sum, p) => sum + punchMinutes(p), 0);
+    const editedAt = sorted
+      .map((p) => p.editedAt)
+      .filter(Boolean)
+      .sort((a, b) => (b || "").localeCompare(a || ""))[0];
+    sheets.push({
+      key,
+      staffId,
+      day,
+      punches: sorted,
+      firstIn,
+      lastOut,
+      totalMinutes,
+      hasOpen,
+      editedAt,
+    });
+  }
+
+  return sheets.sort((a, b) => {
+    const dayCmp = b.day.localeCompare(a.day);
+    if (dayCmp !== 0) return dayCmp;
+    return a.staffId.localeCompare(b.staffId);
+  });
 }
 
 export function TimesheetsPanel() {
@@ -60,6 +144,9 @@ export function TimesheetsPanel() {
   const [editOut, setEditOut] = useState("");
   const [editNote, setEditNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [historyStaffId, setHistoryStaffId] = useState<string | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<TimeEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,11 +173,34 @@ export function TimesheetsPanel() {
     return (id: string) => map.get(id) || id.slice(0, 8);
   }, [staff]);
 
+  const daySheets = useMemo(() => groupByStaffDay(entries), [entries]);
+
+  const historyByDay = useMemo(() => groupByStaffDay(historyEntries), [historyEntries]);
+
+  async function openHistory(id: string) {
+    setHistoryStaffId(id);
+    setHistoryLoading(true);
+    const { data, error } = await adminGet<TimeEntry[]>(
+      `/api/admin/timeclock?staffId=${encodeURIComponent(id)}`,
+    );
+    if (error) toast.error(error);
+    else setHistoryEntries(data ?? []);
+    setHistoryLoading(false);
+  }
+
   function openEdit(entry: TimeEntry) {
     setEditing(entry);
     setEditIn(toLocalInput(entry.clockInAt));
     setEditOut(toLocalInput(entry.clockOutAt));
     setEditNote(entry.note || "");
+  }
+
+  function openEditDay(sheet: DaySheet) {
+    if (sheet.punches.length === 1) {
+      openEdit(sheet.punches[0]);
+      return;
+    }
+    void openHistory(sheet.staffId);
   }
 
   async function saveEdit(e: React.FormEvent) {
@@ -112,12 +222,13 @@ export function TimesheetsPanel() {
     else {
       toast.success("Timesheet updated.");
       setEditing(null);
-      load();
+      await load();
+      if (historyStaffId) void openHistory(historyStaffId);
     }
   }
 
   async function remove(id: string) {
-    if (!confirm("Delete this timesheet entry?")) return;
+    if (!confirm("Delete this clock punch?")) return;
     const { error } = await adminSend("/api/admin/timeclock", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -125,8 +236,9 @@ export function TimesheetsPanel() {
     });
     if (error) toast.error(error);
     else {
-      toast.success("Entry deleted.");
-      load();
+      toast.success("Punch deleted.");
+      await load();
+      if (historyStaffId) void openHistory(historyStaffId);
     }
   }
 
@@ -135,7 +247,7 @@ export function TimesheetsPanel() {
       <div className="mb-8">
         <PageHeader
           title="Timesheets"
-          subtitle="Review staff clock in/out times. Employees cannot edit their own punches."
+          subtitle="One row per person per day. Use the eye to view their full clock history."
         />
       </div>
 
@@ -157,7 +269,7 @@ export function TimesheetsPanel() {
 
       {loading ? (
         <p className="text-slate-500">Loading timesheets…</p>
-      ) : !entries.length ? (
+      ) : !daySheets.length ? (
         <EmptyState
           icon={Clock}
           title="No time entries"
@@ -169,36 +281,44 @@ export function TimesheetsPanel() {
             <thead className="bg-slate-950/60 text-[10px] uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-semibold">Staff</th>
-                <th className="px-4 py-3 font-semibold">Clock in</th>
-                <th className="px-4 py-3 font-semibold">Clock out</th>
-                <th className="px-4 py-3 font-semibold">Duration</th>
-                <th className="px-4 py-3 font-semibold">Note</th>
+                <th className="px-4 py-3 font-semibold">Day</th>
+                <th className="px-4 py-3 font-semibold">First in</th>
+                <th className="px-4 py-3 font-semibold">Last out</th>
+                <th className="px-4 py-3 font-semibold">Total</th>
+                <th className="px-4 py-3 font-semibold">Punches</th>
                 <th className="px-4 py-3 font-semibold" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
-              {entries.map((entry) => (
-                <tr key={entry.id} className="bg-slate-900/30 text-slate-300">
+              {daySheets.map((sheet) => (
+                <tr key={sheet.key} className="bg-slate-900/30 text-slate-300">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-white">{staffName(entry.staffId)}</p>
-                    {entry.editedAt ? (
-                      <p className="text-[11px] text-amber-300/80">Edited {formatStamp(entry.editedAt)}</p>
+                    <p className="font-medium text-white">{staffName(sheet.staffId)}</p>
+                    {sheet.editedAt ? (
+                      <p className="text-[11px] text-amber-300/80">Edited {formatStamp(sheet.editedAt)}</p>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatStamp(entry.clockInAt)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatStamp(entry.clockOutAt)}</td>
-                  <td className="px-4 py-3">{formatDuration(entry)}</td>
-                  <td className="max-w-[12rem] truncate px-4 py-3 text-slate-400">{entry.note || "—"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatDayLabel(sheet.day)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatStamp(sheet.firstIn)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {sheet.lastOut ? formatStamp(sheet.lastOut) : sheet.hasOpen ? "Open" : "—"}
+                  </td>
+                  <td className="px-4 py-3">{formatMinutes(sheet.totalMinutes, sheet.hasOpen)}</td>
+                  <td className="px-4 py-3">{sheet.punches.length}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        className={btnSecondary}
+                        title="View full clock history"
+                        aria-label={`View history for ${staffName(sheet.staffId)}`}
+                        onClick={() => openHistory(sheet.staffId)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
                       <Can permission="timeclock.edit">
-                        <button type="button" className={btnSecondary} onClick={() => openEdit(entry)}>
+                        <button type="button" className={btnSecondary} onClick={() => openEditDay(sheet)}>
                           <Pencil className="h-3.5 w-3.5" /> Edit
-                        </button>
-                      </Can>
-                      <Can permission="timeclock.delete">
-                        <button type="button" className={btnDanger} onClick={() => remove(entry.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </Can>
                     </div>
@@ -210,7 +330,73 @@ export function TimesheetsPanel() {
         </div>
       )}
 
-      <AdminModal open={Boolean(editing)} onClose={() => setEditing(null)} title="Edit timesheet entry">
+      <AdminModal
+        open={Boolean(historyStaffId)}
+        onClose={() => {
+          setHistoryStaffId(null);
+          setHistoryEntries([]);
+        }}
+        title={historyStaffId ? `${staffName(historyStaffId)} — clock history` : "Clock history"}
+        wide
+      >
+        {historyLoading ? (
+          <p className="text-slate-500">Loading history…</p>
+        ) : !historyByDay.length ? (
+          <EmptyState icon={Clock} title="No punches yet" text="This person has no clock history." />
+        ) : (
+          <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
+            {historyByDay.map((sheet) => (
+              <section
+                key={sheet.key}
+                className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4"
+              >
+                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-medium text-white">{formatDayLabel(sheet.day)}</p>
+                  <p className="text-xs text-slate-500">
+                    {sheet.punches.length} punch{sheet.punches.length === 1 ? "" : "es"} ·{" "}
+                    {formatMinutes(sheet.totalMinutes, sheet.hasOpen)}
+                  </p>
+                </div>
+                <ul className="space-y-2">
+                  {sheet.punches.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800/70 bg-slate-900/40 px-3 py-2.5 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-slate-200">
+                          {formatStamp(entry.clockInAt)}
+                          {" → "}
+                          {entry.clockOutAt ? formatStamp(entry.clockOutAt) : "Open"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {formatDuration(entry)}
+                          {entry.note ? ` · ${entry.note}` : ""}
+                          {entry.editedAt ? ` · Edited ${formatStamp(entry.editedAt)}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Can permission="timeclock.edit">
+                          <button type="button" className={btnSecondary} onClick={() => openEdit(entry)}>
+                            <Pencil className="h-3.5 w-3.5" /> Edit
+                          </button>
+                        </Can>
+                        <Can permission="timeclock.delete">
+                          <button type="button" className={btnDanger} onClick={() => remove(entry.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </Can>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )}
+      </AdminModal>
+
+      <AdminModal open={Boolean(editing)} onClose={() => setEditing(null)} title="Edit clock punch">
         {editing ? (
           <form onSubmit={saveEdit} className="space-y-3">
             <p className="text-sm text-slate-400">{staffName(editing.staffId)}</p>
