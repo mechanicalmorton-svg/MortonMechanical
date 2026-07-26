@@ -195,14 +195,6 @@ export function TimesheetsPanel() {
     setEditNote(entry.note || "");
   }
 
-  function openEditDay(sheet: DaySheet) {
-    if (sheet.punches.length === 1) {
-      openEdit(sheet.punches[0]);
-      return;
-    }
-    void openHistory(sheet.staffId);
-  }
-
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editing) return;
@@ -247,7 +239,7 @@ export function TimesheetsPanel() {
       <div className="mb-8">
         <PageHeader
           title="Timesheets"
-          subtitle="One row per person per day. Use the eye to view their full clock history."
+          subtitle="One row per person per day. Open the eye to view history and edit or delete punches."
         />
       </div>
 
@@ -316,11 +308,6 @@ export function TimesheetsPanel() {
                       >
                         <Eye className="h-3.5 w-3.5" />
                       </button>
-                      <Can permission="timeclock.edit">
-                        <button type="button" className={btnSecondary} onClick={() => openEditDay(sheet)}>
-                          <Pencil className="h-3.5 w-3.5" /> Edit
-                        </button>
-                      </Can>
                     </div>
                   </td>
                 </tr>
