@@ -338,6 +338,10 @@ function rowToRoute(r: Record<string, unknown>): RoutePlan {
     stops: (r.stops as RoutePlan["stops"]) ?? [],
     status: r.status as RoutePlan["status"],
     notes: r.notes as string | undefined,
+    mileage:
+      r.mileage != null && r.mileage !== "" && Number.isFinite(Number(r.mileage))
+        ? Number(r.mileage)
+        : undefined,
   };
 }
 
@@ -350,6 +354,7 @@ function routeToRow(r: RoutePlan) {
     stops: r.stops,
     status: r.status,
     notes: r.notes,
+    mileage: r.mileage ?? null,
   };
 }
 
@@ -1823,7 +1828,14 @@ export async function upsertRoute(item: RoutePlan) {
     (await loadRoutes()).find((r) => r.id === item.id) ??
     null;
   if (useDatabase()) {
-    const { error } = await requireAdminClient().from("routes").upsert(routeToRow(item));
+    const full = routeToRow(item);
+    const client = requireAdminClient();
+    let { error } = await client.from("routes").upsert(full);
+    if (error?.code === "PGRST204") {
+      const { mileage: _m, ...withoutMileage } = full;
+      const retry = await client.from("routes").upsert(withoutMileage);
+      error = retry.error;
+    }
     throwOnError(error, "Could not save route");
   } else {
     const items = await loadRoutes();

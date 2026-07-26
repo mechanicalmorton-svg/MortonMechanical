@@ -210,7 +210,10 @@ export function VehicleManagerPanel() {
 
   function openServiceCreate() {
     setEditingOrderId(null);
-    setServiceForm(emptyService);
+    setServiceForm({
+      ...emptyService,
+      mileage: selected?.mileage != null ? String(selected.mileage) : "",
+    });
     setServiceModal(true);
   }
 

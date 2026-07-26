@@ -269,6 +269,8 @@ export type RoutePlan = {
   stops: RouteStop[];
   status: RouteStatus;
   notes?: string;
+  /** Odometer reading entered for this route day (syncs to fleet + Vehicle Manager). */
+  mileage?: number;
 };
 
 export type DashboardStats = {

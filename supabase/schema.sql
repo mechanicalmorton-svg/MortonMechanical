@@ -234,7 +234,8 @@ create table if not exists routes (
   vehicle_id text,
   stops jsonb not null default '[]',
   status text not null default 'planned',
-  notes text
+  notes text,
+  mileage int
 );
 
 -- Vehicle Manager (separate from fleet)

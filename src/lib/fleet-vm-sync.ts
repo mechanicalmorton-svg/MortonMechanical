@@ -78,6 +78,32 @@ export async function syncDeleteVmVehicle(id: string) {
   }
 }
 
+/** Update odometer on Fleet + Vehicle Manager for a shared vehicle id. */
+export async function applySyncedVehicleMileage(vehicleId: string, mileage: number) {
+  const next = Math.round(Number(mileage));
+  if (!vehicleId || !Number.isFinite(next) || next < 0) return;
+
+  try {
+    const fleet = await loadFleet();
+    const fleetVehicle = fleet.find((v) => v.id === vehicleId);
+    if (fleetVehicle) {
+      const updated = { ...fleetVehicle, mileage: next };
+      await upsertFleetVehicle(updated);
+      await syncFleetVehicleToVm(updated);
+      return;
+    }
+
+    const vmList = await loadVmVehicles();
+    const vmVehicle = vmList.find((v) => v.id === vehicleId);
+    if (!vmVehicle) return;
+    const updated = { ...vmVehicle, mileage: next };
+    await upsertVmVehicle(updated);
+    await syncVmVehicleToFleet(updated);
+  } catch (err) {
+    console.error("[fleet-vm-sync] apply mileage failed", vehicleId, err);
+  }
+}
+
 /**
  * Ensure every fleet vehicle has a Vehicle Manager row (backfill for existing data).
  * Does not overwrite vehicles that already exist in VM.

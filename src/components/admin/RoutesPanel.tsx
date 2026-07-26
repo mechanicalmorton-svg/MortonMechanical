@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, MapPin, Plus, Route, Trash2 } from "lucide-react";
+import { CheckCircle2, Gauge, MapPin, Plus, Route, Trash2 } from "lucide-react";
 import type { FleetVehicle, RoutePlan, RouteStop, StaffMember } from "@/lib/shop-types";
 import { adminGet, adminSend, asStaffList } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
@@ -18,6 +18,8 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [mileageDrafts, setMileageDrafts] = useState<Record<string, string>>({});
+  const [savingMileageId, setSavingMileageId] = useState<string | null>(null);
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     driverId: "",
@@ -110,6 +112,43 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
     else load();
   }
 
+  function mileageValueFor(route: RoutePlan) {
+    if (mileageDrafts[route.id] !== undefined) return mileageDrafts[route.id];
+    if (route.mileage != null) return String(route.mileage);
+    const vehicle = fleet.find((item) => item.id === route.vehicleId);
+    return vehicle?.mileage != null ? String(vehicle.mileage) : "";
+  }
+
+  async function saveMileage(route: RoutePlan) {
+    if (!route.vehicleId) {
+      toast.error("Assign a vehicle to this route before saving mileage.");
+      return;
+    }
+    const raw = mileageValueFor(route).trim();
+    const mileage = Number(raw.replace(/,/g, ""));
+    if (!raw || !Number.isFinite(mileage) || mileage < 0) {
+      toast.error("Enter a valid mileage reading.");
+      return;
+    }
+    setSavingMileageId(route.id);
+    const { error: message } = await adminSend("/api/admin/routes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: route.id, mileage }),
+    });
+    setSavingMileageId(null);
+    if (message) toast.error(message);
+    else {
+      toast.success("Mileage saved to route, Fleet, and Vehicle Manager.");
+      setMileageDrafts((prev) => {
+        const next = { ...prev };
+        delete next[route.id];
+        return next;
+      });
+      load();
+    }
+  }
+
   function labelForStaff(id?: string) {
     if (!id) return "Unassigned";
     return staff.find((member) => member.id === id)?.name ?? "Unknown";
@@ -189,6 +228,37 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
                   )}
                 </div>
               </div>
+
+              {route.vehicleId ? (
+                <Can permission="routes.edit">
+                  <div className="mt-4 flex flex-wrap items-end gap-2 rounded-xl border border-slate-800/80 bg-slate-950/40 p-3">
+                    <div className="min-w-[10rem] flex-1">
+                      <label className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500">
+                        <Gauge className="h-3 w-3" />
+                        Vehicle mileage
+                      </label>
+                      <input
+                        className={inputClass}
+                        inputMode="numeric"
+                        placeholder="Odometer reading"
+                        value={mileageValueFor(route)}
+                        onChange={(e) =>
+                          setMileageDrafts((prev) => ({ ...prev, [route.id]: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className={btnSecondary}
+                      disabled={savingMileageId === route.id}
+                      onClick={() => saveMileage(route)}
+                    >
+                      {savingMileageId === route.id ? "Saving…" : "Save mileage"}
+                    </button>
+                  </div>
+                </Can>
+              ) : null}
+
               <ol className="mt-4 space-y-2">
                 {route.stops.map((stop, index) => (
                   <li
