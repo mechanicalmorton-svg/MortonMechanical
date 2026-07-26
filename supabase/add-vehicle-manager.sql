@@ -2,11 +2,20 @@
 
 create table if not exists vm_vehicles (
   id text primary key,
+  name text not null default '',
   vehicle_number text not null default '',
   year int not null default 0,
   make text not null default '',
-  model text not null default ''
+  model text not null default '',
+  status text not null default 'active',
+  mileage int,
+  last_service text
 );
+
+alter table vm_vehicles add column if not exists name text default '';
+alter table vm_vehicles add column if not exists status text default 'active';
+alter table vm_vehicles add column if not exists mileage int;
+alter table vm_vehicles add column if not exists last_service text;
 
 create table if not exists vm_parts (
   id text primary key,

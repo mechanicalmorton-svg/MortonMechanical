@@ -191,12 +191,18 @@ export type FleetVehicle = {
 };
 
 /** Vehicle Manager (shop PM / checklist app) — separate from Fleet Management. */
+export type VmVehicleStatus = "active" | "maintenance" | "out_of_service";
+
 export type VmVehicle = {
   id: string;
+  name: string;
   vehicleNumber: string;
   year: number;
   make: string;
   model: string;
+  status: VmVehicleStatus;
+  mileage?: number;
+  lastService?: string;
 };
 
 export type VmPart = {

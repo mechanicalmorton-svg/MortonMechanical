@@ -209,6 +209,7 @@ export function StatusBadge({ status }: { status: string }) {
     urgent: "admin-glass-chip--red text-red-100",
     active: "admin-glass-chip--emerald text-emerald-100",
     maintenance: "admin-glass-chip--amber text-amber-100",
+    out_of_service: "admin-glass-chip--red text-red-100",
     retired: "admin-glass-chip--slate text-slate-300",
     planned: "admin-glass-chip--sky text-sky-100",
     new: "admin-glass-chip--amber text-amber-100",
@@ -236,6 +237,9 @@ export function StatusBadge({ status }: { status: string }) {
     cancelled: "Cancelled",
     open: "Draft",
     pending: "Draft",
+    out_of_service: "Out of Service",
+    maintenance: "Maintenance",
+    active: "Active",
   };
   const label = labels[status] ?? status.replace(/_/g, " ");
   return (

@@ -135,7 +135,8 @@ export function VehicleChecklistsPanel() {
   function vehicleLabel(id: string) {
     const v = vehicleMap.get(id);
     if (!v) return "Unknown vehicle";
-    return `#${v.vehicleNumber} · ${v.year} ${v.make} ${v.model}`;
+    const title = v.name || `#${v.vehicleNumber}`;
+    return `${title} · ${[v.year, v.make, v.model].filter(Boolean).join(" ")}`;
   }
 
   return (
@@ -254,7 +255,7 @@ export function VehicleChecklistsPanel() {
                           <option value="">Select vehicle…</option>
                           {availableToAdd.map((v) => (
                             <option key={v.id} value={v.id}>
-                              #{v.vehicleNumber} · {v.year} {v.make} {v.model}
+                              {v.name || `#${v.vehicleNumber}`} · {[v.year, v.make, v.model].filter(Boolean).join(" ")}
                             </option>
                           ))}
                         </select>
@@ -318,7 +319,8 @@ export function VehicleChecklistsPanel() {
                       className="accent-amber-500"
                     />
                     <span>
-                      #{vehicle.vehicleNumber} · {vehicle.year} {vehicle.make} {vehicle.model}
+                      {vehicle.name || `#${vehicle.vehicleNumber}`} ·{" "}
+                      {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")}
                     </span>
                   </label>
                 ))

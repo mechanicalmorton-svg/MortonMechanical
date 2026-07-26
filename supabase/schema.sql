@@ -240,10 +240,14 @@ create table if not exists routes (
 -- Vehicle Manager (separate from fleet)
 create table if not exists vm_vehicles (
   id text primary key,
+  name text not null default '',
   vehicle_number text not null default '',
   year int not null default 0,
   make text not null default '',
-  model text not null default ''
+  model text not null default '',
+  status text not null default 'active',
+  mileage int,
+  last_service text
 );
 
 create table if not exists vm_parts (

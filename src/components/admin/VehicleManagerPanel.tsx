@@ -1,18 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ClipboardList, Package, Pencil, Plus, Trash2, Wrench } from "lucide-react";
-import type { VmActivity, VmPart, VmServiceOrder, VmVehicle } from "@/lib/shop-types";
+import { ArrowLeft, ClipboardList, Pencil, Plus, Trash2, Wrench } from "lucide-react";
+import type { VmActivity, VmPart, VmServiceOrder, VmVehicle, VmVehicleStatus } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
-import { EmptyState, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { Can } from "./permissions";
 
-const YEARS = Array.from({ length: new Date().getFullYear() - 1979 }, (_, i) => String(new Date().getFullYear() - i));
-
-const emptyVehicle = { vehicleNumber: "", year: String(new Date().getFullYear()), make: "", model: "" };
-const emptyPart = { name: "", partNumber: "", description: "" };
 const emptyService = {
   mileage: "",
   workNeeded: "",
@@ -24,7 +20,13 @@ const emptyService = {
 };
 
 function vehicleLabel(v: VmVehicle) {
-  return `#${v.vehicleNumber} · ${v.year} ${v.make} ${v.model}`.trim();
+  return v.name || `#${v.vehicleNumber}`;
+}
+
+function vehicleMeta(v: VmVehicle) {
+  const number = v.vehicleNumber ? `#${v.vehicleNumber}` : "";
+  const makeModel = [v.make, v.model].filter(Boolean).join(" ");
+  return [number, makeModel].filter(Boolean).join(" · ");
 }
 
 function formatDate(iso: string) {
@@ -44,16 +46,6 @@ export function VehicleManagerPanel() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const [vehicleModal, setVehicleModal] = useState(false);
-  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
-  const [vehicleForm, setVehicleForm] = useState(emptyVehicle);
-
-  const [partsModal, setPartsModal] = useState(false);
-  const [partEditModal, setPartEditModal] = useState(false);
-  const [editingPartId, setEditingPartId] = useState<string | null>(null);
-  const [partForm, setPartForm] = useState(emptyPart);
-  const [partSearch, setPartSearch] = useState("");
 
   const [activitiesModal, setActivitiesModal] = useState(false);
   const [activityName, setActivityName] = useState("");
@@ -120,98 +112,27 @@ export function VehicleManagerPanel() {
     });
     if (!q) return list;
     return list.filter((v) =>
-      `${v.vehicleNumber} ${v.year} ${v.make} ${v.model}`.toLowerCase().includes(q),
+      `${v.name} ${v.vehicleNumber} ${v.year} ${v.make} ${v.model} ${v.status}`.toLowerCase().includes(q),
     );
   }, [vehicles, search]);
 
-  const grouped = useMemo(() => {
-    const groups: { key: string; items: VmVehicle[] }[] = [];
-    for (const vehicle of filteredVehicles) {
-      const key = `${vehicle.make} ${vehicle.model}`.trim() || "Uncategorized";
-      const last = groups[groups.length - 1];
-      if (last?.key === key) last.items.push(vehicle);
-      else groups.push({ key, items: [vehicle] });
-    }
-    return groups;
-  }, [filteredVehicles]);
-
-  const filteredParts = useMemo(() => {
-    const q = partSearch.trim().toLowerCase();
-    if (!q) return parts;
-    return parts.filter((p) => `${p.name} ${p.partNumber} ${p.description}`.toLowerCase().includes(q));
-  }, [parts, partSearch]);
-
-  async function saveVehicle(e: React.FormEvent) {
-    e.preventDefault();
-    const payload = {
-      ...(editingVehicleId ? { id: editingVehicleId } : {}),
-      vehicleNumber: vehicleForm.vehicleNumber,
-      year: Number(vehicleForm.year),
-      make: vehicleForm.make,
-      model: vehicleForm.model,
-    };
+  async function updateStatus(id: string, status: VmVehicleStatus) {
     const { error } = await adminSend("/api/admin/vehicle-manager/vehicles", {
-      method: editingVehicleId ? "PATCH" : "POST",
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ id, status }),
     });
     if (error) toast.error(error);
-    else {
-      toast.success(editingVehicleId ? "Vehicle updated." : "Vehicle added.");
-      setVehicleModal(false);
-      setEditingVehicleId(null);
-      setVehicleForm(emptyVehicle);
-      loadBase();
-    }
+    else loadBase();
   }
 
-  async function removeVehicle(id: string) {
-    if (!confirm("Delete this vehicle and its service history?")) return;
-    const { error } = await adminSend("/api/admin/vehicle-manager/vehicles", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    if (error) toast.error(error);
-    else {
-      if (selectedId === id) setSelectedId(null);
-      toast.success("Vehicle deleted.");
-      loadBase();
+  function toggleCardStatus(vehicle: VmVehicle) {
+    if (vehicle.status === "out_of_service") {
+      void updateStatus(vehicle.id, "active");
+      return;
     }
-  }
-
-  async function savePart(e: React.FormEvent) {
-    e.preventDefault();
-    const { error } = await adminSend("/api/admin/vehicle-manager/parts", {
-      method: editingPartId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...(editingPartId ? { id: editingPartId } : {}),
-        ...partForm,
-      }),
-    });
-    if (error) toast.error(error);
-    else {
-      toast.success(editingPartId ? "Part updated." : "Part added.");
-      setPartEditModal(false);
-      setEditingPartId(null);
-      setPartForm(emptyPart);
-      loadBase();
-    }
-  }
-
-  async function removePart(id: string) {
-    if (!confirm("Delete this part?")) return;
-    const { error } = await adminSend("/api/admin/vehicle-manager/parts", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    if (error) toast.error(error);
-    else {
-      toast.success("Part deleted.");
-      loadBase();
-    }
+    const next: VmVehicleStatus = vehicle.status === "maintenance" ? "active" : "maintenance";
+    void updateStatus(vehicle.id, next);
   }
 
   async function saveActivity(e: React.FormEvent) {
@@ -346,12 +267,29 @@ export function VehicleManagerPanel() {
 
         <article className="mb-6 overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/40">
           <div className="h-1 bg-gradient-to-r from-amber-500 to-pink-600" />
-          <div className="p-5 sm:p-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Service history</p>
-            <h2 className="mt-1 text-xl font-semibold text-white">{vehicleLabel(selected)}</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              {selected.year} {selected.make} {selected.model}
-            </p>
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-white">{vehicleLabel(selected)}</p>
+                <p className="text-sm text-slate-400">{vehicleMeta(selected)}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {[selected.year, selected.make, selected.model].filter(Boolean).join(" ")}
+                </p>
+              </div>
+              <StatusBadge status={selected.status || "active"} />
+            </div>
+            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-xs text-slate-500">Mileage</dt>
+                <dd className="text-slate-300">{selected.mileage?.toLocaleString() ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Last service</dt>
+                <dd className="text-slate-300">
+                  {selected.lastService ? new Date(selected.lastService).toLocaleDateString() : "—"}
+                </dd>
+              </div>
+            </dl>
           </div>
         </article>
 
@@ -491,7 +429,7 @@ export function VehicleManagerPanel() {
                     </label>
                   ))
                 ) : (
-                  <p className="text-xs text-slate-500">No parts in catalog yet. Add parts from the Vehicles screen.</p>
+                  <p className="text-xs text-slate-500">No parts available for this work order.</p>
                 )}
               </div>
             </div>
@@ -511,282 +449,120 @@ export function VehicleManagerPanel() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader
-        title="Vehicle Manager"
-        subtitle="Track shop PM vehicles, service history, parts, and activities."
-        actions={
-          <>
-            <Can permission="vehicle_manager.create">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingVehicleId(null);
-                  setVehicleForm(emptyVehicle);
-                  setVehicleModal(true);
-                }}
-                className={btnPrimary}
-              >
-                <Plus className="h-4 w-4" /> Add vehicle
-              </button>
-            </Can>
-            <Can permission="vehicle_manager.view">
-              <button type="button" onClick={() => setActivitiesModal(true)} className={btnSecondary}>
-                <ClipboardList className="h-4 w-4" /> Activities
-              </button>
-              <button type="button" onClick={() => setPartsModal(true)} className={btnSecondary}>
-                <Package className="h-4 w-4" /> Parts
-              </button>
-            </Can>
-          </>
-        }
-      />
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <PageHeader
+          title="Vehicle Manager"
+          subtitle="Track shop PM vehicles, service history, and activities."
+        />
+        <Can permission="vehicle_manager.view">
+          <button type="button" onClick={() => setActivitiesModal(true)} className={btnSecondary}>
+            <ClipboardList className="h-4 w-4" /> Activities
+          </button>
+        </Can>
+      </div>
 
       <div className="mb-6">
         <input
           className={`${inputClass} max-w-xl`}
-          placeholder="Search by number, make, or model…"
+          placeholder="Search by name, number, make, or model…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
       {loading ? (
-        <p className="text-slate-500">Loading vehicles…</p>
+        <p className="text-slate-500">Loading…</p>
       ) : !filteredVehicles.length ? (
         <EmptyState icon={Wrench} title="No vehicles yet" text="Add your first vehicle to start logging service." />
       ) : (
-        <div className="space-y-8">
-          {grouped.map((group) => (
-            <section key={group.key}>
-              <h3 className="mb-3 border-b border-slate-800/80 pb-2 text-sm font-semibold uppercase tracking-[0.14em] text-slate-400">
-                {group.key}
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {group.items.map((vehicle) => {
-                  const last = lastWorkByVehicle.get(vehicle.id);
-                  return (
-                    <article
-                      key={vehicle.id}
-                      className="overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/40 transition hover:border-slate-700"
-                    >
-                      <div className="h-1 bg-gradient-to-r from-amber-500 to-pink-600" />
-                      <div className="p-5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-lg font-semibold text-white">#{vehicle.vehicleNumber}</p>
-                            <p className="text-sm text-slate-400">
-                              {vehicle.year} {vehicle.make} {vehicle.model}
-                            </p>
-                          </div>
-                          <div className="flex gap-1">
-                            <Can permission="vehicle_manager.edit">
-                              <button
-                                type="button"
-                                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
-                                aria-label="Edit vehicle"
-                                onClick={() => {
-                                  setEditingVehicleId(vehicle.id);
-                                  setVehicleForm({
-                                    vehicleNumber: vehicle.vehicleNumber,
-                                    year: String(vehicle.year),
-                                    make: vehicle.make,
-                                    model: vehicle.model,
-                                  });
-                                  setVehicleModal(true);
-                                }}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </button>
-                            </Can>
-                            <Can permission="vehicle_manager.delete">
-                              <button
-                                type="button"
-                                className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-300"
-                                aria-label="Delete vehicle"
-                                onClick={() => removeVehicle(vehicle.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </Can>
-                          </div>
-                        </div>
-                        <div className="mt-3 rounded-xl border border-slate-800/70 bg-slate-950/50 px-3 py-2 text-xs text-slate-400">
-                          {last ? (
-                            <>
-                              <span className="font-medium text-slate-300">Last work:</span> {last.workNeeded || "Service"}{" "}
-                              · {formatDate(last.createdAt)}
-                            </>
-                          ) : (
-                            "No service history yet"
-                          )}
-                        </div>
-                        <button type="button" onClick={() => setSelectedId(vehicle.id)} className={`${btnSecondary} mt-4 w-full`}>
-                          <Wrench className="h-4 w-4" /> Service
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
-
-      <AdminModal
-        open={vehicleModal}
-        onClose={() => setVehicleModal(false)}
-        title={editingVehicleId ? "Edit vehicle" : "Add vehicle"}
-      >
-        <form onSubmit={saveVehicle} className="space-y-3">
-          <input
-            className={inputClass}
-            placeholder="Vehicle number"
-            value={vehicleForm.vehicleNumber}
-            onChange={(e) => setVehicleForm({ ...vehicleForm, vehicleNumber: e.target.value })}
-            required
-          />
-          <select
-            className={inputClass}
-            value={vehicleForm.year}
-            onChange={(e) => setVehicleForm({ ...vehicleForm, year: e.target.value })}
-          >
-            {YEARS.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-          <input
-            className={inputClass}
-            placeholder="Make"
-            value={vehicleForm.make}
-            onChange={(e) => setVehicleForm({ ...vehicleForm, make: e.target.value })}
-            required
-          />
-          <input
-            className={inputClass}
-            placeholder="Model"
-            value={vehicleForm.model}
-            onChange={(e) => setVehicleForm({ ...vehicleForm, model: e.target.value })}
-            required
-          />
-          <div className="flex gap-2">
-            <button type="submit" className={btnPrimary}>
-              {editingVehicleId ? "Save changes" : "Add vehicle"}
-            </button>
-            <button type="button" onClick={() => setVehicleModal(false)} className={btnSecondary}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      </AdminModal>
-
-      <AdminModal open={partsModal} onClose={() => setPartsModal(false)} title="Parts catalog" wide>
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <input
-              className={`${inputClass} min-w-[12rem] flex-1`}
-              placeholder="Search parts…"
-              value={partSearch}
-              onChange={(e) => setPartSearch(e.target.value)}
-            />
-            <Can permission="vehicle_manager.create">
-              <button
-                type="button"
-                className={btnPrimary}
-                onClick={() => {
-                  setEditingPartId(null);
-                  setPartForm(emptyPart);
-                  setPartEditModal(true);
-                }}
-              >
-                <Plus className="h-4 w-4" /> Add part
-              </button>
-            </Can>
-          </div>
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto">
-            {filteredParts.length ? (
-              filteredParts.map((part) => (
-                <div
-                  key={part.id}
-                  className="flex items-start justify-between gap-3 rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-white">{part.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {part.partNumber || "No part #"}
-                      {part.description ? ` · ${part.description}` : ""}
-                    </p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredVehicles.map((vehicle) => {
+            const last = lastWorkByVehicle.get(vehicle.id);
+            const lastServiceDisplay = vehicle.lastService
+              ? new Date(vehicle.lastService).toLocaleDateString()
+              : last
+                ? new Date(last.createdAt).toLocaleDateString()
+                : "—";
+            const statusLabel =
+              vehicle.status === "maintenance"
+                ? "Maintenance"
+                : vehicle.status === "out_of_service"
+                  ? "Out of service"
+                  : "Active";
+            return (
+              <article key={vehicle.id} className="overflow-hidden rounded-xl border border-slate-800/80 bg-slate-900/40">
+                <div className="h-0.5 bg-gradient-to-r from-amber-500 to-pink-600" />
+                <div className="p-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">{vehicleLabel(vehicle)}</p>
+                      <p className="truncate text-xs text-slate-400">{vehicleMeta(vehicle)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                        {[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")}
+                      </p>
+                    </div>
+                    <StatusBadge status={vehicle.status || "active"} />
                   </div>
-                  <div className="flex shrink-0 gap-1">
+                  <dl className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <dt className="text-[10px] uppercase tracking-wide text-slate-500">Mileage</dt>
+                      <dd className="text-slate-300">{vehicle.mileage?.toLocaleString() ?? "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] uppercase tracking-wide text-slate-500">Last service</dt>
+                      <dd className="text-slate-300">{lastServiceDisplay}</dd>
+                    </div>
+                  </dl>
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
                     <Can permission="vehicle_manager.edit">
                       <button
                         type="button"
-                        className={btnSecondary}
-                        onClick={() => {
-                          setEditingPartId(part.id);
-                          setPartForm({
-                            name: part.name,
-                            partNumber: part.partNumber,
-                            description: part.description,
-                          });
-                          setPartEditModal(true);
-                        }}
+                        onClick={() => toggleCardStatus(vehicle)}
+                        className={`inline-flex h-7 flex-1 items-center justify-center rounded-lg border px-2 text-[11px] font-semibold transition active:scale-[0.98] ${
+                          vehicle.status === "out_of_service"
+                            ? "border-slate-700/70 bg-slate-900/50 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                            : vehicle.status === "maintenance"
+                              ? "border-amber-500/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/20"
+                              : "border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/20"
+                        }`}
+                        aria-label={`Status ${statusLabel}. Click to switch Active and Maintenance.`}
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        {vehicle.status === "maintenance" ? "Maintenance" : "Active"}
                       </button>
                     </Can>
-                    <Can permission="vehicle_manager.delete">
-                      <button type="button" className={btnDanger} onClick={() => removePart(part.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(vehicle.id)}
+                      className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-slate-700/70 bg-slate-900/50 px-2.5 text-[11px] font-medium text-slate-200 transition hover:border-slate-600 hover:bg-slate-800/70 hover:text-white active:scale-[0.98]"
+                    >
+                      <Wrench className="h-3 w-3" /> Service
+                    </button>
+                    <Can permission="vehicle_manager.edit">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateStatus(
+                            vehicle.id,
+                            vehicle.status === "out_of_service" ? "active" : "out_of_service",
+                          )
+                        }
+                        className={`inline-flex h-7 flex-1 items-center justify-center rounded-lg border px-2 text-[11px] font-semibold transition active:scale-[0.98] ${
+                          vehicle.status === "out_of_service"
+                            ? "border-red-500/45 bg-red-500/20 text-red-100 hover:bg-red-500/25"
+                            : "border-red-900/50 bg-red-950/20 text-red-300 hover:bg-red-500/15 hover:text-red-100"
+                        }`}
+                        aria-label="Out of service"
+                      >
+                        Out of service
                       </button>
                     </Can>
                   </div>
                 </div>
-              ))
-            ) : (
-              <p className="py-6 text-center text-sm text-slate-500">No parts yet.</p>
-            )}
-          </div>
+              </article>
+            );
+          })}
         </div>
-      </AdminModal>
-
-      <AdminModal
-        open={partEditModal}
-        onClose={() => setPartEditModal(false)}
-        title={editingPartId ? "Edit part" : "Add part"}
-      >
-        <form onSubmit={savePart} className="space-y-3">
-          <input
-            className={inputClass}
-            placeholder="Part name"
-            value={partForm.name}
-            onChange={(e) => setPartForm({ ...partForm, name: e.target.value })}
-            required
-          />
-          <input
-            className={inputClass}
-            placeholder="Part number"
-            value={partForm.partNumber}
-            onChange={(e) => setPartForm({ ...partForm, partNumber: e.target.value })}
-          />
-          <textarea
-            className={`${inputClass} min-h-[4rem]`}
-            placeholder="Description"
-            value={partForm.description}
-            onChange={(e) => setPartForm({ ...partForm, description: e.target.value })}
-          />
-          <div className="flex gap-2">
-            <button type="submit" className={btnPrimary}>
-              {editingPartId ? "Save changes" : "Add part"}
-            </button>
-            <button type="button" onClick={() => setPartEditModal(false)} className={btnSecondary}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      </AdminModal>
+      )}
 
       <AdminModal open={activitiesModal} onClose={() => setActivitiesModal(false)} title="Activities">
         <form onSubmit={saveActivity} className="mb-4 flex flex-wrap gap-2">

@@ -10,7 +10,14 @@ import type {
   VmServiceOrder,
   VmServiceOrderPart,
   VmVehicle,
+  VmVehicleStatus,
 } from "./shop-types";
+
+function normalizeVmStatus(value: unknown): VmVehicleStatus {
+  if (value === "maintenance") return "maintenance";
+  if (value === "out_of_service" || value === "retired") return "out_of_service";
+  return "active";
+}
 
 function useDatabase() {
   requireDatabaseInProduction();
@@ -35,20 +42,28 @@ async function fetchDbRowById<T>(
 function rowToVmVehicle(r: Record<string, unknown>): VmVehicle {
   return {
     id: r.id as string,
+    name: (r.name as string) || `Unit ${(r.vehicle_number as string) || ""}`.trim(),
     vehicleNumber: (r.vehicle_number as string) ?? "",
     year: Number(r.year) || 0,
     make: (r.make as string) ?? "",
     model: (r.model as string) ?? "",
+    status: normalizeVmStatus(r.status),
+    mileage: r.mileage != null ? Number(r.mileage) : undefined,
+    lastService: (r.last_service as string) || undefined,
   };
 }
 
 function vmVehicleToRow(v: VmVehicle) {
   return {
     id: v.id,
+    name: v.name,
     vehicle_number: v.vehicleNumber,
     year: v.year,
     make: v.make,
     model: v.model,
+    status: v.status,
+    mileage: v.mileage ?? null,
+    last_service: v.lastService ?? null,
   };
 }
 

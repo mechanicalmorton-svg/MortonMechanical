@@ -4,9 +4,23 @@ import {
   createVmId,
   deleteVmServiceOrder,
   loadVmServiceOrders,
+  loadVmVehicles,
   upsertVmServiceOrder,
+  upsertVmVehicle,
 } from "@/lib/vehicle-manager-data";
 import type { VmServiceOrder, VmServiceOrderPart } from "@/lib/shop-types";
+
+async function syncVehicleFromOrder(order: VmServiceOrder) {
+  const vehicles = await loadVmVehicles();
+  const vehicle = vehicles.find((v) => v.id === order.vehicleId);
+  if (!vehicle) return;
+  const mileageNum = Number(String(order.mileage).replace(/,/g, ""));
+  await upsertVmVehicle({
+    ...vehicle,
+    mileage: Number.isFinite(mileageNum) && mileageNum > 0 ? mileageNum : vehicle.mileage,
+    lastService: order.createdAt.slice(0, 10),
+  });
+}
 
 function normalizeParts(raw: unknown): VmServiceOrderPart[] {
   if (!Array.isArray(raw)) return [];
@@ -49,6 +63,7 @@ export async function POST(req: Request) {
       createdAt: new Date().toISOString(),
     };
     await upsertVmServiceOrder(order);
+    await syncVehicleFromOrder(order);
     return NextResponse.json(order);
   });
 }
@@ -75,6 +90,7 @@ export async function PATCH(req: Request) {
       parts: body.parts != null ? normalizeParts(body.parts) : item.parts,
     };
     await upsertVmServiceOrder(updated);
+    await syncVehicleFromOrder(updated);
     return NextResponse.json(updated);
   });
 }
