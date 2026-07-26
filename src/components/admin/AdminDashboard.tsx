@@ -40,6 +40,7 @@ import { QuotesPanel } from "./QuotesPanel";
 import { RoutesPanel } from "./RoutesPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { StaffPanel } from "./StaffPanel";
+import { TimeclockNavControl } from "./TimeclockNavControl";
 import { TimesheetsPanel } from "./TimesheetsPanel";
 import { VehicleChecklistsPanel } from "./VehicleChecklistsPanel";
 import { VehicleManagerPanel } from "./VehicleManagerPanel";
@@ -441,14 +442,17 @@ export function AdminDashboard({ user }: Props) {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <header className="sticky top-0 z-40 shrink-0 border-b border-slate-800/70 bg-slate-950/70 px-4 py-3.5 backdrop-blur-xl sm:px-6">
               <div className="flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => setMobileOpen(true)}
-                  className="rounded-xl border border-slate-800 bg-slate-900/60 p-2 text-slate-300 transition hover:bg-slate-800 xl:hidden"
-                  aria-label="Open menu"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
+                <div className="flex min-w-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMobileOpen(true)}
+                    className="rounded-xl border border-slate-800 bg-slate-900/60 p-2 text-slate-300 transition hover:bg-slate-800 xl:hidden"
+                    aria-label="Open menu"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </button>
+                  <TimeclockNavControl />
+                </div>
                 <div className="ml-auto hidden items-center gap-2.5 sm:flex">
                   <button
                     type="button"

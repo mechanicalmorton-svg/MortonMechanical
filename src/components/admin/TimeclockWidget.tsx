@@ -7,6 +7,7 @@ import { adminGet, adminSend } from "./admin-fetch";
 import { useAdminToast } from "./AdminToast";
 import { btnPrimary } from "./admin-ui";
 import { Can, usePermissions } from "./permissions";
+import { TIMECLOCK_CHANGED } from "./TimeclockNavControl";
 
 type MinePayload = {
   open: TimeEntry | null;
@@ -54,6 +55,11 @@ export function TimeclockWidget() {
 
   useEffect(() => {
     load();
+    function onChanged() {
+      load();
+    }
+    window.addEventListener(TIMECLOCK_CHANGED, onChanged);
+    return () => window.removeEventListener(TIMECLOCK_CHANGED, onChanged);
   }, [load]);
 
   async function punch(action: "in" | "out") {
@@ -68,6 +74,7 @@ export function TimeclockWidget() {
     else {
       toast.success(action === "in" ? "Clocked in." : "Clocked out.");
       load();
+      window.dispatchEvent(new Event(TIMECLOCK_CHANGED));
     }
   }
 
