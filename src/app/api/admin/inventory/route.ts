@@ -41,28 +41,33 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const body = await req.json();
-  const isAdjust = Boolean(body.sku && body.adjust !== undefined && !body.id);
-  return withPermission(isAdjust ? "inventory.adjust" : "inventory.edit", async () => {
-    const items = await loadInventory();
+  // Barcode scan quick-add uses sku + adjust (not id). Requires scan + adjust.
+  const isScanAdjust = Boolean(body.sku && body.adjust !== undefined && !body.id);
+  return withPermission(
+    isScanAdjust ? ["inventory.scan", "inventory.adjust"] : "inventory.edit",
+    async () => {
+      const items = await loadInventory();
 
-    if (isAdjust) {
-      const item = items.find((i) => i.sku.toLowerCase() === String(body.sku).trim().toLowerCase());
-      if (!item) return NextResponse.json({ error: "SKU not found." }, { status: 404 });
-      const updated = {
-        ...item,
-        quantity: Math.max(0, item.quantity + Number(body.adjust)),
-        updatedAt: new Date().toISOString(),
-      };
+      if (isScanAdjust) {
+        const item = items.find((i) => i.sku.toLowerCase() === String(body.sku).trim().toLowerCase());
+        if (!item) return NextResponse.json({ error: "SKU not found." }, { status: 404 });
+        const updated = {
+          ...item,
+          quantity: Math.max(0, item.quantity + Number(body.adjust)),
+          updatedAt: new Date().toISOString(),
+        };
+        await upsertInventoryItem(updated);
+        return NextResponse.json(updated);
+      }
+
+      const item = items.find((i) => i.id === body.id);
+      if (!item) return NextResponse.json({ error: "Not found." }, { status: 404 });
+      const updated = { ...item, ...body, updatedAt: new Date().toISOString() };
       await upsertInventoryItem(updated);
       return NextResponse.json(updated);
-    }
-
-    const item = items.find((i) => i.id === body.id);
-    if (!item) return NextResponse.json({ error: "Not found." }, { status: 404 });
-    const updated = { ...item, ...body, updatedAt: new Date().toISOString() };
-    await upsertInventoryItem(updated);
-    return NextResponse.json(updated);
-  });
+    },
+    isScanAdjust ? "all" : "any",
+  );
 }
 
 export async function DELETE(req: Request) {

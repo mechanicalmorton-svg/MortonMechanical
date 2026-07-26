@@ -133,6 +133,11 @@ function seedCatalog() {
       { action: "edit", label: "Edit" },
       { action: "delete", label: "Delete" },
       { action: "adjust", label: "Adjust stock / categories" },
+      {
+        action: "scan",
+        label: "Barcode scan",
+        description: "Show barcode scan mode and allow scan-to-adjust stock by SKU",
+      },
     ],
   });
 
@@ -142,6 +147,31 @@ function seedCatalog() {
     description: "Shop vehicles",
     tabs: ["fleet"],
     permissions: [
+      { action: "view", label: "View" },
+      { action: "create", label: "Create" },
+      { action: "edit", label: "Edit" },
+      { action: "delete", label: "Delete" },
+    ],
+  });
+
+  registerModule({
+    id: "vehicle_manager",
+    label: "Vehicle Manager",
+    description: "PM vehicles, service history, and checklists",
+    tabs: ["vehicle-manager", "vehicle-checklists"],
+    permissions: [
+      {
+        action: "workspace.vehicles",
+        label: "Workspace: Vehicles",
+        description: "Show Vehicle Manager → Vehicles in the sidebar",
+        unlocksTabs: ["vehicle-manager"],
+      },
+      {
+        action: "workspace.checklists",
+        label: "Workspace: Checklists",
+        description: "Show Vehicle Manager → Checklists in the sidebar",
+        unlocksTabs: ["vehicle-checklists"],
+      },
       { action: "view", label: "View" },
       { action: "create", label: "Create" },
       { action: "edit", label: "Edit" },
@@ -328,9 +358,22 @@ export const TAB_TO_ACTIONS: Record<string, string[]> = {
     "inventory.create",
     "inventory.edit",
     "inventory.adjust",
+    "inventory.scan",
   ],
   "inventory-low": ["inventory.workspace.low", "inventory.view"],
   fleet: ["fleet.view", "fleet.create", "fleet.edit"],
+  "vehicle-manager": [
+    "vehicle_manager.workspace.vehicles",
+    "vehicle_manager.view",
+    "vehicle_manager.create",
+    "vehicle_manager.edit",
+  ],
+  "vehicle-checklists": [
+    "vehicle_manager.workspace.checklists",
+    "vehicle_manager.view",
+    "vehicle_manager.create",
+    "vehicle_manager.edit",
+  ],
   "routes-manager": ["routes.workspace.manager", "routes.view", "routes.create", "routes.edit"],
   "routes-today": ["routes.workspace.today", "routes.view", "routes.edit"],
   users: ["users.view", "users.create", "users.edit", "users.manage", "roles.view", "roles.edit"],
@@ -403,6 +446,10 @@ export function ensureWorkspaceActions(actions: string[], tabs: string[] = []): 
   migrate("inventory", [
     { key: "inventory.workspace.all", tab: "inventory-all" },
     { key: "inventory.workspace.low", tab: "inventory-low" },
+  ]);
+  migrate("vehicle_manager", [
+    { key: "vehicle_manager.workspace.vehicles", tab: "vehicle-manager" },
+    { key: "vehicle_manager.workspace.checklists", tab: "vehicle-checklists" },
   ]);
 
   return [...next];

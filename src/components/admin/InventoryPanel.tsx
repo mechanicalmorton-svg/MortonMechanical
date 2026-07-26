@@ -19,7 +19,7 @@ import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
-import { Can } from "./permissions";
+import { Can, usePermissions } from "./permissions";
 import { SearchableSelect } from "./SearchableSelect";
 
 type Props = { lowStockOnly?: boolean; role?: StaffRole; canManageCategories?: boolean };
@@ -131,6 +131,8 @@ function FormField({
 
 export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Props) {
   const toast = useAdminToast();
+  const { hasPermission } = usePermissions();
+  const canScanBarcode = hasPermission("inventory.scan");
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [categories, setCategories] = useState<string[]>([...DEFAULT_INVENTORY_CATEGORIES]);
@@ -167,6 +169,10 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
   }, []);
 
   useEffect(() => {
+    if (!canScanBarcode && scanMode) setScanMode(false);
+  }, [canScanBarcode, scanMode]);
+
+  useEffect(() => {
     if (scanMode) scanInputRef.current?.focus();
   }, [scanMode]);
 
@@ -176,6 +182,11 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
 
   const handleScan = useCallback(
     async (rawSku: string) => {
+      if (!canScanBarcode) {
+        toast.error("You do not have permission to use barcode scan.");
+        setScanMode(false);
+        return;
+      }
       const sku = rawSku.trim();
       if (!sku) return;
       closeAllDropdowns();
@@ -213,11 +224,11 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
 
       toast.info(`SKU "${sku}" not found. Click Add Part to create a new inventory item.`);
     },
-    [closeAllDropdowns, showForm, editingId, toast],
+    [canScanBarcode, closeAllDropdowns, showForm, editingId, toast],
   );
 
   useEffect(() => {
-    if (!scanMode) return;
+    if (!scanMode || !canScanBarcode) return;
 
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
@@ -242,7 +253,7 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [scanMode, handleScan]);
+  }, [scanMode, canScanBarcode, handleScan]);
 
   const filtered = lowStockOnly
     ? items.filter((item) => item.minStock > 0 && item.quantity <= item.minStock)
@@ -378,14 +389,16 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
         }
         actions={
           <>
-            <button
-              type="button"
-              onClick={() => setScanMode((v) => !v)}
-              className={scanMode ? `${btnPrimary} ring-2 ring-emerald-400/40` : btnSecondary}
-            >
-              <Barcode className="h-4 w-4" />
-              {scanMode ? "Scan mode on" : "Barcode scan"}
-            </button>
+            <Can permission="inventory.scan">
+              <button
+                type="button"
+                onClick={() => setScanMode((v) => !v)}
+                className={scanMode ? `${btnPrimary} ring-2 ring-emerald-400/40` : btnSecondary}
+              >
+                <Barcode className="h-4 w-4" />
+                {scanMode ? "Scan mode on" : "Barcode scan"}
+              </button>
+            </Can>
             {canManageCategories && !lowStockOnly ? (
               <button
                 type="button"
@@ -407,7 +420,7 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
         }
       />
 
-      {scanMode && (
+      {canScanBarcode && scanMode ? (
         <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
           <p className="text-sm font-medium text-emerald-200">Barcode scan mode active</p>
           <p className="mt-1 text-xs text-emerald-100/80">
@@ -434,7 +447,7 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
             />
           </label>
         </div>
-      )}
+      ) : null}
 
       <AdminModal
         open={showForm}

@@ -366,6 +366,8 @@ async function buildAdminUser(
           "quotes",
           "users",
           "fleet",
+          "vehicle-manager",
+          "vehicle-checklists",
           "routes-manager",
           "routes-today",
           "site-contents",

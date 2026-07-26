@@ -23,6 +23,8 @@ export const DASHBOARD_TAB_OPTIONS = [
   { id: "quotes", label: "Quote Requests" },
   { id: "users", label: "User Management" },
   { id: "fleet", label: "Fleet Management" },
+  { id: "vehicle-manager", label: "Vehicle Manager · Vehicles" },
+  { id: "vehicle-checklists", label: "Vehicle Manager · Checklists" },
   { id: "routes-manager", label: "Routes · Manager" },
   { id: "routes-today", label: "Routes · My route today" },
   { id: "site-contents", label: "Site Contents" },
@@ -78,6 +80,16 @@ export const PERMISSION_PAGE_GROUPS: PermissionPageGroup[] = [
       { id: "fleet", label: "Fleet Management", description: "Shop vehicles and status" },
       { id: "routes-manager", label: "Route manager", description: "Plan and assign routes" },
       { id: "routes-today", label: "My route today", description: "Assigned stops for today" },
+    ],
+  },
+  {
+    id: "vehicle-manager",
+    label: "Vehicle Manager",
+    description: "PM vehicles, service history, and checklists",
+    selectableAll: true,
+    pages: [
+      { id: "vehicle-manager", label: "Vehicles", description: "Vehicle list, parts, activities, and service" },
+      { id: "vehicle-checklists", label: "Checklists", description: "Vehicle completion checklists" },
     ],
   },
   {

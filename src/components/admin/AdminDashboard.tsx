@@ -20,6 +20,7 @@ import {
   UserCircle,
   Truck,
   Users,
+  Wrench,
   X,
 } from "lucide-react";
 import { SiteLogo } from "@/components/SiteLogo";
@@ -38,6 +39,8 @@ import { QuotesPanel } from "./QuotesPanel";
 import { RoutesPanel } from "./RoutesPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { StaffPanel } from "./StaffPanel";
+import { VehicleChecklistsPanel } from "./VehicleChecklistsPanel";
+import { VehicleManagerPanel } from "./VehicleManagerPanel";
 import { WorkOrdersPanel } from "./WorkOrdersPanel";
 import { AdminToastProvider } from "./AdminToast";
 
@@ -50,6 +53,8 @@ export type Tab =
   | "quotes"
   | "users"
   | "fleet"
+  | "vehicle-manager"
+  | "vehicle-checklists"
   | "routes-manager"
   | "routes-today"
   | "site-contents"
@@ -111,6 +116,15 @@ const nav: NavItem[] = [
   { id: "users", label: "User Management", icon: Users },
   { id: "fleet", label: "Fleet Management", icon: Truck },
   {
+    id: "vehicle-manager",
+    label: "Vehicle Manager",
+    icon: Wrench,
+    children: [
+      { id: "vehicle-manager", label: "Vehicles" },
+      { id: "vehicle-checklists", label: "Checklists" },
+    ],
+  },
+  {
     id: "routes-manager",
     label: "Routes",
     icon: Map,
@@ -156,14 +170,19 @@ export function AdminDashboard({ user }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ "inventory-all": true, "routes-manager": true });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({
+    "inventory-all": true,
+    "vehicle-manager": true,
+    "routes-manager": true,
+  });
 
   const visibleNav = useMemo(
     () =>
       nav.filter((item) => {
-        if (!userCanAccessTab(user, item.id)) return false;
-        if (item.children) return item.children.some((child) => userCanAccessTab(user, child.id));
-        return true;
+        if (item.children?.length) {
+          return item.children.some((child) => userCanAccessTab(user, child.id));
+        }
+        return userCanAccessTab(user, item.id);
       }),
     [user],
   );
@@ -494,6 +513,10 @@ export function AdminDashboard({ user }: Props) {
                   <StaffPanel currentUserId={user.id} onSelfUpdated={() => router.refresh()} />
                 )}
                 {tab === "fleet" && <FleetPanel />}
+                {tab === "vehicle-manager" && userCanAccessTab(user, "vehicle-manager") && <VehicleManagerPanel />}
+                {tab === "vehicle-checklists" && userCanAccessTab(user, "vehicle-checklists") && (
+                  <VehicleChecklistsPanel />
+                )}
                 {tab === "routes-manager" && <RoutesPanel />}
                 {tab === "routes-today" && <RoutesPanel todayOnly userId={user.id} />}
                 {tab === "site-contents" && userCanAccessTab(user, "site-contents") && <ContentEditor />}

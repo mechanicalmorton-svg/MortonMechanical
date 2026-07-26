@@ -237,6 +237,47 @@ create table if not exists routes (
   notes text
 );
 
+-- Vehicle Manager (separate from fleet)
+create table if not exists vm_vehicles (
+  id text primary key,
+  vehicle_number text not null default '',
+  year int not null default 0,
+  make text not null default '',
+  model text not null default ''
+);
+
+create table if not exists vm_parts (
+  id text primary key,
+  name text not null default '',
+  part_number text not null default '',
+  description text not null default ''
+);
+
+create table if not exists vm_activities (
+  id text primary key,
+  name text not null default ''
+);
+
+create table if not exists vm_service_orders (
+  id text primary key,
+  vehicle_id text not null,
+  mileage text not null default '',
+  work_needed text not null default '',
+  dvir text not null default '',
+  description text not null default '',
+  hours numeric not null default 0,
+  activity_id text,
+  parts jsonb not null default '[]',
+  created_at text not null
+);
+
+create table if not exists vm_checklists (
+  id text primary key,
+  name text not null default '',
+  created_at text not null,
+  items jsonb not null default '[]'
+);
+
 -- Realtime: live website updates when owner saves content
 do $$
 begin
@@ -264,6 +305,11 @@ alter table staff enable row level security;
 alter table staff_roles enable row level security;
 alter table fleet enable row level security;
 alter table routes enable row level security;
+alter table vm_vehicles enable row level security;
+alter table vm_parts enable row level security;
+alter table vm_activities enable row level security;
+alter table vm_service_orders enable row level security;
+alter table vm_checklists enable row level security;
 alter table customers enable row level security;
 alter table customer_vehicles enable row level security;
 

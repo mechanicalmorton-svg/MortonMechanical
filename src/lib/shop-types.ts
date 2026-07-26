@@ -190,6 +190,60 @@ export type FleetVehicle = {
   lastService?: string;
 };
 
+/** Vehicle Manager (shop PM / checklist app) — separate from Fleet Management. */
+export type VmVehicle = {
+  id: string;
+  vehicleNumber: string;
+  year: number;
+  make: string;
+  model: string;
+};
+
+export type VmPart = {
+  id: string;
+  name: string;
+  partNumber: string;
+  description: string;
+};
+
+export type VmActivity = {
+  id: string;
+  name: string;
+};
+
+export type VmServiceOrderPart = {
+  id: string;
+  partId: string;
+  quantity: number;
+};
+
+export type VmServiceOrder = {
+  id: string;
+  vehicleId: string;
+  mileage: string;
+  workNeeded: string;
+  dvir: string;
+  description: string;
+  hours: number;
+  activityId?: string;
+  parts: VmServiceOrderPart[];
+  createdAt: string;
+};
+
+export type VmChecklistItem = {
+  id: string;
+  vehicleId: string;
+  sortOrder: number;
+  isDone: boolean;
+};
+
+export type VmChecklist = {
+  id: string;
+  name: string;
+  createdAt: string;
+  items: VmChecklistItem[];
+};
+
 export type RouteStop = {
   id: string;
   customerName: string;

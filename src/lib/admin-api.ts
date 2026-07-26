@@ -43,6 +43,8 @@ export async function getAuthUser(): Promise<AuthUser | null> {
             "quotes",
             "users",
             "fleet",
+            "vehicle-manager",
+            "vehicle-checklists",
             "routes-manager",
             "routes-today",
             "site-contents",
