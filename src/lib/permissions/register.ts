@@ -26,6 +26,8 @@ export function registerModule(input: {
     label: string;
     description?: string;
     dependsOn?: string[];
+    /** Dashboard tabs unlocked when this permission is granted. */
+    unlocksTabs?: string[];
     /** When true, shown in matrix as planned / not yet enforced everywhere. */
     comingSoon?: boolean;
   }[];
@@ -43,6 +45,7 @@ export function registerModule(input: {
       description: item.comingSoon
         ? [item.description, "Coming soon — assign now to prepare roles."].filter(Boolean).join(" ")
         : item.description,
+      unlocksTabs: item.unlocksTabs,
       dependsOn: item.dependsOn ?? (item.action !== "view" && !item.action.startsWith("widget.")
         ? [`${input.id}.view`]
         : item.action.startsWith("widget.")

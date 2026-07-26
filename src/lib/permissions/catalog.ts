@@ -116,6 +116,18 @@ function seedCatalog() {
     description: "Parts stock and categories",
     tabs: ["inventory-all", "inventory-low"],
     permissions: [
+      {
+        action: "workspace.all",
+        label: "Workspace: All parts",
+        description: "Show Inventory → All parts in the sidebar",
+        unlocksTabs: ["inventory-all"],
+      },
+      {
+        action: "workspace.low",
+        label: "Workspace: Low stock",
+        description: "Show Inventory → Low stock in the sidebar",
+        unlocksTabs: ["inventory-low"],
+      },
       { action: "view", label: "View" },
       { action: "create", label: "Create" },
       { action: "edit", label: "Edit" },
@@ -143,6 +155,18 @@ function seedCatalog() {
     description: "Route planning and today’s stops",
     tabs: ["routes-manager", "routes-today"],
     permissions: [
+      {
+        action: "workspace.manager",
+        label: "Workspace: Route manager",
+        description: "Show Routes → Route manager in the sidebar",
+        unlocksTabs: ["routes-manager"],
+      },
+      {
+        action: "workspace.today",
+        label: "Workspace: My route today",
+        description: "Show Routes → My route today in the sidebar",
+        unlocksTabs: ["routes-today"],
+      },
       { action: "view", label: "View" },
       { action: "create", label: "Create" },
       { action: "edit", label: "Edit" },
@@ -298,22 +322,45 @@ export const TAB_TO_ACTIONS: Record<string, string[]> = {
   ]),
   bookings: ["bookings.view", "bookings.create", "bookings.edit", "customers.view"],
   quotes: ["quotes.view", "quotes.edit"],
-  "inventory-all": ["inventory.view", "inventory.create", "inventory.edit", "inventory.adjust"],
-  "inventory-low": ["inventory.view"],
+  "inventory-all": [
+    "inventory.workspace.all",
+    "inventory.view",
+    "inventory.create",
+    "inventory.edit",
+    "inventory.adjust",
+  ],
+  "inventory-low": ["inventory.workspace.low", "inventory.view"],
   fleet: ["fleet.view", "fleet.create", "fleet.edit"],
-  "routes-manager": ["routes.view", "routes.create", "routes.edit"],
-  "routes-today": ["routes.view", "routes.edit"],
+  "routes-manager": ["routes.workspace.manager", "routes.view", "routes.create", "routes.edit"],
+  "routes-today": ["routes.workspace.today", "routes.view", "routes.edit"],
   users: ["users.view", "users.create", "users.edit", "users.manage", "roles.view", "roles.edit"],
   "site-contents": ["content.view", "content.edit"],
   "audit-logs": ["audit_logs.view", "audit_logs.export"],
   settings: ["payments.view", "settings.account.view"],
 };
 
-/** Derive dashboard tabs that should be visible for a set of action keys. */
+/**
+ * When a module defines workspace keys (`unlocksTabs`), only those keys unlock
+ * sidebar workspaces. Capability keys (view/create/edit/…) no longer open every tab.
+ */
 export function tabsFromActions(actions: string[]): string[] {
   const tabs = new Set<string>();
   const actionSet = new Set(actions);
   for (const module of getRegisteredModules()) {
+    const workspacePerms = module.permissions.filter(
+      (permission) => permission.unlocksTabs && permission.unlocksTabs.length > 0,
+    );
+
+    if (workspacePerms.length > 0) {
+      for (const permission of workspacePerms) {
+        if (!actionSet.has(permission.key)) continue;
+        for (const tab of permission.unlocksTabs ?? []) {
+          if (tab !== "settings") tabs.add(tab);
+        }
+      }
+      continue;
+    }
+
     const hasAny = module.permissions.some((permission) => actionSet.has(permission.key));
     if (!hasAny) continue;
     for (const tab of module.tabs) {
@@ -323,6 +370,44 @@ export function tabsFromActions(actions: string[]): string[] {
   return [...tabs];
 }
 
+/** Backfill workspace keys from legacy tabs / coarse route+inventory grants. */
+export function ensureWorkspaceActions(actions: string[], tabs: string[] = []): string[] {
+  const next = new Set(actions.filter(isPermissionKey));
+
+  const migrate = (
+    capabilityPrefix: string,
+    workspaceKeys: { key: string; tab: string }[],
+  ) => {
+    const hasWorkspace = workspaceKeys.some((item) => next.has(item.key));
+    if (hasWorkspace) return;
+
+    const fromTabs = workspaceKeys.filter((item) => tabs.includes(item.tab));
+    if (fromTabs.length) {
+      for (const item of fromTabs) next.add(item.key);
+      return;
+    }
+
+    // Legacy actions-only roles (no tabs recorded): keep prior “both workspaces” behavior.
+    const hasCapability = [...next].some(
+      (key) => key.startsWith(`${capabilityPrefix}.`) && !key.startsWith(`${capabilityPrefix}.workspace.`),
+    );
+    if (hasCapability && tabs.length === 0) {
+      for (const item of workspaceKeys) next.add(item.key);
+    }
+  };
+
+  migrate("routes", [
+    { key: "routes.workspace.manager", tab: "routes-manager" },
+    { key: "routes.workspace.today", tab: "routes-today" },
+  ]);
+  migrate("inventory", [
+    { key: "inventory.workspace.all", tab: "inventory-all" },
+    { key: "inventory.workspace.low", tab: "inventory-low" },
+  ]);
+
+  return [...next];
+}
+
 /** Expand legacy tabs/flags into action keys. Explicit `actions` wins (matrix source of truth). */
 export function actionsFromLegacy(input: {
   tabs?: string[];
@@ -330,15 +415,18 @@ export function actionsFromLegacy(input: {
   manageUsers?: boolean;
   editSiteContent?: boolean;
 }): string[] {
+  const tabs = Array.isArray(input.tabs) ? input.tabs : [];
+
   if (Array.isArray(input.actions)) {
-    return expandCoarseActions(input.actions.filter(isPermissionKey));
+    return ensureWorkspaceActions(
+      expandCoarseActions(input.actions.filter(isPermissionKey)),
+      tabs,
+    );
   }
 
   const next = new Set<string>();
-  if (Array.isArray(input.tabs)) {
-    for (const tab of input.tabs) {
-      for (const key of TAB_TO_ACTIONS[tab] ?? []) next.add(key);
-    }
+  for (const tab of tabs) {
+    for (const key of TAB_TO_ACTIONS[tab] ?? []) next.add(key);
   }
   if (input.manageUsers) {
     for (const key of [
@@ -363,7 +451,7 @@ export function actionsFromLegacy(input: {
     next.add("content.view");
     next.add("content.edit");
   }
-  return expandCoarseActions([...next]);
+  return ensureWorkspaceActions(expandCoarseActions([...next]), tabs);
 }
 
 export function findPermissionDependencyIssues(actions: string[]): { key: string; missing: string[] }[] {

@@ -7,6 +7,8 @@ export type PermissionDef = {
   label: string;
   description?: string;
   dependsOn?: string[];
+  /** When set, granting this key unlocks these dashboard tabs (workspace-level access). */
+  unlocksTabs?: string[];
 };
 
 export type PermissionModuleGroup = {

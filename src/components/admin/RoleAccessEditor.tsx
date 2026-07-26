@@ -239,7 +239,7 @@ export function RoleAccessEditor({ value, onChange, ownerLocked = false }: Props
           <div>
             <h3 className="text-sm font-semibold text-white">Permission matrix</h3>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              Search and filter by module. Pages unlock from any permission in that module.
+              Search and filter by module. Use Workspace toggles to pick exact sidebar pages (e.g. Route manager vs My route today).
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

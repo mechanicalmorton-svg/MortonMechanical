@@ -1,5 +1,6 @@
 import {
   actionsFromLegacy,
+  ensureWorkspaceActions,
   expandCoarseActions,
   isPermissionKey,
   tabsFromActions,
@@ -42,14 +43,18 @@ export function getEffectivePermissions(user: PermissionUser | null | undefined)
   if (!user) return new Set();
   if (isFounder(user)) return new Set(liveKeys());
 
+  const tabs = Array.isArray(user.permissions?.tabs) ? user.permissions.tabs : [];
   const fromActions = Array.isArray(user.permissions?.actions)
-    ? expandCoarseActions(user.permissions.actions.filter(isPermissionKey))
+    ? ensureWorkspaceActions(
+        expandCoarseActions(user.permissions.actions.filter(isPermissionKey)),
+        tabs,
+      )
     : [];
   const base = fromActions.length
     ? new Set(fromActions)
     : new Set(
         actionsFromLegacy({
-          tabs: user.permissions?.tabs,
+          tabs,
           manageUsers: user.permissions?.manageUsers,
           editSiteContent: user.permissions?.editSiteContent,
         }),
@@ -110,8 +115,9 @@ export function canAccessPage(user: PermissionUser | null | undefined, tabId: st
   const effective = getEffectivePermissions(user);
   const derivedTabs = new Set(tabsFromActions([...effective]));
 
-  // Back-compat: honor legacy tabs until actions fully populated.
-  if (Array.isArray(user.permissions?.tabs)) {
+  // Back-compat: honor legacy tabs only when actions were never stored.
+  const hasStoredActions = Array.isArray(user.permissions?.actions) && user.permissions.actions.length > 0;
+  if (!hasStoredActions && Array.isArray(user.permissions?.tabs)) {
     for (const tab of user.permissions.tabs) derivedTabs.add(tab);
   }
 

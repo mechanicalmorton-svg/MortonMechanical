@@ -19,7 +19,7 @@ import { useAdminToast } from "./AdminToast";
 import { RoleAccessEditor } from "./RoleAccessEditor";
 import { EmptyState, PageHeader, RoleBadge, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { Can } from "./permissions";
-import { actionsFromLegacy } from "@/lib/permissions/catalog";
+import { actionsFromLegacy, ensureWorkspaceActions, tabsFromActions } from "@/lib/permissions/catalog";
 import { getRegisteredKeys } from "@/lib/permissions/register";
 
 function formatWhen(value?: string | null) {
@@ -237,16 +237,19 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
     const actions =
       role.id === "owner"
         ? [...getRegisteredKeys()]
-        : role.permissions.actions?.length
-          ? [...role.permissions.actions]
-          : actionsFromLegacy(role.permissions);
+        : ensureWorkspaceActions(
+            role.permissions.actions?.length
+              ? [...role.permissions.actions]
+              : actionsFromLegacy(role.permissions),
+            role.permissions.tabs,
+          );
     setRoleForm({
       id: role.id,
       name: role.name,
       color: role.color,
       description: role.permissions.description ?? "",
       actions,
-      tabs: [...role.permissions.tabs],
+      tabs: tabsFromActions(actions),
       manageUsers: role.permissions.manageUsers,
       editSiteContent: role.permissions.editSiteContent,
       archived: Boolean(role.permissions.archived),

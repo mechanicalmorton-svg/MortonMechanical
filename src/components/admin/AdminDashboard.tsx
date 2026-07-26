@@ -335,7 +335,7 @@ export function AdminDashboard({ user }: Props) {
 
   const sidebar = (
     <>
-      <div className="relative border-b border-slate-800/70 px-5 py-6">
+      <div className="relative shrink-0 border-b border-slate-800/70 px-5 py-6">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
         <SiteLogo size={44} showName subtitle="Dashboard" />
         <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200/90">
@@ -344,7 +344,7 @@ export function AdminDashboard({ user }: Props) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3">
         <p className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">Workspace</p>
         {visibleNav.map((item) => {
           const children = item.children?.filter((child) => userCanAccessTab(user, child.id));
@@ -381,7 +381,7 @@ export function AdminDashboard({ user }: Props) {
         })}
       </nav>
 
-      <div className="border-t border-slate-800/70 p-3">
+      <div className="shrink-0 border-t border-slate-800/70 p-3">
         <UserCard />
       </div>
     </>
@@ -393,15 +393,15 @@ export function AdminDashboard({ user }: Props) {
   return (
     <AdminToastProvider>
       <PermissionsProvider user={user}>
-        <div className="flex min-h-screen">
-          <aside className="admin-glass hidden w-[17.5rem] shrink-0 flex-col border-y-0 border-l-0 xl:flex">
+        <div className="flex h-dvh min-h-0 overflow-hidden">
+          <aside className="admin-glass sticky top-0 hidden h-dvh w-[17.5rem] shrink-0 flex-col border-y-0 border-l-0 xl:flex">
             {sidebar}
           </aside>
 
           {mobileOpen ? (
             <div className="fixed inset-0 z-50 xl:hidden">
               <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setMobileOpen(false)} aria-label="Close menu" />
-              <aside className="admin-glass relative flex h-full w-[17.5rem] max-w-[88vw] flex-col shadow-2xl">
+              <aside className="admin-glass relative flex h-dvh w-[17.5rem] max-w-[88vw] flex-col shadow-2xl">
                 <button
                   type="button"
                   onClick={() => setMobileOpen(false)}
@@ -415,8 +415,8 @@ export function AdminDashboard({ user }: Props) {
             </div>
           ) : null}
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <header className="sticky top-0 z-40 border-b border-slate-800/70 bg-slate-950/70 px-4 py-3.5 backdrop-blur-xl sm:px-6">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <header className="sticky top-0 z-40 shrink-0 border-b border-slate-800/70 bg-slate-950/70 px-4 py-3.5 backdrop-blur-xl sm:px-6">
               <div className="flex items-center justify-between gap-3">
                 <button
                   type="button"
@@ -472,7 +472,7 @@ export function AdminDashboard({ user }: Props) {
               </div>
             </header>
 
-            <main className="relative flex-1 overflow-auto">
+            <main className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
               <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 <div className="admin-soft-pulse absolute -right-24 top-10 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl" />
                 <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-pink-600/10 blur-3xl" />
