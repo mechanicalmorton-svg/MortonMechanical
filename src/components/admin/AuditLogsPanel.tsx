@@ -397,6 +397,16 @@ export function AuditLogsPanel() {
                 <StatusBadge status={selected.status} />
                 <StatusBadge status={selected.module} />
               </div>
+              {selected.notes ? (
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-300/80">
+                    Notes for Founder
+                  </p>
+                  <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-relaxed text-amber-50/95">
+                    {selected.notes}
+                  </pre>
+                </div>
+              ) : null}
               <dl className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <dt className="text-slate-500">When</dt>

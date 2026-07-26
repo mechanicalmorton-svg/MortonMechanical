@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withPermission } from "@/lib/admin-route";
 import { isMissingAuditLogsTable, rowToAuditLog } from "@/lib/audit-log";
 import { AUDIT_SQL } from "@/lib/audit-types";
+import { ensurePortalReleaseAuditPosted } from "@/lib/portal-release-audit";
 import { requireAdminClient } from "@/lib/supabase/db";
 
 const MAX_PAGE = 100;
@@ -118,6 +119,9 @@ export async function GET(req: Request) {
   const requiredKey = exportFmt ? "audit_logs.export" : "audit_logs.view";
 
   return withPermission(requiredKey, async () => {
+    // One-time Founder-facing release changelog for this portal update.
+    await ensurePortalReleaseAuditPosted();
+
     const q = url.searchParams.get("q")?.trim() || "";
     const moduleFilter = url.searchParams.get("module")?.trim() || "";
     const action = url.searchParams.get("action")?.trim() || "";
