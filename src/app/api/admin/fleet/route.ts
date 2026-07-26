@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { withPermission } from "@/lib/admin-route";
+import {
+  syncDeleteFleetVehicle,
+  syncFleetVehicleToVm,
+} from "@/lib/fleet-vm-sync";
 import { createId, deleteFleetVehicle, loadFleet, upsertFleetVehicle } from "@/lib/shop-data";
 import type { FleetVehicle } from "@/lib/shop-types";
 
@@ -23,6 +27,7 @@ export async function POST(req: Request) {
       lastService: body.lastService,
     };
     await upsertFleetVehicle(vehicle);
+    await syncFleetVehicleToVm(vehicle);
     return NextResponse.json(vehicle);
   });
 }
@@ -35,6 +40,7 @@ export async function PATCH(req: Request) {
     if (!item) return NextResponse.json({ error: "Not found." }, { status: 404 });
     const updated = { ...item, ...body };
     await upsertFleetVehicle(updated);
+    await syncFleetVehicleToVm(updated);
     return NextResponse.json(updated);
   });
 }
@@ -43,6 +49,7 @@ export async function DELETE(req: Request) {
   return withPermission("fleet.delete", async () => {
     const { id } = await req.json();
     await deleteFleetVehicle(id);
+    await syncDeleteFleetVehicle(id);
     return NextResponse.json({ ok: true });
   });
 }

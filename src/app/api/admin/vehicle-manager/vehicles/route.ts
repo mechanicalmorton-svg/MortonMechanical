@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { withPermission } from "@/lib/admin-route";
+import {
+  ensureVmMirrorsFromFleet,
+  syncDeleteVmVehicle,
+  syncVmVehicleToFleet,
+} from "@/lib/fleet-vm-sync";
 import { hasPermission, isFounder } from "@/lib/permissions/service";
 import {
   createVmId,
@@ -17,7 +22,10 @@ function parseStatus(value: unknown, fallback: VmVehicleStatus = "active"): VmVe
 }
 
 export async function GET() {
-  return withPermission("vehicle_manager.view", async () => NextResponse.json(await loadVmVehicles()));
+  return withPermission("vehicle_manager.view", async () => {
+    await ensureVmMirrorsFromFleet();
+    return NextResponse.json(await loadVmVehicles());
+  });
 }
 
 export async function POST(req: Request) {
@@ -36,6 +44,7 @@ export async function POST(req: Request) {
       lastService: body.lastService ? String(body.lastService) : undefined,
     };
     await upsertVmVehicle(vehicle);
+    await syncVmVehicleToFleet(vehicle);
     return NextResponse.json(vehicle);
   });
 }
@@ -80,6 +89,7 @@ export async function PATCH(req: Request) {
           : item.lastService,
     };
     await upsertVmVehicle(updated);
+    await syncVmVehicleToFleet(updated);
     return NextResponse.json(updated);
   });
 }
@@ -88,6 +98,7 @@ export async function DELETE(req: Request) {
   return withPermission("vehicle_manager.delete", async () => {
     const { id } = await req.json();
     await deleteVmVehicle(id);
+    await syncDeleteVmVehicle(id);
     return NextResponse.json({ ok: true });
   });
 }

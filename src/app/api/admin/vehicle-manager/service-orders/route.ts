@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withPermission } from "@/lib/admin-route";
+import { syncVmVehicleToFleet } from "@/lib/fleet-vm-sync";
 import {
   createVmId,
   deleteVmServiceOrder,
@@ -15,11 +16,13 @@ async function syncVehicleFromOrder(order: VmServiceOrder) {
   const vehicle = vehicles.find((v) => v.id === order.vehicleId);
   if (!vehicle) return;
   const mileageNum = Number(String(order.mileage).replace(/,/g, ""));
-  await upsertVmVehicle({
+  const updated = {
     ...vehicle,
     mileage: Number.isFinite(mileageNum) && mileageNum > 0 ? mileageNum : vehicle.mileage,
     lastService: order.createdAt.slice(0, 10),
-  });
+  };
+  await upsertVmVehicle(updated);
+  await syncVmVehicleToFleet(updated);
 }
 
 function normalizeParts(raw: unknown): VmServiceOrderPart[] {

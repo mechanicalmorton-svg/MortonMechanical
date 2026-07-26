@@ -363,10 +363,6 @@ export function VehicleManagerPanel() {
                     <dt className="text-xs text-slate-500">Logged by</dt>
                     <dd className="text-slate-300">{order.createdBy || "—"}</dd>
                   </div>
-                  <div>
-                    <dt className="text-xs text-slate-500">DVIR</dt>
-                    <dd className="text-slate-300">{order.dvir || "—"}</dd>
-                  </div>
                 </dl>
                 {order.description ? <p className="mt-3 text-sm text-slate-400">{order.description}</p> : null}
                 {order.parts.length ? (
@@ -412,12 +408,6 @@ export function VehicleManagerPanel() {
               value={serviceForm.workNeeded}
               onChange={(e) => setServiceForm({ ...serviceForm, workNeeded: e.target.value })}
               required
-            />
-            <input
-              className={inputClass}
-              placeholder="DVIR"
-              value={serviceForm.dvir}
-              onChange={(e) => setServiceForm({ ...serviceForm, dvir: e.target.value })}
             />
             <textarea
               className={`${inputClass} min-h-[5rem]`}
