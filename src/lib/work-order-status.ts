@@ -55,12 +55,19 @@ export function isWorkOrderStatus(value: unknown): value is WorkOrderStatus {
 export function normalizeWorkOrderStatus(value: unknown): WorkOrderStatus {
   if (isWorkOrderStatus(value)) return value;
   if (value === "open" || value === "pending" || value === "new") return "draft";
+  // Brief period used unpaid/paid as job statuses — map back to workflow statuses.
+  if (value === "unpaid") return "completed";
+  if (value === "paid") return "delivered";
+  if (value === "complete") return "completed";
+  if (value === "delivery") return "delivered";
   return "draft";
 }
 
 export function workOrderStatusLabel(status: string) {
   if (isWorkOrderStatus(status)) return WORK_ORDER_STATUS_LABELS[status];
   if (status === "open" || status === "pending") return WORK_ORDER_STATUS_LABELS.draft;
+  if (status === "unpaid") return WORK_ORDER_STATUS_LABELS.completed;
+  if (status === "paid") return WORK_ORDER_STATUS_LABELS.delivered;
   return status.replace(/_/g, " ");
 }
 

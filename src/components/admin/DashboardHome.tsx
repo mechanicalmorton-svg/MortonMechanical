@@ -290,10 +290,10 @@ export function DashboardHome({ name, onNavigate }: Props) {
             <div className="mb-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
               <p className="text-xs uppercase tracking-wide text-emerald-200/80">Month to date</p>
               <p className="mt-1 text-2xl font-bold text-emerald-300">${mtdTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-              <p className="mt-1 text-xs text-emerald-100/70">{data?.mtdCompletedJobs.length ?? 0} completed job{(data?.mtdCompletedJobs.length ?? 0) === 1 ? "" : "s"}</p>
+              <p className="mt-1 text-xs text-emerald-100/70">{data?.mtdCompletedJobs.length ?? 0} finished job{(data?.mtdCompletedJobs.length ?? 0) === 1 ? "" : "s"}</p>
             </div>
             {!data?.mtdCompletedJobs.length ? (
-              <EmptyState icon={DollarSign} title="No completed revenue yet" text="Completed work orders with revenue will show here." />
+              <EmptyState icon={DollarSign} title="No finished revenue yet" text="Completed and delivered work orders with revenue will show here." />
             ) : (
               <ul className="space-y-3">
                 {data.mtdCompletedJobs.map((order) => (
@@ -302,7 +302,10 @@ export function DashboardHome({ name, onNavigate }: Props) {
                       <p className="font-medium text-white">{order.customerName}</p>
                       <p className="text-sm text-slate-400">{order.service}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {formatOrderNumber(order.id)} · Completed {new Date(order.updatedAt).toLocaleDateString()}
+                        {formatOrderNumber(order.id)} · {order.status === "delivered" ? "Delivered" : "Completed"}
+                        {" · "}
+                        {order.paymentStatus === "paid" ? "Paid" : "Unpaid"}{" "}
+                        {new Date(order.updatedAt).toLocaleDateString()}
                       </p>
                     </div>
                     <p className="shrink-0 text-lg font-semibold text-emerald-300">${(order.revenue ?? 0).toFixed(2)}</p>

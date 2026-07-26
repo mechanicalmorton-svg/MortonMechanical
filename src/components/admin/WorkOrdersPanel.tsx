@@ -42,7 +42,38 @@ const actionBtn =
 const docActionBtn =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-slate-200 transition hover:border-cyan-500/35 hover:bg-slate-800/80 hover:text-cyan-100 active:scale-[0.98]";
 
-type StatusFilter = "queued" | "in_shop" | "done" | "overdue" | WorkOrderStatus | null;
+type StatusFilter = "queued" | "in_shop" | "done" | "invoice_unpaid" | "invoice_paid" | "overdue" | WorkOrderStatus | null;
+
+const WORK_ORDER_GROUPS: {
+  id: string;
+  label: string;
+  match: (order: WorkOrder) => boolean;
+}[] = [
+  {
+    id: "queued",
+    label: "Draft / Scheduled",
+    match: (order) => WORK_ORDER_QUEUED_STATUSES.includes(order.status),
+  },
+  {
+    id: "in_shop",
+    label: "In Shop",
+    match: (order) => WORK_ORDER_IN_SHOP_STATUSES.includes(order.status),
+  },
+  {
+    id: "done",
+    label: "Completed / Delivered",
+    match: (order) => WORK_ORDER_DONE_STATUSES.includes(order.status),
+  },
+  {
+    id: "cancelled",
+    label: "Cancelled",
+    match: (order) => order.status === "cancelled",
+  },
+];
+
+function invoicePaymentStatus(order: WorkOrder): "paid" | "unpaid" {
+  return order.paymentStatus === "paid" ? "paid" : "unpaid";
+}
 
 function formatOrderNumber(id: string) {
   const compact = id.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
@@ -145,11 +176,71 @@ export function WorkOrdersPanel() {
     load();
   }, []);
 
+  const pendingPaymentKey = useMemo(
+    () =>
+      items
+        .filter((order) => (order.paymentStatus ?? "unpaid") !== "paid" && Boolean(order.stripeCheckoutSessionId))
+        .map((order) => order.id)
+        .sort()
+        .join(","),
+    [items],
+  );
+
+  useEffect(() => {
+    if (!pendingPaymentKey) return;
+    let cancelled = false;
+
+    async function refreshPayments() {
+      // Ask Stripe directly about open Checkout sessions, then refresh the list.
+      await adminSend("/api/admin/payments/sync-pending", { method: "POST" });
+      if (cancelled) return;
+
+      const { data, error } = await adminGet<WorkOrder[]>("/api/admin/work-orders");
+      if (cancelled || error || !data) return;
+
+      setItems((prev) => {
+        const newlyPaid = data.filter(
+          (next) =>
+            next.paymentStatus === "paid" &&
+            prev.some((old) => old.id === next.id && (old.paymentStatus ?? "unpaid") !== "paid"),
+        );
+        if (newlyPaid.length) {
+          queueMicrotask(() => {
+            for (const order of newlyPaid) {
+              toast.success(`Payment received — ${order.customerName} is now Paid.`);
+            }
+          });
+        }
+        return data;
+      });
+
+      setViewOrder((current) => {
+        if (!current) return current;
+        return data.find((order) => order.id === current.id) ?? current;
+      });
+    }
+
+    const quick = window.setTimeout(() => {
+      void refreshPayments();
+    }, 1000);
+    const interval = window.setInterval(() => {
+      void refreshPayments();
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(quick);
+      window.clearInterval(interval);
+    };
+  }, [pendingPaymentKey, toast]);
+
   const counts = useMemo(
     () => ({
       queued: items.filter((w) => WORK_ORDER_QUEUED_STATUSES.includes(w.status)).length,
       inShop: items.filter((w) => WORK_ORDER_IN_SHOP_STATUSES.includes(w.status)).length,
       done: items.filter((w) => WORK_ORDER_DONE_STATUSES.includes(w.status)).length,
+      invoiceUnpaid: items.filter((w) => invoicePaymentStatus(w) !== "paid").length,
+      invoicePaid: items.filter((w) => invoicePaymentStatus(w) === "paid").length,
       overdue: items.filter(isOverdue).length,
     }),
     [items],
@@ -162,12 +253,16 @@ export function WorkOrdersPanel() {
       if (statusFilter === "queued" && !WORK_ORDER_QUEUED_STATUSES.includes(order.status)) return false;
       if (statusFilter === "in_shop" && !WORK_ORDER_IN_SHOP_STATUSES.includes(order.status)) return false;
       if (statusFilter === "done" && !WORK_ORDER_DONE_STATUSES.includes(order.status)) return false;
+      if (statusFilter === "invoice_unpaid" && invoicePaymentStatus(order) === "paid") return false;
+      if (statusFilter === "invoice_paid" && invoicePaymentStatus(order) !== "paid") return false;
       if (statusFilter === "overdue" && !isOverdue(order)) return false;
       if (
         statusFilter &&
         statusFilter !== "queued" &&
         statusFilter !== "in_shop" &&
         statusFilter !== "done" &&
+        statusFilter !== "invoice_unpaid" &&
+        statusFilter !== "invoice_paid" &&
         statusFilter !== "overdue" &&
         order.status !== statusFilter
       ) {
@@ -199,6 +294,20 @@ export function WorkOrdersPanel() {
     });
   }, [items, statusFilter, search, filterAssigned, createdOn]);
 
+  const grouped = useMemo(() => {
+    if (statusFilter === "overdue") {
+      return filtered.length
+        ? [{ id: "overdue", label: "Overdue", items: filtered }]
+        : [];
+    }
+
+    return WORK_ORDER_GROUPS.map((group) => ({
+      id: group.id,
+      label: group.label,
+      items: filtered.filter(group.match),
+    })).filter((group) => group.items.length > 0);
+  }, [filtered, statusFilter]);
+
   function staffName(id?: string) {
     if (!id) return "—";
     return staff.find((member) => member.id === id)?.name ?? "—";
@@ -227,11 +336,11 @@ export function WorkOrdersPanel() {
     setEditingOrder(null);
   }
 
-  async function patch(id: string, patch: Partial<WorkOrder>) {
+  async function patch(id: string, next: Partial<WorkOrder>) {
     const { error: message } = await adminSend("/api/admin/work-orders", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, ...patch }),
+      body: JSON.stringify({ id, ...next }),
     });
     if (message) toast.error(message);
     else {
@@ -241,11 +350,12 @@ export function WorkOrdersPanel() {
   }
 
   async function complete(id: string) {
-    const input = window.prompt("Revenue for this job ($)?", "0");
+    const current = items.find((order) => order.id === id);
+    const input = window.prompt("Total charge for this job ($)?", String(current?.revenue ?? 0));
     if (input === null) return;
     const revenue = Number(input);
     if (Number.isNaN(revenue) || revenue < 0) {
-      toast.error("Enter a valid revenue amount.");
+      toast.error("Enter a valid total charge.");
       return;
     }
     await patch(id, { status: "completed", revenue });
@@ -299,7 +409,15 @@ export function WorkOrdersPanel() {
       toast.success("Stripe invoice link ready.");
     }
     window.open(url, "_blank", "noopener,noreferrer");
-    load();
+    // Soft refresh so stripeCheckoutSessionId is present and live payment polling starts.
+    const refreshed = await adminGet<WorkOrder[]>("/api/admin/work-orders");
+    if (!refreshed.error && refreshed.data) {
+      setItems(refreshed.data);
+      setViewOrder((current) => {
+        if (!current || current.id !== order.id) return current;
+        return refreshed.data?.find((item) => item.id === order.id) ?? current;
+      });
+    }
   }
 
   return (
@@ -319,7 +437,7 @@ export function WorkOrdersPanel() {
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <FilterStatCard
           label="Draft / Scheduled"
           value={counts.queued}
@@ -343,6 +461,22 @@ export function WorkOrdersPanel() {
           accent="emerald"
           active={statusFilter === "done"}
           onClick={() => toggleStatusFilter("done")}
+        />
+        <FilterStatCard
+          label="Unpaid"
+          value={counts.invoiceUnpaid}
+          icon={Receipt}
+          accent="amber"
+          active={statusFilter === "invoice_unpaid"}
+          onClick={() => toggleStatusFilter("invoice_unpaid")}
+        />
+        <FilterStatCard
+          label="Paid"
+          value={counts.invoicePaid}
+          icon={CreditCard}
+          accent="emerald"
+          active={statusFilter === "invoice_paid"}
+          onClick={() => toggleStatusFilter("invoice_paid")}
         />
         <FilterStatCard
           label="Overdue"
@@ -382,6 +516,8 @@ export function WorkOrdersPanel() {
                 statusFilter !== "queued" &&
                 statusFilter !== "in_shop" &&
                 statusFilter !== "done" &&
+                statusFilter !== "invoice_unpaid" &&
+                statusFilter !== "invoice_paid" &&
                 statusFilter !== "overdue"
                   ? statusFilter
                   : ""
@@ -478,9 +614,9 @@ export function WorkOrdersPanel() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={viewOrder.status} />
+              <StatusBadge status={invoicePaymentStatus(viewOrder)} />
               <StatusBadge status={viewOrder.priority === "urgent" ? "urgent" : "normal"} />
               {isOverdue(viewOrder) && <StatusBadge status="overdue" />}
-              <StatusBadge status={viewOrder.paymentStatus ?? "unpaid"} />
             </div>
             <dl className="grid gap-3 sm:grid-cols-2">
               <div>
@@ -504,9 +640,9 @@ export function WorkOrdersPanel() {
                 <dd className="mt-1 text-sm text-emerald-300">${(viewOrder.revenue ?? 0).toFixed(2)}</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase tracking-wide text-slate-500">Payment</dt>
+                <dt className="text-xs uppercase tracking-wide text-slate-500">Invoice</dt>
                 <dd className="mt-1 text-sm capitalize text-slate-300">
-                  {(viewOrder.paymentStatus ?? "unpaid").replace(/_/g, " ")}
+                  {invoicePaymentStatus(viewOrder) === "paid" ? "Paid" : "Unpaid"}
                 </dd>
               </div>
               <div>
@@ -601,24 +737,35 @@ export function WorkOrdersPanel() {
                   <FileText className="h-3.5 w-3.5" /> Estimate
                 </button>
               </Can>
-              {viewOrder.paymentStatus === "paid" ? (
+              {invoicePaymentStatus(viewOrder) === "paid" ? (
                 <span className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-200">
                   <CreditCard className="h-3.5 w-3.5" />
-                  Invoice paid
+                  Paid
                 </span>
               ) : (
-                <Can permission={["payments.manage", "work_orders.payments.link"]} mode="any">
-                  <button
-                    type="button"
-                    onClick={() => createPayNowLink(viewOrder)}
-                    className={btnPrimary}
-                    disabled={payNowLoadingId === viewOrder.id || !(Number(viewOrder.revenue) > 0)}
-                    title={Number(viewOrder.revenue) > 0 ? "Create Stripe invoice payment link" : "Set Total charge before invoicing"}
-                  >
-                    <CreditCard className="h-3.5 w-3.5" />
-                    {payNowLoadingId === viewOrder.id ? "Creating…" : "Stripe invoice"}
-                  </button>
-                </Can>
+                <>
+                  <Can permission={["payments.manage", "work_orders.payments.link"]} mode="any">
+                    <button
+                      type="button"
+                      onClick={() => createPayNowLink(viewOrder)}
+                      className={btnPrimary}
+                      disabled={payNowLoadingId === viewOrder.id || !(Number(viewOrder.revenue) > 0)}
+                      title={Number(viewOrder.revenue) > 0 ? "Create Stripe invoice payment link" : "Set Total charge before invoicing"}
+                    >
+                      <CreditCard className="h-3.5 w-3.5" />
+                      {payNowLoadingId === viewOrder.id ? "Creating…" : "Stripe invoice"}
+                    </button>
+                  </Can>
+                  <Can permission={["payments.manage", "work_orders.edit"]} mode="any">
+                    <button
+                      type="button"
+                      onClick={() => patch(viewOrder.id, { paymentStatus: "paid" })}
+                      className={btnSecondary}
+                    >
+                      Mark paid
+                    </button>
+                  </Can>
+                </>
               )}
               <Can permission="work_orders.edit">
                 <button
@@ -649,116 +796,131 @@ export function WorkOrdersPanel() {
       ) : !filtered.length ? (
         <EmptyState icon={ClipboardList} title="No matching work orders" text="Try adjusting your filters or search." />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/40">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="border-b border-slate-800 bg-slate-950/40 text-xs uppercase tracking-wider text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Order #</th>
-                  <th className="px-4 py-3">Customer</th>
-                  <th className="hidden px-4 py-3 lg:table-cell">Vehicle</th>
-                  <th className="px-4 py-3">Description</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="hidden px-4 py-3 md:table-cell">Priority</th>
-                  <th className="hidden px-4 py-3 xl:table-cell">Due date</th>
-                  <th className="hidden whitespace-nowrap px-4 py-3 lg:table-cell">Assigned to</th>
-                  <th className="hidden whitespace-nowrap px-4 py-3 lg:table-cell">Total charge</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/80">
-                {filtered.map((order) => (
-                  <tr key={order.id} className="bg-slate-950/20 transition hover:bg-slate-900/40">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-400">{formatOrderNumber(order.id)}</td>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-white">{order.customerName}</p>
-                      <p className="text-xs text-slate-500 lg:hidden">{order.vehicle || "No vehicle"}</p>
-                    </td>
-                    <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">{order.vehicle || "—"}</td>
-                    <td className="max-w-[220px] px-4 py-3 text-slate-300">
-                      <p className="truncate">{order.service}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        <StatusBadge status={order.status} />
-                        {isOverdue(order) && <StatusBadge status="overdue" />}
-                        <StatusBadge status={order.paymentStatus ?? "unpaid"} />
-                      </div>
-                    </td>
-                    <td className="hidden px-4 py-3 md:table-cell">
-                      <StatusBadge status={order.priority === "urgent" ? "urgent" : "normal"} />
-                    </td>
-                    <td className="hidden px-4 py-3 text-slate-400 xl:table-cell">{formatDate(order.scheduledDate)}</td>
-                    <td className="hidden whitespace-nowrap px-4 py-3 text-slate-400 lg:table-cell">
-                      {staffName(order.assignedTo)}
-                    </td>
-                    <td className="hidden whitespace-nowrap px-4 py-3 font-medium text-emerald-300 lg:table-cell">
-                      ${(order.revenue ?? 0).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-nowrap items-center justify-end gap-1.5">
-                        <button type="button" onClick={() => setViewOrder(order)} className={actionBtn} title="View" aria-label={`View ${order.customerName}`}>
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
-                        <Can permission="work_orders.edit">
-                          <button type="button" onClick={() => openEditModal(order)} className={actionBtn} title="Edit" aria-label={`Edit ${order.customerName}`}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                        </Can>
-                        <div className="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-xl border border-slate-700/60 bg-slate-950/40 px-0.5">
-                          <button
-                            type="button"
-                            onClick={() => openDocument("work-order", order)}
-                            className={docActionBtn}
-                            title="Work order"
-                            aria-label={`Open work order for ${order.customerName}`}
-                          >
-                            <ClipboardList className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openDocument("estimate", order)}
-                            className={docActionBtn}
-                            title="Estimate"
-                            aria-label={`Open estimate for ${order.customerName}`}
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                          </button>
-                          {order.paymentStatus === "paid" ? (
-                            <span
-                              className="inline-flex h-8 w-8 items-center justify-center text-emerald-300"
-                              title="Invoice paid"
-                              aria-label={`Invoice paid for ${order.customerName}`}
-                            >
-                              <CreditCard className="h-3.5 w-3.5" />
-                            </span>
-                          ) : (
-                            <Can permission={["payments.manage", "work_orders.payments.link"]} mode="any">
-                              <button
-                                type="button"
-                                onClick={() => createPayNowLink(order)}
-                                className={docActionBtn}
-                                title={Number(order.revenue) > 0 ? "Stripe invoice" : "Set Total charge before invoicing"}
-                                aria-label={`Create Stripe invoice for ${order.customerName}`}
-                                disabled={payNowLoadingId === order.id || !(Number(order.revenue) > 0)}
-                              >
-                                <Receipt className="h-3.5 w-3.5" />
+        <div className="space-y-5">
+          {grouped.map((group) => (
+            <section key={group.id} className="overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/40">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 bg-slate-950/40 px-4 py-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-white">{group.label}</h2>
+                  <p className="text-xs text-slate-500">
+                    {group.items.length} work order{group.items.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] text-left text-sm">
+                  <thead className="border-b border-slate-800 bg-slate-950/30 text-xs uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Order #</th>
+                      <th className="px-4 py-3">Customer</th>
+                      <th className="hidden px-4 py-3 lg:table-cell">Vehicle</th>
+                      <th className="px-4 py-3">Description</th>
+                      <th className="px-4 py-3">Job status</th>
+                      <th className="px-4 py-3">Invoice</th>
+                      <th className="hidden px-4 py-3 md:table-cell">Priority</th>
+                      <th className="hidden px-4 py-3 xl:table-cell">Due date</th>
+                      <th className="hidden whitespace-nowrap px-4 py-3 lg:table-cell">Assigned to</th>
+                      <th className="hidden whitespace-nowrap px-4 py-3 lg:table-cell">Total charge</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80">
+                    {group.items.map((order) => (
+                      <tr key={order.id} className="bg-slate-950/20 transition hover:bg-slate-900/40">
+                        <td className="px-4 py-3 font-mono text-xs text-slate-400">{formatOrderNumber(order.id)}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-white">{order.customerName}</p>
+                          <p className="text-xs text-slate-500 lg:hidden">{order.vehicle || "No vehicle"}</p>
+                        </td>
+                        <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">{order.vehicle || "—"}</td>
+                        <td className="max-w-[220px] px-4 py-3 text-slate-300">
+                          <p className="truncate">{order.service}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            <StatusBadge status={order.status} />
+                            {isOverdue(order) && <StatusBadge status="overdue" />}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={invoicePaymentStatus(order)} />
+                        </td>
+                        <td className="hidden px-4 py-3 md:table-cell">
+                          <StatusBadge status={order.priority === "urgent" ? "urgent" : "normal"} />
+                        </td>
+                        <td className="hidden px-4 py-3 text-slate-400 xl:table-cell">{formatDate(order.scheduledDate)}</td>
+                        <td className="hidden whitespace-nowrap px-4 py-3 text-slate-400 lg:table-cell">
+                          {staffName(order.assignedTo)}
+                        </td>
+                        <td className="hidden whitespace-nowrap px-4 py-3 font-medium text-emerald-300 lg:table-cell">
+                          ${(order.revenue ?? 0).toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-nowrap items-center justify-end gap-1.5">
+                            <button type="button" onClick={() => setViewOrder(order)} className={actionBtn} title="View" aria-label={`View ${order.customerName}`}>
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                            <Can permission="work_orders.edit">
+                              <button type="button" onClick={() => openEditModal(order)} className={actionBtn} title="Edit" aria-label={`Edit ${order.customerName}`}>
+                                <Pencil className="h-3.5 w-3.5" />
                               </button>
                             </Can>
-                          )}
-                        </div>
-                        <Can permission="work_orders.delete">
-                          <button type="button" onClick={() => remove(order.id)} className={btnDanger} title="Delete" aria-label={`Delete ${order.customerName}`}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </Can>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                            <div className="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-xl border border-slate-700/60 bg-slate-950/40 px-0.5">
+                              <button
+                                type="button"
+                                onClick={() => openDocument("work-order", order)}
+                                className={docActionBtn}
+                                title="Work order"
+                                aria-label={`Open work order for ${order.customerName}`}
+                              >
+                                <ClipboardList className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openDocument("estimate", order)}
+                                className={docActionBtn}
+                                title="Estimate"
+                                aria-label={`Open estimate for ${order.customerName}`}
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                              </button>
+                              {order.paymentStatus === "paid" ? (
+                                <span
+                                  className="inline-flex h-8 w-8 items-center justify-center text-emerald-300"
+                                  title="Invoice paid"
+                                  aria-label={`Invoice paid for ${order.customerName}`}
+                                >
+                                  <CreditCard className="h-3.5 w-3.5" />
+                                </span>
+                              ) : (
+                                <Can permission={["payments.manage", "work_orders.payments.link"]} mode="any">
+                                  <button
+                                    type="button"
+                                    onClick={() => createPayNowLink(order)}
+                                    className={docActionBtn}
+                                    title={Number(order.revenue) > 0 ? "Stripe invoice" : "Set Total charge before invoicing"}
+                                    aria-label={`Create Stripe invoice for ${order.customerName}`}
+                                    disabled={payNowLoadingId === order.id || !(Number(order.revenue) > 0)}
+                                  >
+                                    <Receipt className="h-3.5 w-3.5" />
+                                  </button>
+                                </Can>
+                              )}
+                            </div>
+                            <Can permission="work_orders.delete">
+                              <button type="button" onClick={() => remove(order.id)} className={btnDanger} title="Delete" aria-label={`Delete ${order.customerName}`}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </Can>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </div>

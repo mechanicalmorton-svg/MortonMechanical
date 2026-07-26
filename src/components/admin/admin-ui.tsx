@@ -192,36 +192,44 @@ export function EmptyState({ icon: Icon, title, text }: { icon: LucideIcon; titl
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  // Each status maps to a distinct chip hue so badges side-by-side stay readable.
   const styles: Record<string, string> = {
-    pending: "admin-glass-chip--amber text-amber-100",
+    // Job statuses
     draft: "admin-glass-chip--slate text-slate-200",
-    scheduled: "admin-glass-chip--sky text-sky-100",
     open: "admin-glass-chip--slate text-slate-200",
-    normal: "admin-glass-chip--sky text-sky-100",
-    overdue: "admin-glass-chip--red text-red-100",
+    pending: "admin-glass-chip--slate text-slate-200",
+    scheduled: "admin-glass-chip--sky text-sky-100",
     in_progress: "admin-glass-chip--fuchsia text-fuchsia-100",
-    waiting_on_parts: "admin-glass-chip--amber text-amber-100",
+    waiting_on_parts: "admin-glass-chip--orange text-orange-100",
     waiting_customer: "admin-glass-chip--violet text-violet-100",
-    confirmed: "admin-glass-chip--emerald text-emerald-100",
     completed: "admin-glass-chip--emerald text-emerald-100",
-    delivered: "admin-glass-chip--sky text-sky-100",
+    delivered: "admin-glass-chip--lime text-lime-100",
     cancelled: "admin-glass-chip--red text-red-100",
-    urgent: "admin-glass-chip--red text-red-100",
-    active: "admin-glass-chip--emerald text-emerald-100",
-    maintenance: "admin-glass-chip--amber text-amber-100",
-    out_of_service: "admin-glass-chip--red text-red-100",
+    overdue: "admin-glass-chip--rose text-rose-100",
+
+    // Invoice / payment
+    unpaid: "admin-glass-chip--amber text-amber-100",
+    paid: "admin-glass-chip--indigo text-indigo-100",
+    deposit_paid: "admin-glass-chip--cyan text-cyan-100",
+
+    // Priority
+    normal: "admin-glass-chip--teal text-teal-100",
+    urgent: "admin-glass-chip--gold text-amber-50",
+
+    // Bookings / fleet / routes / misc (keep unique where possible)
+    confirmed: "admin-glass-chip--teal text-teal-100",
+    active: "admin-glass-chip--lime text-lime-100",
+    maintenance: "admin-glass-chip--orange text-orange-100",
+    out_of_service: "admin-glass-chip--rose text-rose-100",
     retired: "admin-glass-chip--slate text-slate-300",
-    planned: "admin-glass-chip--sky text-sky-100",
-    new: "admin-glass-chip--amber text-amber-100",
+    planned: "admin-glass-chip--indigo text-indigo-100",
+    new: "admin-glass-chip--gold text-amber-50",
     read: "admin-glass-chip--slate text-slate-200",
     archived: "admin-glass-chip--slate text-slate-400",
-    unpaid: "admin-glass-chip--amber text-amber-100",
-    paid: "admin-glass-chip--emerald text-emerald-100",
-    deposit_paid: "admin-glass-chip--sky text-sky-100",
     info: "admin-glass-chip--sky text-sky-100",
     notice: "admin-glass-chip--amber text-amber-100",
-    warning: "admin-glass-chip--amber text-amber-100",
-    critical: "admin-glass-chip--red text-red-100",
+    warning: "admin-glass-chip--orange text-orange-100",
+    critical: "admin-glass-chip--rose text-rose-100",
     success: "admin-glass-chip--emerald text-emerald-100",
     failure: "admin-glass-chip--red text-red-100",
     denied: "admin-glass-chip--red text-red-100",
@@ -234,6 +242,9 @@ export function StatusBadge({ status }: { status: string }) {
     waiting_customer: "Waiting Customer",
     completed: "Completed",
     delivered: "Delivered",
+    unpaid: "Unpaid",
+    paid: "Paid",
+    deposit_paid: "Deposit paid",
     cancelled: "Cancelled",
     open: "Draft",
     pending: "Draft",

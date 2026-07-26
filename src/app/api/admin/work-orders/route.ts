@@ -55,6 +55,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Assigned to is required." }, { status: 400 });
       }
 
+      const status = parseStatus(body.status);
       const order: WorkOrder = {
         id: createId(),
         customerId: optionalId(links.customerId),
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
         vehicle: links.vehicle,
         customerConcern: body.customerConcern ?? "",
         service: typeof body.service === "string" && body.service.trim() ? body.service.trim() : "General repair",
-        status: parseStatus(body.status),
+        status,
         priority: parsePriority(body.priority),
         assignedTo,
         notes: body.notes,
@@ -105,6 +106,11 @@ export async function PATCH(req: Request) {
         !optionalId(body.customerVehicleId) &&
         !optionalId(links.customerVehicleId);
 
+      const paymentStatus =
+        body.paymentStatus === "paid" || body.paymentStatus === "unpaid" || body.paymentStatus === "deposit_paid"
+          ? body.paymentStatus
+          : (item.paymentStatus ?? "unpaid");
+
       const updated: WorkOrder = {
         id: item.id,
         customerId: optionalId(links.customerId ?? item.customerId),
@@ -124,6 +130,8 @@ export async function PATCH(req: Request) {
         internalNotes:
           typeof body.internalNotes === "string" ? body.internalNotes : item.internalNotes ?? "",
         revenue: body.revenue ?? item.revenue,
+        paymentStatus,
+        stripeCheckoutSessionId: item.stripeCheckoutSessionId,
         scheduledDate: optionalId(body.scheduledDate) ?? item.scheduledDate,
         documentData:
           body.documentData && typeof body.documentData === "object"
