@@ -238,6 +238,18 @@ create table if not exists routes (
   mileage int
 );
 
+create table if not exists time_entries (
+  id text primary key,
+  staff_id text not null,
+  clock_in_at timestamptz not null,
+  clock_out_at timestamptz,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  edited_by text,
+  edited_at timestamptz
+);
+
 -- Vehicle Manager (separate from fleet)
 create table if not exists vm_vehicles (
   id text primary key,
@@ -312,6 +324,7 @@ alter table staff enable row level security;
 alter table staff_roles enable row level security;
 alter table fleet enable row level security;
 alter table routes enable row level security;
+alter table time_entries enable row level security;
 alter table vm_vehicles enable row level security;
 alter table vm_parts enable row level security;
 alter table vm_activities enable row level security;
@@ -378,6 +391,7 @@ create index if not exists bookings_status_idx on bookings (status);
 create index if not exists bookings_created_idx on bookings (created_at desc);
 create index if not exists fleet_status_idx on fleet (status);
 create index if not exists routes_date_idx on routes (date desc);
+create index if not exists time_entries_staff_clock_idx on time_entries (staff_id, clock_in_at desc);
 create index if not exists staff_auth_user_idx on staff (auth_user_id);
 create index if not exists staff_role_idx on staff (role);
 create index if not exists customers_name_idx on customers (lower(name));

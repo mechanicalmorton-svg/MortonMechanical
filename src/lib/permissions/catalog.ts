@@ -33,6 +33,11 @@ function seedCatalog() {
       { action: "widget.pending_bookings", label: "Pending bookings" },
       { action: "widget.low_stock", label: "Inventory alerts" },
       { action: "widget.quick_actions", label: "Quick actions" },
+      {
+        action: "widget.timeclock",
+        label: "Timeclock widget",
+        description: "Show Clock In / Clock Out card on the dashboard",
+      },
     ],
   });
 
@@ -259,6 +264,43 @@ function seedCatalog() {
   });
 
   registerModule({
+    id: "timeclock",
+    label: "Timeclock / Timesheets",
+    description: "Employee clock in/out and timesheet management",
+    tabs: ["timesheets"],
+    permissions: [
+      {
+        action: "view",
+        label: "View own punches",
+        description: "See your own clock status and recent history",
+      },
+      {
+        action: "clock",
+        label: "Clock in / out",
+        description: "Punch in and out from the dashboard (timestamps are server-set and not editable by the employee)",
+      },
+      {
+        action: "workspace.timesheets",
+        label: "Workspace: Timesheets",
+        description: "Show Timesheets in the sidebar to review staff time",
+        unlocksTabs: ["timesheets"],
+      },
+      {
+        action: "edit",
+        label: "Edit timesheets",
+        description: "Correct clock in/out times and notes for any staff",
+        dependsOn: ["timeclock.view", "timeclock.workspace.timesheets"],
+      },
+      {
+        action: "delete",
+        label: "Delete timesheet entries",
+        description: "Remove timesheet entries",
+        dependsOn: ["timeclock.view", "timeclock.workspace.timesheets"],
+      },
+    ],
+  });
+
+  registerModule({
     id: "audit_logs",
     label: "Audit Logs",
     description: "Immutable activity trail",
@@ -322,6 +364,7 @@ export const COARSE_ACTION_EXPANSION: Record<string, string[]> = {
     "dashboard.widget.pending_bookings",
     "dashboard.widget.low_stock",
     "dashboard.widget.quick_actions",
+    "dashboard.widget.timeclock",
   ],
   "work_orders.edit": [
     "work_orders.assign",
@@ -344,7 +387,12 @@ export function expandCoarseActions(actions: string[]): string[] {
 
 /** Map legacy dashboard tab ids → default action grants for migration. */
 export const TAB_TO_ACTIONS: Record<string, string[]> = {
-  dashboard: expandCoarseActions(["dashboard.view"]),
+  dashboard: expandCoarseActions([
+    "dashboard.view",
+    "dashboard.widget.timeclock",
+    "timeclock.view",
+    "timeclock.clock",
+  ]),
   "work-orders": expandCoarseActions([
     "work_orders.view",
     "work_orders.create",
@@ -381,6 +429,12 @@ export const TAB_TO_ACTIONS: Record<string, string[]> = {
   ],
   "routes-manager": ["routes.workspace.manager", "routes.view", "routes.create", "routes.edit"],
   "routes-today": ["routes.workspace.today", "routes.view", "routes.edit"],
+  timesheets: [
+    "timeclock.workspace.timesheets",
+    "timeclock.view",
+    "timeclock.edit",
+    "timeclock.delete",
+  ],
   users: ["users.view", "users.create", "users.edit", "users.manage", "roles.view", "roles.edit"],
   "site-contents": ["content.view", "content.edit"],
   "audit-logs": ["audit_logs.view", "audit_logs.export"],
@@ -456,6 +510,7 @@ export function ensureWorkspaceActions(actions: string[], tabs: string[] = []): 
     { key: "vehicle_manager.workspace.vehicles", tab: "vehicle-manager" },
     { key: "vehicle_manager.workspace.checklists", tab: "vehicle-checklists" },
   ]);
+  migrate("timeclock", [{ key: "timeclock.workspace.timesheets", tab: "timesheets" }]);
 
   return [...next];
 }

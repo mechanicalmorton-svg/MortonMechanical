@@ -9,6 +9,7 @@ import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, Panel, StatCard, StatusBadge, btnSecondary } from "./admin-ui";
 import { Can, usePermissions } from "./permissions";
+import { TimeclockWidget } from "./TimeclockWidget";
 
 type Props = {
   name: string;
@@ -63,6 +64,9 @@ export function DashboardHome({ name, onNavigate }: Props) {
   if (canAccessPage("routes-today")) {
     quickActions.push({ label: "My Route Today", tab: "routes-today" });
   }
+  if (canAccessPage("timesheets")) {
+    quickActions.push({ label: "Timesheets", tab: "timesheets" });
+  }
   if (hasPermission("users.create") && canAccessPage("users")) {
     quickActions.push({ label: "Add User", tab: "users", permission: "users.create" });
   }
@@ -79,6 +83,10 @@ export function DashboardHome({ name, onNavigate }: Props) {
         subtitle="Here’s what’s happening across the shop today — work orders, bookings, and the jobs that need attention."
         eyebrow="Operations dashboard"
       />
+
+      <div className="mb-8">
+        <TimeclockWidget />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Can permission={["dashboard.widget.overview", "dashboard.widget.open_work_orders"]} mode="any">

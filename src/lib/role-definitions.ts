@@ -27,6 +27,7 @@ export const DASHBOARD_TAB_OPTIONS = [
   { id: "vehicle-checklists", label: "Vehicle Manager · Checklists" },
   { id: "routes-manager", label: "Routes · Manager" },
   { id: "routes-today", label: "Routes · My route today" },
+  { id: "timesheets", label: "Timesheets" },
   { id: "site-contents", label: "Site Contents" },
   { id: "audit-logs", label: "Audit Logs" },
 ] as const;
@@ -59,6 +60,7 @@ export const PERMISSION_PAGE_GROUPS: PermissionPageGroup[] = [
       { id: "work-orders", label: "Work Orders", description: "Create and manage jobs" },
       { id: "bookings", label: "Bookings", description: "Appointments and schedule" },
       { id: "quotes", label: "Quote Requests", description: "Incoming website quote leads" },
+      { id: "timesheets", label: "Timesheets", description: "Review and edit staff clock in/out" },
     ],
   },
   {
@@ -258,6 +260,24 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
           "routes-manager",
           "routes-today",
         ],
+        actions: [
+          ...actionsFromLegacy({
+            tabs: [
+              "dashboard",
+              "inventory-all",
+              "inventory-low",
+              "work-orders",
+              "bookings",
+              "quotes",
+              "fleet",
+              "routes-manager",
+              "routes-today",
+            ],
+          }),
+          "dashboard.widget.timeclock",
+          "timeclock.view",
+          "timeclock.clock",
+        ],
         manageUsers: false,
         editSiteContent: false,
       }),
@@ -278,6 +298,22 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
           "fleet",
           "routes-manager",
           "routes-today",
+        ],
+        actions: [
+          ...actionsFromLegacy({
+            tabs: [
+              "dashboard",
+              "work-orders",
+              "bookings",
+              "quotes",
+              "fleet",
+              "routes-manager",
+              "routes-today",
+            ],
+          }),
+          "dashboard.widget.timeclock",
+          "timeclock.view",
+          "timeclock.clock",
         ],
         manageUsers: false,
         editSiteContent: false,
@@ -332,6 +368,12 @@ export function normalizeRolePermissions(raw: unknown): RolePermissions {
   if (effectiveManageUsers && !uniqueTabs.includes("users")) uniqueTabs.push("users");
   if (effectiveEditSiteContent && !uniqueTabs.includes("site-contents")) uniqueTabs.push("site-contents");
   if (actions.includes("audit_logs.view") && !uniqueTabs.includes("audit-logs")) uniqueTabs.push("audit-logs");
+  if (
+    actions.includes("timeclock.workspace.timesheets") &&
+    !uniqueTabs.includes("timesheets")
+  ) {
+    uniqueTabs.push("timesheets");
+  }
   return {
     tabs: uniqueTabs,
     actions,
@@ -385,6 +427,22 @@ export function mergeRoleDefinitions(stored: RoleDefinition[]): RoleDefinition[]
       });
       continue;
     }
+    // Built-in floor staff roles always get punch access (Founder can still revoke in Access Control).
+    if (normalized.id === "mechanic" || normalized.id === "dispatcher") {
+      const punchKeys = ["dashboard.widget.timeclock", "timeclock.view", "timeclock.clock"];
+      const actions = new Set(normalized.permissions.actions ?? []);
+      for (const key of punchKeys) actions.add(key);
+      byId.set(normalized.id, {
+        ...normalized,
+        system: false,
+        permissions: {
+          ...normalized.permissions,
+          actions: [...actions],
+        },
+      });
+      continue;
+    }
+
     byId.set(normalized.id, {
       ...normalized,
       system: false,

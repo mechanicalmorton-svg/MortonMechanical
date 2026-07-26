@@ -273,6 +273,18 @@ export type RoutePlan = {
   mileage?: number;
 };
 
+export type TimeEntry = {
+  id: string;
+  staffId: string;
+  clockInAt: string;
+  clockOutAt?: string;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+  editedBy?: string;
+  editedAt?: string;
+};
+
 export type DashboardStats = {
   openWorkOrders: number;
   inProgressWorkOrders: number;

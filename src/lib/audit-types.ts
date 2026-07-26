@@ -13,6 +13,7 @@ export type AuditModule =
   | "fleet"
   | "routes"
   | "vehicle-manager"
+  | "timeclock"
   | "staff"
   | "roles"
   | "payments"
@@ -36,6 +37,7 @@ export type AuditRecordType =
   | "vm_activity"
   | "vm_service_order"
   | "vm_checklist"
+  | "time_entry"
   | "staff"
   | "role"
   | "payment"
@@ -118,6 +120,7 @@ export const AUDIT_MODULE_OPTIONS: { id: AuditModule; label: string }[] = [
   { id: "fleet", label: "Fleet" },
   { id: "routes", label: "Routes" },
   { id: "vehicle-manager", label: "Vehicle Manager" },
+  { id: "timeclock", label: "Timeclock" },
   { id: "staff", label: "Staff" },
   { id: "roles", label: "Roles" },
   { id: "payments", label: "Payments" },

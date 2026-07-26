@@ -8,6 +8,7 @@ import {
   Calendar,
   ChevronDown,
   ClipboardList,
+  Clock,
   ExternalLink,
   LayoutDashboard,
   LogOut,
@@ -39,6 +40,7 @@ import { QuotesPanel } from "./QuotesPanel";
 import { RoutesPanel } from "./RoutesPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { StaffPanel } from "./StaffPanel";
+import { TimesheetsPanel } from "./TimesheetsPanel";
 import { VehicleChecklistsPanel } from "./VehicleChecklistsPanel";
 import { VehicleManagerPanel } from "./VehicleManagerPanel";
 import { WorkOrdersPanel } from "./WorkOrdersPanel";
@@ -57,6 +59,7 @@ export type Tab =
   | "vehicle-checklists"
   | "routes-manager"
   | "routes-today"
+  | "timesheets"
   | "site-contents"
   | "audit-logs"
   | "settings";
@@ -133,6 +136,7 @@ const nav: NavItem[] = [
       { id: "routes-today", label: "My route today" },
     ],
   },
+  { id: "timesheets", label: "Timesheets", icon: Clock },
   { id: "site-contents", label: "Site Contents", icon: Paintbrush },
   { id: "audit-logs", label: "Audit Logs", icon: ScrollText },
 ];
@@ -519,6 +523,7 @@ export function AdminDashboard({ user }: Props) {
                 )}
                 {tab === "routes-manager" && <RoutesPanel />}
                 {tab === "routes-today" && <RoutesPanel todayOnly userId={user.id} />}
+                {tab === "timesheets" && userCanAccessTab(user, "timesheets") && <TimesheetsPanel />}
                 {tab === "site-contents" && userCanAccessTab(user, "site-contents") && <ContentEditor />}
                 {tab === "audit-logs" && userCanAccessTab(user, "audit-logs") && <AuditLogsPanel />}
                 {tab === "settings" && <SettingsPanel user={user} />}
