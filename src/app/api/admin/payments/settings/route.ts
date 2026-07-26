@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { withOwnerAdmin } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { loadPaymentSettings, savePaymentSettings } from "@/lib/payment-settings";
 import { formatUsdFromCents, isStripeConfigured } from "@/lib/stripe";
 
 export async function GET() {
-  return withOwnerAdmin(async () => {
+  return withPermission("payments.view", async () => {
     const settings = await loadPaymentSettings();
     return NextResponse.json({
       ...settings,
@@ -15,7 +15,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
-  return withOwnerAdmin(async () => {
+  return withPermission("payments.manage", async () => {
     const body = await req.json();
     let bookingDepositCents = Number(body.bookingDepositCents);
 

@@ -34,6 +34,7 @@ import { useAdminToast } from "./AdminToast";
 import { WorkOrderDocumentEditor } from "./WorkOrderDocumentEditor";
 import { WorkOrderFormModal } from "./WorkOrderFormModal";
 import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can } from "./permissions";
 
 const actionBtn =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700/70 bg-slate-900/50 text-slate-200 shadow-sm transition hover:border-amber-500/40 hover:bg-slate-800/70 hover:text-amber-100 active:scale-[0.98]";
@@ -310,9 +311,11 @@ export function WorkOrdersPanel() {
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </button>
-          <button type="button" onClick={openCreateModal} className={btnPrimary}>
-            <Plus className="h-4 w-4" /> New Work Order
-          </button>
+          <Can permission="work_orders.create">
+            <button type="button" onClick={openCreateModal} className={btnPrimary}>
+              <Plus className="h-4 w-4" /> New Work Order
+            </button>
+          </Can>
         </div>
       </div>
 
@@ -534,96 +537,106 @@ export function WorkOrdersPanel() {
               ) : null}
             </dl>
             <div className="flex flex-wrap gap-2 border-t border-slate-800 pt-4">
-              {(viewOrder.status === "draft" || viewOrder.status === "scheduled") && (
-                <>
-                  {viewOrder.status === "draft" ? (
-                    <button type="button" onClick={() => patch(viewOrder.id, { status: "scheduled" })} className={btnSecondary}>
-                      Mark scheduled
-                    </button>
-                  ) : null}
-                  <button type="button" onClick={() => patch(viewOrder.id, { status: "in_progress" })} className={btnPrimary}>
-                    Start job
-                  </button>
-                  <button type="button" onClick={() => patch(viewOrder.id, { status: "cancelled" })} className={btnSecondary}>
-                    Cancel
-                  </button>
-                </>
-              )}
-              {(viewOrder.status === "in_progress" ||
-                viewOrder.status === "waiting_on_parts" ||
-                viewOrder.status === "waiting_customer") && (
-                <>
-                  {viewOrder.status !== "in_progress" ? (
-                    <button type="button" onClick={() => patch(viewOrder.id, { status: "in_progress" })} className={btnSecondary}>
-                      Resume job
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => patch(viewOrder.id, { status: "waiting_on_parts" })}
-                        className={btnSecondary}
-                      >
-                        Waiting on parts
+              <Can permission={["work_orders.edit", "work_orders.status.change"]} mode="any">
+                {(viewOrder.status === "draft" || viewOrder.status === "scheduled") && (
+                  <>
+                    {viewOrder.status === "draft" ? (
+                      <button type="button" onClick={() => patch(viewOrder.id, { status: "scheduled" })} className={btnSecondary}>
+                        Mark scheduled
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => patch(viewOrder.id, { status: "waiting_customer" })}
-                        className={btnSecondary}
-                      >
-                        Waiting customer
+                    ) : null}
+                    <button type="button" onClick={() => patch(viewOrder.id, { status: "in_progress" })} className={btnPrimary}>
+                      Start job
+                    </button>
+                    <button type="button" onClick={() => patch(viewOrder.id, { status: "cancelled" })} className={btnSecondary}>
+                      Cancel
+                    </button>
+                  </>
+                )}
+                {(viewOrder.status === "in_progress" ||
+                  viewOrder.status === "waiting_on_parts" ||
+                  viewOrder.status === "waiting_customer") && (
+                  <>
+                    {viewOrder.status !== "in_progress" ? (
+                      <button type="button" onClick={() => patch(viewOrder.id, { status: "in_progress" })} className={btnSecondary}>
+                        Resume job
                       </button>
-                    </>
-                  )}
-                  <button type="button" onClick={() => complete(viewOrder.id)} className={btnPrimary}>
-                    Complete
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => patch(viewOrder.id, { status: "waiting_on_parts" })}
+                          className={btnSecondary}
+                        >
+                          Waiting on parts
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => patch(viewOrder.id, { status: "waiting_customer" })}
+                          className={btnSecondary}
+                        >
+                          Waiting customer
+                        </button>
+                      </>
+                    )}
+                    <button type="button" onClick={() => complete(viewOrder.id)} className={btnPrimary}>
+                      Complete
+                    </button>
+                    <button type="button" onClick={() => patch(viewOrder.id, { status: "cancelled" })} className={btnSecondary}>
+                      Cancel
+                    </button>
+                  </>
+                )}
+                {viewOrder.status === "completed" && (
+                  <button type="button" onClick={() => patch(viewOrder.id, { status: "delivered" })} className={btnPrimary}>
+                    Mark delivered
                   </button>
-                  <button type="button" onClick={() => patch(viewOrder.id, { status: "cancelled" })} className={btnSecondary}>
-                    Cancel
-                  </button>
-                </>
-              )}
-              {viewOrder.status === "completed" && (
-                <button type="button" onClick={() => patch(viewOrder.id, { status: "delivered" })} className={btnPrimary}>
-                  Mark delivered
+                )}
+              </Can>
+              <Can permission={["work_orders.view", "work_orders.document.edit"]} mode="any">
+                <button type="button" onClick={() => openDocument("work-order", viewOrder)} className={btnSecondary}>
+                  <ClipboardList className="h-3.5 w-3.5" /> Work order
                 </button>
-              )}
-              <button type="button" onClick={() => openDocument("work-order", viewOrder)} className={btnSecondary}>
-                <ClipboardList className="h-3.5 w-3.5" /> Work order
-              </button>
-              <button type="button" onClick={() => openDocument("estimate", viewOrder)} className={btnSecondary}>
-                <FileText className="h-3.5 w-3.5" /> Estimate
-              </button>
+                <button type="button" onClick={() => openDocument("estimate", viewOrder)} className={btnSecondary}>
+                  <FileText className="h-3.5 w-3.5" /> Estimate
+                </button>
+              </Can>
               {viewOrder.paymentStatus === "paid" ? (
                 <span className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-200">
                   <CreditCard className="h-3.5 w-3.5" />
                   Invoice paid
                 </span>
               ) : (
+                <Can permission={["payments.manage", "work_orders.payments.link"]} mode="any">
+                  <button
+                    type="button"
+                    onClick={() => createPayNowLink(viewOrder)}
+                    className={btnPrimary}
+                    disabled={payNowLoadingId === viewOrder.id || !(Number(viewOrder.revenue) > 0)}
+                    title={Number(viewOrder.revenue) > 0 ? "Create Stripe invoice payment link" : "Set Total charge before invoicing"}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    {payNowLoadingId === viewOrder.id ? "Creating…" : "Stripe invoice"}
+                  </button>
+                </Can>
+              )}
+              <Can permission="work_orders.edit">
                 <button
                   type="button"
-                  onClick={() => createPayNowLink(viewOrder)}
-                  className={btnPrimary}
-                  disabled={payNowLoadingId === viewOrder.id || !(Number(viewOrder.revenue) > 0)}
-                  title={Number(viewOrder.revenue) > 0 ? "Create Stripe invoice payment link" : "Set Total charge before invoicing"}
+                  onClick={() => {
+                    setViewOrder(null);
+                    openEditModal(viewOrder);
+                  }}
+                  className={btnSecondary}
                 >
-                  <CreditCard className="h-3.5 w-3.5" />
-                  {payNowLoadingId === viewOrder.id ? "Creating…" : "Stripe invoice"}
+                  <Pencil className="h-3.5 w-3.5" /> Edit
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setViewOrder(null);
-                  openEditModal(viewOrder);
-                }}
-                className={btnSecondary}
-              >
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </button>
-              <button type="button" onClick={() => remove(viewOrder.id)} className={btnDanger}>
-                <Trash2 className="h-3.5 w-3.5" /> Delete
-              </button>
+              </Can>
+              <Can permission="work_orders.delete">
+                <button type="button" onClick={() => remove(viewOrder.id)} className={btnDanger}>
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </button>
+              </Can>
             </div>
           </div>
         )}
@@ -687,9 +700,11 @@ export function WorkOrdersPanel() {
                         <button type="button" onClick={() => setViewOrder(order)} className={actionBtn} title="View" aria-label={`View ${order.customerName}`}>
                           <Eye className="h-3.5 w-3.5" />
                         </button>
-                        <button type="button" onClick={() => openEditModal(order)} className={actionBtn} title="Edit" aria-label={`Edit ${order.customerName}`}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
+                        <Can permission="work_orders.edit">
+                          <button type="button" onClick={() => openEditModal(order)} className={actionBtn} title="Edit" aria-label={`Edit ${order.customerName}`}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        </Can>
                         <div className="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-xl border border-slate-700/60 bg-slate-950/40 px-0.5">
                           <button
                             type="button"
@@ -718,21 +733,25 @@ export function WorkOrdersPanel() {
                               <CreditCard className="h-3.5 w-3.5" />
                             </span>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => createPayNowLink(order)}
-                              className={docActionBtn}
-                              title={Number(order.revenue) > 0 ? "Stripe invoice" : "Set Total charge before invoicing"}
-                              aria-label={`Create Stripe invoice for ${order.customerName}`}
-                              disabled={payNowLoadingId === order.id || !(Number(order.revenue) > 0)}
-                            >
-                              <Receipt className="h-3.5 w-3.5" />
-                            </button>
+                            <Can permission={["payments.manage", "work_orders.payments.link"]} mode="any">
+                              <button
+                                type="button"
+                                onClick={() => createPayNowLink(order)}
+                                className={docActionBtn}
+                                title={Number(order.revenue) > 0 ? "Stripe invoice" : "Set Total charge before invoicing"}
+                                aria-label={`Create Stripe invoice for ${order.customerName}`}
+                                disabled={payNowLoadingId === order.id || !(Number(order.revenue) > 0)}
+                              >
+                                <Receipt className="h-3.5 w-3.5" />
+                              </button>
+                            </Can>
                           )}
                         </div>
-                        <button type="button" onClick={() => remove(order.id)} className={btnDanger} title="Delete" aria-label={`Delete ${order.customerName}`}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <Can permission="work_orders.delete">
+                          <button type="button" onClick={() => remove(order.id)} className={btnDanger} title="Delete" aria-label={`Delete ${order.customerName}`}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </Can>
                       </div>
                     </td>
                   </tr>

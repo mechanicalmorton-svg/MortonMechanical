@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth, withOwnerAdmin } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { normalizeRoleIds, pickPrimaryRoleId } from "@/lib/role-definitions";
 import { assertStaffMutationAllowed, ROLE_IDS_SQL, staffMultiRoleReady } from "@/lib/staff-auth";
 import {
@@ -19,7 +19,7 @@ function findMember(staff: StaffMember[], id: string) {
 }
 
 export async function GET() {
-  return withAdminAuth(async () => {
+  return withPermission("users.view", async () => {
     const [staff, multiRoleReady] = await Promise.all([loadStaff(), staffMultiRoleReady()]);
     return NextResponse.json({
       staff,
@@ -30,7 +30,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  return withOwnerAdmin(async () => {
+  return withPermission("users.create", async () => {
     const body = await req.json();
     const roleIds = roleIdsFromBody(body);
     const member = await createPortalUser({
@@ -58,7 +58,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withOwnerAdmin(async (user) => {
+  return withPermission("users.edit", async (user) => {
     const body = await req.json();
     const id = String(body.id ?? "").trim();
     if (!id) return NextResponse.json({ error: "User id is required." }, { status: 400 });
@@ -99,7 +99,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withOwnerAdmin(async (user) => {
+  return withPermission("users.delete", async (user) => {
     const { id } = await req.json();
     const targetId = String(id ?? "").trim();
     if (!targetId) return NextResponse.json({ error: "User id is required." }, { status: 400 });

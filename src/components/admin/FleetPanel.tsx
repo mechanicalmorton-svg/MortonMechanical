@@ -7,6 +7,7 @@ import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can } from "./permissions";
 import { VehicleMakeModelFields } from "./VehicleMakeModelFields";
 
 type MakeOption = { id: number; name: string };
@@ -165,9 +166,11 @@ export function FleetPanel() {
           title="Fleet Management"
           subtitle="Full NHTSA vehicle database — every make and model. Use the filter box to search, or scroll the dropdown."
         />
-        <button type="button" onClick={openAddModal} className={btnPrimary}>
-          <Plus className="h-4 w-4" /> Add Vehicle
-        </button>
+        <Can permission="fleet.create">
+          <button type="button" onClick={openAddModal} className={btnPrimary}>
+            <Plus className="h-4 w-4" /> Add Vehicle
+          </button>
+        </Can>
       </div>
 
       <AdminModal
@@ -240,13 +243,17 @@ export function FleetPanel() {
                   <div><dt className="text-xs text-slate-500">Last service</dt><dd className="text-slate-300">{vehicle.lastService ? new Date(vehicle.lastService).toLocaleDateString() : "—"}</dd></div>
                 </dl>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <select className={inputClass} value={vehicle.status} onChange={(e) => updateStatus(vehicle.id, e.target.value as FleetStatus)}>
-                    <option value="active">Active</option>
-                    <option value="maintenance">Maintenance</option>
-                    <option value="retired">Retired</option>
-                  </select>
-                  <button type="button" onClick={() => startEdit(vehicle)} className={btnSecondary}>Edit</button>
-                  <button type="button" onClick={() => remove(vehicle.id)} className={btnDanger}><Trash2 className="h-3.5 w-3.5" /> Remove</button>
+                  <Can permission="fleet.edit">
+                    <select className={inputClass} value={vehicle.status} onChange={(e) => updateStatus(vehicle.id, e.target.value as FleetStatus)}>
+                      <option value="active">Active</option>
+                      <option value="maintenance">Maintenance</option>
+                      <option value="retired">Retired</option>
+                    </select>
+                    <button type="button" onClick={() => startEdit(vehicle)} className={btnSecondary}>Edit</button>
+                  </Can>
+                  <Can permission="fleet.delete">
+                    <button type="button" onClick={() => remove(vehicle.id)} className={btnDanger}><Trash2 className="h-3.5 w-3.5" /> Remove</button>
+                  </Can>
                 </div>
               </div>
             </article>

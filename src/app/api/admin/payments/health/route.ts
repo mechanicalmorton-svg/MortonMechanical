@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { withOwnerAdmin } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { getBookingDepositCents } from "@/lib/payment-settings";
 import { formatUsdFromCents, isStripeConfigured } from "@/lib/stripe";
 import { requireAdminClient } from "@/lib/supabase/db";
 
 export async function GET() {
-  return withOwnerAdmin(async () => {
+  return withPermission("payments.view", async () => {
     const stripeConfigured = isStripeConfigured();
     const webhookConfigured = Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim());
     const depositCents = await getBookingDepositCents();

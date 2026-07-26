@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { canManageUsers } from "@/lib/admin-roles";
-import { withAdminAuth, withOwnerAdmin } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import {
   deleteRoleDefinition,
   ensureDefaultRolesSeeded,
@@ -10,14 +9,14 @@ import {
 import { isValidRoleColor, normalizeRolePermissions } from "@/lib/role-definitions";
 
 export async function GET() {
-  return withAdminAuth(async () => {
+  return withPermission("roles.view", async () => {
     await ensureDefaultRolesSeeded();
     return NextResponse.json(await loadRoleDefinitions());
   });
 }
 
 export async function POST(req: Request) {
-  return withOwnerAdmin(async () => {
+  return withPermission("roles.create", async () => {
     const body = await req.json().catch(() => ({}));
     const name = String(body.name ?? "").trim();
     if (!name) return NextResponse.json({ error: "Role name is required." }, { status: 400 });
@@ -42,7 +41,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withOwnerAdmin(async () => {
+  return withPermission("roles.edit", async () => {
     const body = await req.json().catch(() => ({}));
     const id = String(body.id ?? "").trim();
     const name = String(body.name ?? "").trim();
@@ -69,16 +68,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withOwnerAdmin(async (user) => {
-    if (
-      !(
-        user.permissions?.manageUsers ||
-        canManageUsers(user.role) ||
-        user.roleIds?.includes("owner")
-      )
-    ) {
-      return NextResponse.json({ error: "You do not have permission for this action." }, { status: 403 });
-    }
+  return withPermission("roles.delete", async () => {
     const body = await req.json().catch(() => ({}));
     try {
       const roles = await deleteRoleDefinition(String(body.id ?? ""));

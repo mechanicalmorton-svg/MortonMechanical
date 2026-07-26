@@ -1,9 +1,11 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { canManageUsers } from "./admin-roles";
 import { AUTH_COOKIE, getSessionUser } from "./auth";
 import { getSupabaseAuthUser, type AdminUser } from "./supabase/server-auth";
 import { isSupabaseAuthConfigured } from "./supabase/server";
+import { normalizeRolePermissions } from "./role-definitions";
+import { getRegisteredKeys } from "./permissions/register";
+import { canManageUsers as userCanManageUsersPerm, hasPermission, isFounder } from "./permissions/service";
 
 export type AuthUser = AdminUser & { role: AdminUser["role"] };
 
@@ -30,7 +32,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     ],
     roleName: role === "owner" ? "Founder" : role,
     roleColor: role === "owner" ? "sky" : role === "admin" ? "violet" : "slate",
-    permissions: {
+    permissions: normalizeRolePermissions({
       tabs: isElevated
         ? [
             "dashboard",
@@ -47,9 +49,10 @@ export async function getAuthUser(): Promise<AuthUser | null> {
             "audit-logs",
           ]
         : ["dashboard", "work-orders", "bookings", "routes-today"],
+      actions: isElevated ? [...getRegisteredKeys()] : undefined,
       manageUsers: isElevated,
       editSiteContent: isElevated,
-    },
+    }),
   };
 }
 
@@ -66,14 +69,22 @@ export async function requireOwnerOrAdmin() {
   if (error || !user) {
     return { user: null, error: error ?? NextResponse.json({ error: SESSION_ERROR }, { status: 401 }) };
   }
-  if (
-    !(
-      user.permissions?.manageUsers ||
-      canManageUsers(user.role) ||
-      user.roleIds?.includes("owner") ||
-      user.roleIds?.includes("admin")
-    )
-  ) {
+  if (!(isFounder(user) || userCanManageUsersPerm(user))) {
+    return { user: null, error: NextResponse.json({ error: "You do not have permission for this action." }, { status: 403 }) };
+  }
+  return { user, error: null };
+}
+
+export async function requirePermission(keys: string | string[], mode: "any" | "all" = "any") {
+  const { user, error } = await requireAuth();
+  if (error || !user) {
+    return { user: null, error: error ?? NextResponse.json({ error: SESSION_ERROR }, { status: 401 }) };
+  }
+  const list = Array.isArray(keys) ? keys : [keys];
+  const ok =
+    isFounder(user) ||
+    (mode === "all" ? list.every((key) => hasPermission(user, key)) : list.some((key) => hasPermission(user, key)));
+  if (!ok) {
     return { user: null, error: NextResponse.json({ error: "You do not have permission for this action." }, { status: 403 }) };
   }
   return { user, error: null };

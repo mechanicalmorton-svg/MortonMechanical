@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { createId, deleteWorkOrder, loadWorkOrders, resolveWorkOrderLinks, upsertWorkOrder } from "@/lib/shop-data";
 import type { Priority, WorkOrder } from "@/lib/shop-types";
 import { normalizeWorkOrderStatus } from "@/lib/work-order-status";
@@ -18,14 +18,14 @@ function optionalId(value: unknown) {
 }
 
 export async function GET() {
-  return withAdminAuth(async () => {
+  return withPermission("work_orders.view", async () => {
     const items = await loadWorkOrders();
     return NextResponse.json(items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
   });
 }
 
 export async function POST(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("work_orders.create", async () => {
     try {
       const body = await req.json();
       const now = new Date().toISOString();
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("work_orders.edit", async () => {
     try {
       const body = await req.json();
       const items = await loadWorkOrders();
@@ -141,7 +141,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("work_orders.delete", async () => {
     const { id } = await req.json();
     await deleteWorkOrder(id);
     return NextResponse.json({ ok: true });

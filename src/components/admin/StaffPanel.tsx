@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Shield, Trash2, Users } from "lucide-react";
+import { Copy, Download, Pencil, Plus, Shield, Trash2, Upload, Users } from "lucide-react";
 import type { StaffMember, StaffRole } from "@/lib/shop-types";
 import {
   dashboardTabLabel,
@@ -9,6 +9,7 @@ import {
   isValidRoleColor,
   normalizeRoleColor,
   normalizeRoleIds,
+  normalizeRolePermissions,
   pickPrimaryRoleId,
   type RoleDefinition,
   type RolePermissions,
@@ -17,6 +18,9 @@ import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { RoleAccessEditor } from "./RoleAccessEditor";
 import { EmptyState, PageHeader, RoleBadge, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can } from "./permissions";
+import { actionsFromLegacy } from "@/lib/permissions/catalog";
+import { getRegisteredKeys } from "@/lib/permissions/register";
 
 function formatWhen(value?: string | null) {
   if (!value) return "Never signed in";
@@ -87,9 +91,12 @@ const emptyRoleForm = {
   id: "",
   name: "",
   color: "slate",
+  description: "",
+  actions: actionsFromLegacy({ tabs: ["dashboard", "work-orders"] }),
   tabs: ["dashboard", "work-orders"] as string[],
   manageUsers: false,
   editSiteContent: false,
+  archived: false,
 };
 
 const emptyUserForm = {
@@ -123,7 +130,19 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
   const [form, setForm] = useState(emptyUserForm);
   const [roleForm, setRoleForm] = useState(emptyRoleForm);
 
-  const roleOptions = useMemo(() => roles, [roles]);
+  const roleOptions = useMemo(
+    () => roles.filter((role) => !role.permissions.archived || role.id === "owner"),
+    [roles],
+  );
+  const assignedCountByRole = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const member of items) {
+      for (const roleId of memberRoleIds(member)) {
+        counts.set(roleId, (counts.get(roleId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [items]);
   const editingUser = editingUserId ? items.find((item) => item.id === editingUserId) : null;
 
   const activeOwnerCount = useMemo(
@@ -215,15 +234,116 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
 
   function openEditRole(role: RoleDefinition) {
     setEditingRoleId(role.id);
+    const actions =
+      role.id === "owner"
+        ? [...getRegisteredKeys()]
+        : role.permissions.actions?.length
+          ? [...role.permissions.actions]
+          : actionsFromLegacy(role.permissions);
     setRoleForm({
       id: role.id,
       name: role.name,
       color: role.color,
+      description: role.permissions.description ?? "",
+      actions,
       tabs: [...role.permissions.tabs],
       manageUsers: role.permissions.manageUsers,
       editSiteContent: role.permissions.editSiteContent,
+      archived: Boolean(role.permissions.archived),
     });
     setShowRoleForm(true);
+  }
+
+  async function cloneRole(role: RoleDefinition) {
+    setSavingRole(true);
+    const permissions = normalizeRolePermissions({
+      ...role.permissions,
+      description: role.permissions.description,
+      archived: false,
+    });
+    const res = await fetch("/api/admin/roles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: `Copy of ${role.name}`,
+        color: role.color,
+        permissions,
+      }),
+    });
+    const data = await res.json();
+    setSavingRole(false);
+    if (!res.ok) {
+      toast.error(data.error ?? "Could not clone role.");
+      return;
+    }
+    setRoles(data);
+    toast.success(`Cloned “${role.name}”.`);
+  }
+
+  function exportRolesTemplate() {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      roles: roles
+        .filter((role) => role.id !== "owner")
+        .map((role) => ({
+          id: role.id,
+          name: role.name,
+          color: role.color,
+          permissions: {
+            actions: role.permissions.actions,
+            description: role.permissions.description,
+            archived: role.permissions.archived,
+          },
+        })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `role-permissions-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Role permission template exported.");
+  }
+
+  async function importRolesTemplate(file: File) {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as {
+        roles?: { name?: string; color?: string; permissions?: Partial<RolePermissions> }[];
+      };
+      if (!Array.isArray(parsed.roles) || !parsed.roles.length) {
+        toast.error("No roles found in that file.");
+        return;
+      }
+      setSavingRole(true);
+      let last: RoleDefinition[] = roles;
+      for (const entry of parsed.roles) {
+        const name = String(entry.name ?? "").trim();
+        if (!name) continue;
+        const res = await fetch("/api/admin/roles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            color: entry.color || "slate",
+            permissions: normalizeRolePermissions(entry.permissions),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error ?? `Could not import “${name}”.`);
+          setSavingRole(false);
+          return;
+        }
+        last = data;
+      }
+      setRoles(last);
+      setSavingRole(false);
+      toast.success("Role template imported.");
+    } catch {
+      toast.error("Could not read that JSON file.");
+    }
   }
 
   async function saveRole(e: React.FormEvent) {
@@ -235,9 +355,12 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
     }
     setSavingRole(true);
     const permissions: RolePermissions = {
+      actions: roleForm.actions,
       tabs: roleForm.tabs,
       manageUsers: roleForm.manageUsers,
       editSiteContent: roleForm.editSiteContent,
+      description: roleForm.description?.trim() || undefined,
+      archived: Boolean(roleForm.archived),
     };
     const res = await fetch("/api/admin/roles", {
       method: editingRoleId ? "PATCH" : "POST",
@@ -411,12 +534,16 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
         subtitle="Design roles with exact page access, then assign one or more roles to each staff member. Sidebar pages combine from every role they hold."
         actions={
           <>
-            <button type="button" onClick={openCreateRole} className={btnSecondary}>
-              <Shield className="h-4 w-4" /> Add Role
-            </button>
-            <button type="button" onClick={openCreateUser} className={btnPrimary}>
-              <Plus className="h-4 w-4" /> Add User
-            </button>
+            <Can permission="roles.create">
+              <button type="button" onClick={openCreateRole} className={btnSecondary}>
+                <Shield className="h-4 w-4" /> Add Role
+              </button>
+            </Can>
+            <Can permission="users.create">
+              <button type="button" onClick={openCreateUser} className={btnPrimary}>
+                <Plus className="h-4 w-4" /> Add User
+              </button>
+            </Can>
           </>
         }
       />
@@ -438,31 +565,64 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
           <div className="flex items-center justify-between gap-3 border-b border-slate-800/70 px-5 py-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-400/80">Access control</p>
-              <h2 className="mt-1 text-base font-semibold text-white">Roles & page permissions</h2>
+              <h2 className="mt-1 text-base font-semibold text-white">Roles & permissions</h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                Fully customize which dashboard pages each role can see.
+                Assign action permissions; pages unlock from the modules you grant.
               </p>
             </div>
-            <button type="button" onClick={openCreateRole} className={`${btnSecondary} !py-2`}>
-              <Plus className="h-3.5 w-3.5" />
-              New role
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <Can permission="roles.view">
+                <button type="button" onClick={exportRolesTemplate} className={`${btnSecondary} !py-2`} title="Export roles JSON">
+                  <Download className="h-3.5 w-3.5" />
+                  Export
+                </button>
+                <label className={`${btnSecondary} !py-2 cursor-pointer`} title="Import roles JSON">
+                  <Upload className="h-3.5 w-3.5" />
+                  Import
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void importRolesTemplate(file);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </Can>
+              <Can permission="roles.create">
+                <button type="button" onClick={openCreateRole} className={`${btnSecondary} !py-2`}>
+                  <Plus className="h-3.5 w-3.5" />
+                  New role
+                </button>
+              </Can>
+            </div>
           </div>
           <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
             {roles.map((role) => {
+              const actionCount = role.permissions.actions?.length ?? 0;
+              const assigned = assignedCountByRole.get(role.id) ?? 0;
               const pagePreview = role.permissions.tabs.slice(0, 4).map(dashboardTabLabel);
               const extraPages = Math.max(0, role.permissions.tabs.length - pagePreview.length);
               return (
                 <article
                   key={role.id}
-                  className="group relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900/70 via-slate-950/50 to-slate-950/80 p-4 transition hover:border-amber-500/25 hover:shadow-lg hover:shadow-amber-950/10"
+                  className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-900/70 via-slate-950/50 to-slate-950/80 p-4 transition hover:border-amber-500/25 hover:shadow-lg hover:shadow-amber-950/10 ${
+                    role.permissions.archived ? "border-slate-700/60 opacity-70" : "border-slate-800/80"
+                  }`}
                 >
                   <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-amber-500/5 blur-2xl transition group-hover:bg-amber-500/10" />
                   <div className="relative flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <RoleBadge role={role.id} roleName={role.name} roleColor={role.color} />
+                      {role.permissions.description ? (
+                        <p className="mt-2 line-clamp-2 text-xs text-slate-500">{role.permissions.description}</p>
+                      ) : null}
                       <p className="mt-3 text-xs font-medium text-slate-300">
-                        {role.permissions.tabs.length} page{role.permissions.tabs.length === 1 ? "" : "s"} unlocked
+                        {actionCount} action{actionCount === 1 ? "" : "s"} · {role.permissions.tabs.length} page
+                        {role.permissions.tabs.length === 1 ? "" : "s"} · {assigned} user
+                        {assigned === 1 ? "" : "s"}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {pagePreview.map((label) => (
@@ -495,26 +655,47 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
                             Full access
                           </span>
                         ) : null}
+                        {role.permissions.archived ? (
+                          <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-300">
+                            Archived
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-col gap-1.5">
-                      <button
-                        type="button"
-                        className={`${btnSecondary} !h-9 !w-9 !px-0`}
-                        onClick={() => openEditRole(role)}
-                        aria-label={`Edit ${role.name}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      {!isProtectedRole(role.id) ? (
+                      <Can permission="roles.create">
                         <button
                           type="button"
-                          className={`${btnDanger} !h-9 !w-9 !px-0`}
-                          onClick={() => removeRole(role)}
-                          aria-label={`Delete ${role.name}`}
+                          className={`${btnSecondary} !h-9 !w-9 !px-0`}
+                          onClick={() => cloneRole(role)}
+                          disabled={savingRole}
+                          aria-label={`Clone ${role.name}`}
+                          title="Clone role"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Copy className="h-3.5 w-3.5" />
                         </button>
+                      </Can>
+                      <Can permission="roles.edit">
+                        <button
+                          type="button"
+                          className={`${btnSecondary} !h-9 !w-9 !px-0`}
+                          onClick={() => openEditRole(role)}
+                          aria-label={`Edit ${role.name}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </Can>
+                      {!isProtectedRole(role.id) ? (
+                        <Can permission="roles.delete">
+                          <button
+                            type="button"
+                            className={`${btnDanger} !h-9 !w-9 !px-0`}
+                            onClick={() => removeRole(role)}
+                            aria-label={`Delete ${role.name}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </Can>
                       ) : null}
                     </div>
                   </div>
@@ -740,41 +921,45 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
                           : assignedIds.map((id) => <RoleBadge key={id} role={id} />)}
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => openEditUser(s)} className={btnPrimary}>
-                          <Pencil className="h-3.5 w-3.5" />
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActive(s, !s.active)}
-                          className={btnSecondary}
-                          disabled={isSelf || (s.active && isLastOwner)}
-                          title={
-                            isSelf
-                              ? "You cannot deactivate yourself"
-                              : s.active && isLastOwner
-                                ? "Cannot deactivate the last Founder"
-                                : undefined
-                          }
-                        >
-                          {s.active ? "Deactivate" : "Activate"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => remove(s.id, s.email)}
-                          className={btnDanger}
-                          disabled={isSelf || isLastOwner}
-                          title={
-                            isSelf
-                              ? "You cannot delete yourself"
-                              : isLastOwner
-                                ? "Cannot delete the last Founder"
-                                : `Delete ${s.email}`
-                          }
-                          aria-label={`Delete ${s.email}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <Can permission="users.edit">
+                          <button type="button" onClick={() => openEditUser(s)} className={btnPrimary}>
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActive(s, !s.active)}
+                            className={btnSecondary}
+                            disabled={isSelf || (s.active && isLastOwner)}
+                            title={
+                              isSelf
+                                ? "You cannot deactivate yourself"
+                                : s.active && isLastOwner
+                                  ? "Cannot deactivate the last Founder"
+                                  : undefined
+                            }
+                          >
+                            {s.active ? "Deactivate" : "Activate"}
+                          </button>
+                        </Can>
+                        <Can permission="users.delete">
+                          <button
+                            type="button"
+                            onClick={() => remove(s.id, s.email)}
+                            className={btnDanger}
+                            disabled={isSelf || isLastOwner}
+                            title={
+                              isSelf
+                                ? "You cannot delete yourself"
+                                : isLastOwner
+                                  ? "Cannot delete the last Founder"
+                                  : `Delete ${s.email}`
+                            }
+                            aria-label={`Delete ${s.email}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </Can>
                       </div>
                     </div>
                   </article>

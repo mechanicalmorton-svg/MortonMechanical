@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { canManageUsers } from "@/lib/admin-roles";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import {
   addInventoryCategory,
   deleteInventoryCategory,
@@ -9,7 +8,7 @@ import {
 import { isDefaultInventoryCategory } from "@/lib/inventory-categories";
 
 export async function GET() {
-  return withAdminAuth(async () => {
+  return withPermission("inventory.view", async () => {
     const categories = await loadInventoryCategories();
     return NextResponse.json({
       categories,
@@ -19,20 +18,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  return withAdminAuth(async (user) => {
-    if (
-      !(
-        user.permissions?.manageUsers ||
-        canManageUsers(user.role) ||
-        user.roleIds?.includes("owner") ||
-        user.roleIds?.includes("admin")
-      )
-    ) {
-      return NextResponse.json(
-        { error: "Only the owner or an admin can create inventory categories." },
-        { status: 403 },
-      );
-    }
+  return withPermission("inventory.adjust", async () => {
     const body = await req.json().catch(() => ({}));
     try {
       const categories = await addInventoryCategory(String(body.name ?? ""));
@@ -50,20 +36,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withAdminAuth(async (user) => {
-    if (
-      !(
-        user.permissions?.manageUsers ||
-        canManageUsers(user.role) ||
-        user.roleIds?.includes("owner") ||
-        user.roleIds?.includes("admin")
-      )
-    ) {
-      return NextResponse.json(
-        { error: "Only the owner or an admin can delete inventory categories." },
-        { status: 403 },
-      );
-    }
+  return withPermission("inventory.adjust", async () => {
     const body = await req.json().catch(() => ({}));
     try {
       const categories = await deleteInventoryCategory(String(body.name ?? ""));

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, Loader2, Mail, Trash2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { hasPermission, isFounder } from "@/lib/permissions";
 import type { StaffRole } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
 import { useAdminToast } from "./AdminToast";
@@ -30,7 +31,7 @@ type Props = {
     roleName?: string;
     roleColor?: string;
     avatarUrl?: string;
-    permissions?: { manageUsers?: boolean };
+    permissions?: { manageUsers?: boolean; actions?: string[]; tabs?: string[] };
   };
 };
 
@@ -62,13 +63,7 @@ export function SettingsPanel({ user }: Props) {
   const toast = useAdminToast();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const canManagePayments = Boolean(
-    user.permissions?.manageUsers ||
-      user.roleIds?.includes("owner") ||
-      user.roleIds?.includes("admin") ||
-      user.role === "owner" ||
-      user.role === "admin",
-  );
+  const canManagePayments = isFounder(user) || hasPermission(user, "payments.manage");
 
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profile, setProfile] = useState<AccountProfile | null>(null);

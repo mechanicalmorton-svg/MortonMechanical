@@ -17,6 +17,7 @@ import type { AuditLogEntry } from "@/lib/audit-types";
 import { AUDIT_MODULE_OPTIONS, AUDIT_SEVERITY_OPTIONS } from "@/lib/audit-types";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, StatusBadge, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can } from "./permissions";
 
 type ListResponse = {
   ready?: boolean;
@@ -161,12 +162,14 @@ export function AuditLogsPanel() {
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </button>
-          <a href={exportUrl("csv")} className={btnSecondary}>
-            <Download className="h-4 w-4" /> CSV / Excel
-          </a>
-          <a href={exportUrl("json")} className={btnSecondary}>
-            <Download className="h-4 w-4" /> JSON
-          </a>
+          <Can permission="audit_logs.export">
+            <a href={exportUrl("csv")} className={btnSecondary}>
+              <Download className="h-4 w-4" /> CSV / Excel
+            </a>
+            <a href={exportUrl("json")} className={btnSecondary}>
+              <Download className="h-4 w-4" /> JSON
+            </a>
+          </Can>
           <button type="button" className={btnSecondary} onClick={() => window.print()}>
             <Printer className="h-4 w-4" /> Print
           </button>

@@ -7,6 +7,7 @@ import type { Booking } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary } from "./admin-ui";
+import { Can } from "./permissions";
 
 export function QuotesPanel() {
   const toast = useAdminToast();
@@ -146,30 +147,36 @@ export function QuotesPanel() {
                     <p className="mt-0.5 text-xs text-slate-600">{new Date(q.createdAt).toLocaleString()}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {!linkedBooking ? (
-                      <button
-                        type="button"
-                        onClick={() => createBookingFromQuote(q)}
-                        disabled={schedulingId === q.id}
-                        className={btnPrimary}
-                      >
-                        <CalendarPlus className="h-3.5 w-3.5" />
-                        {schedulingId === q.id ? "Creating…" : "Create booking"}
+                    <Can permission="bookings.create">
+                      {!linkedBooking ? (
+                        <button
+                          type="button"
+                          onClick={() => createBookingFromQuote(q)}
+                          disabled={schedulingId === q.id}
+                          className={btnPrimary}
+                        >
+                          <CalendarPlus className="h-3.5 w-3.5" />
+                          {schedulingId === q.id ? "Creating…" : "Create booking"}
+                        </button>
+                      ) : null}
+                    </Can>
+                    <Can permission="quotes.edit">
+                      {q.status !== "read" && (
+                        <button type="button" onClick={() => updateStatus(q.id, "read")} className={btnSecondary}>
+                          Mark read
+                        </button>
+                      )}
+                      {q.status !== "archived" && (
+                        <button type="button" onClick={() => updateStatus(q.id, "archived")} className={btnSecondary}>
+                          <Archive className="h-3.5 w-3.5" /> Archive
+                        </button>
+                      )}
+                    </Can>
+                    <Can permission="quotes.delete">
+                      <button type="button" onClick={() => remove(q.id)} className={btnDanger}>
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                    ) : null}
-                    {q.status !== "read" && (
-                      <button type="button" onClick={() => updateStatus(q.id, "read")} className={btnSecondary}>
-                        Mark read
-                      </button>
-                    )}
-                    {q.status !== "archived" && (
-                      <button type="button" onClick={() => updateStatus(q.id, "archived")} className={btnSecondary}>
-                        <Archive className="h-3.5 w-3.5" /> Archive
-                      </button>
-                    )}
-                    <button type="button" onClick={() => remove(q.id)} className={btnDanger}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    </Can>
                   </div>
                 </div>
                 <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">

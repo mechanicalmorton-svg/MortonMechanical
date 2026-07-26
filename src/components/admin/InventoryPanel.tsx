@@ -19,6 +19,7 @@ import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can } from "./permissions";
 import { SearchableSelect } from "./SearchableSelect";
 
 type Props = { lowStockOnly?: boolean; role?: StaffRole; canManageCategories?: boolean };
@@ -397,9 +398,11 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
                 <FolderPlus className="h-4 w-4" /> Add Category
               </button>
             ) : null}
-            <button type="button" onClick={openAddModal} className={btnPrimary}>
-              <Plus className="h-4 w-4" /> {lowStockOnly ? "Add Part" : "Add Inventory"}
-            </button>
+            <Can permission="inventory.create">
+              <button type="button" onClick={openAddModal} className={btnPrimary}>
+                <Plus className="h-4 w-4" /> {lowStockOnly ? "Add Part" : "Add Inventory"}
+              </button>
+            </Can>
           </>
         }
       />
@@ -642,9 +645,11 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
                         <td className="hidden px-4 py-3 font-mono text-slate-400 sm:table-cell">{item.sku || "—"}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => adjustStock(item, -1)} className={btnSecondary} aria-label="Decrease stock">
-                              <Minus className="h-3.5 w-3.5" />
-                            </button>
+                            <Can permission="inventory.adjust">
+                              <button type="button" onClick={() => adjustStock(item, -1)} className={btnSecondary} aria-label="Decrease stock">
+                                <Minus className="h-3.5 w-3.5" />
+                              </button>
+                            </Can>
                             <span
                               className={
                                 item.minStock > 0 && item.quantity <= item.minStock
@@ -654,9 +659,11 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
                             >
                               {item.quantity}
                             </span>
-                            <button type="button" onClick={() => adjustStock(item, 1)} className={btnSecondary} aria-label="Increase stock">
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
+                            <Can permission="inventory.adjust">
+                              <button type="button" onClick={() => adjustStock(item, 1)} className={btnSecondary} aria-label="Increase stock">
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                            </Can>
                             <span className="text-slate-600">/ {item.minStock}</span>
                           </div>
                         </td>
@@ -679,12 +686,16 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2">
-                            <button type="button" onClick={() => startEdit(item)} className={btnSecondary} aria-label={`Edit ${item.name}`}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button type="button" onClick={() => remove(item.id)} className={btnDanger} aria-label={`Remove ${item.name}`}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            <Can permission="inventory.edit">
+                              <button type="button" onClick={() => startEdit(item)} className={btnSecondary} aria-label={`Edit ${item.name}`}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </Can>
+                            <Can permission="inventory.delete">
+                              <button type="button" onClick={() => remove(item.id)} className={btnDanger} aria-label={`Remove ${item.name}`}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </Can>
                           </div>
                         </td>
                       </tr>

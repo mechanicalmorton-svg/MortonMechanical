@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { createId, deleteFleetVehicle, loadFleet, upsertFleetVehicle } from "@/lib/shop-data";
 import type { FleetVehicle } from "@/lib/shop-types";
 
 export async function GET() {
-  return withAdminAuth(async () => NextResponse.json(await loadFleet()));
+  return withPermission("fleet.view", async () => NextResponse.json(await loadFleet()));
 }
 
 export async function POST(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("fleet.create", async () => {
     const body = await req.json();
     const vehicle: FleetVehicle = {
       id: createId(),
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("fleet.edit", async () => {
     const body = await req.json();
     const items = await loadFleet();
     const item = items.find((v) => v.id === body.id);
@@ -40,7 +40,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("fleet.delete", async () => {
     const { id } = await req.json();
     await deleteFleetVehicle(id);
     return NextResponse.json({ ok: true });

@@ -8,6 +8,7 @@ import { AdminModal } from "./AdminModal";
 import { CustomerPickerModal, type CustomerWithVehicles } from "./CustomerPickerModal";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can } from "./permissions";
 
 const emptyForm = {
   customerId: "",
@@ -105,9 +106,11 @@ export function BookingsPanel() {
           title="Bookings"
           subtitle="Live appointments from your customers and website requests (Supabase)."
         />
-        <button type="button" onClick={openCreate} className={btnPrimary}>
-          <Plus className="h-4 w-4" /> New Booking
-        </button>
+        <Can permission="bookings.create">
+          <button type="button" onClick={openCreate} className={btnPrimary}>
+            <Plus className="h-4 w-4" /> New Booking
+          </button>
+        </Can>
       </div>
 
       <AdminModal open={showForm} onClose={() => setShowForm(false)} title="New Booking" wide>
@@ -203,19 +206,23 @@ export function BookingsPanel() {
                   {b.notes ? <p className="mt-2 text-sm text-slate-500">{b.notes}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {b.status === "pending" && (
-                    <>
-                      <button type="button" onClick={() => setStatus(b.id, "confirmed")} className={btnPrimary}>Confirm</button>
-                      <button type="button" onClick={() => setStatus(b.id, "cancelled")} className={btnSecondary}>Cancel</button>
-                    </>
-                  )}
-                  {b.status === "confirmed" && (
-                    <>
-                      <button type="button" onClick={() => setStatus(b.id, "completed")} className={btnSecondary}>Complete</button>
-                      <button type="button" onClick={() => setStatus(b.id, "cancelled")} className={btnSecondary}>Cancel</button>
-                    </>
-                  )}
-                  <button type="button" onClick={() => remove(b.id)} className={btnDanger}><Trash2 className="h-3.5 w-3.5" /></button>
+                  <Can permission="bookings.edit">
+                    {b.status === "pending" && (
+                      <>
+                        <button type="button" onClick={() => setStatus(b.id, "confirmed")} className={btnPrimary}>Confirm</button>
+                        <button type="button" onClick={() => setStatus(b.id, "cancelled")} className={btnSecondary}>Cancel</button>
+                      </>
+                    )}
+                    {b.status === "confirmed" && (
+                      <>
+                        <button type="button" onClick={() => setStatus(b.id, "completed")} className={btnSecondary}>Complete</button>
+                        <button type="button" onClick={() => setStatus(b.id, "cancelled")} className={btnSecondary}>Cancel</button>
+                      </>
+                    )}
+                  </Can>
+                  <Can permission="bookings.delete">
+                    <button type="button" onClick={() => remove(b.id)} className={btnDanger}><Trash2 className="h-3.5 w-3.5" /></button>
+                  </Can>
                 </div>
               </div>
             </article>

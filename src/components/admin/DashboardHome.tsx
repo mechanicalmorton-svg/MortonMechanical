@@ -8,11 +8,11 @@ import type { Tab } from "./AdminDashboard";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, Panel, StatCard, StatusBadge, btnSecondary } from "./admin-ui";
+import { Can, usePermissions } from "./permissions";
 
 type Props = {
   name: string;
   role: StaffRole;
-  canManageUsers?: boolean;
   onNavigate: (tab: Tab) => void;
 };
 
@@ -34,8 +34,9 @@ function formatOrderNumber(id: string) {
   return `WO-${compact.slice(-12) || id.slice(0, 12).toUpperCase()}`;
 }
 
-export function DashboardHome({ name, canManageUsers = false, onNavigate }: Props) {
+export function DashboardHome({ name, onNavigate }: Props) {
   const toast = useAdminToast();
+  const { hasPermission, canAccessPage } = usePermissions();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [statModal, setStatModal] = useState<StatModal>(null);
@@ -49,13 +50,22 @@ export function DashboardHome({ name, canManageUsers = false, onNavigate }: Prop
   }, [toast]);
 
   const stats = data?.stats;
-  const quickActions: { label: string; tab: Tab; primary?: boolean }[] = [
-    { label: "New Work Order", tab: "work-orders", primary: true },
-    { label: "New Booking", tab: "bookings" },
-    { label: "Quote Requests", tab: "quotes" },
-    { label: "My Route Today", tab: "routes-today" },
-  ];
-  if (canManageUsers) quickActions.push({ label: "Add User", tab: "users" });
+  const quickActions: { label: string; tab: Tab; primary?: boolean; permission?: string }[] = [];
+  if (hasPermission("work_orders.create") && canAccessPage("work-orders")) {
+    quickActions.push({ label: "New Work Order", tab: "work-orders", primary: true, permission: "work_orders.create" });
+  }
+  if (hasPermission("bookings.create") && canAccessPage("bookings")) {
+    quickActions.push({ label: "New Booking", tab: "bookings", permission: "bookings.create" });
+  }
+  if (canAccessPage("quotes")) {
+    quickActions.push({ label: "Quote Requests", tab: "quotes" });
+  }
+  if (canAccessPage("routes-today")) {
+    quickActions.push({ label: "My Route Today", tab: "routes-today" });
+  }
+  if (hasPermission("users.create") && canAccessPage("users")) {
+    quickActions.push({ label: "Add User", tab: "users", permission: "users.create" });
+  }
 
   const mtdTotal = data?.mtdCompletedJobs.reduce((sum, job) => sum + (job.revenue ?? 0), 0) ?? 0;
 
@@ -71,50 +81,58 @@ export function DashboardHome({ name, canManageUsers = false, onNavigate }: Prop
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="admin-rise admin-rise-delay-1">
-          <StatCard
-            label="Queued Work Orders"
-            value={loading ? "—" : stats?.openWorkOrders ?? 0}
-            hint={`${stats?.inProgressWorkOrders ?? 0} in shop`}
-            icon={ClipboardList}
-            accent="amber"
-            active={statModal === "open-work-orders"}
-            onClick={() => setStatModal((current) => (current === "open-work-orders" ? null : "open-work-orders"))}
-          />
-        </div>
-        <div className="admin-rise admin-rise-delay-2">
-          <StatCard
-            label="Today's Bookings"
-            value={loading ? "—" : stats?.todayBookings ?? 0}
-            hint={`${stats?.pendingBookings ?? 0} pending confirmation`}
-            icon={Calendar}
-            accent="purple"
-            active={statModal === "today-bookings"}
-            onClick={() => setStatModal((current) => (current === "today-bookings" ? null : "today-bookings"))}
-          />
-        </div>
-        <div className="admin-rise admin-rise-delay-3">
-          <StatCard
-            label="Urgent Items"
-            value={loading ? "—" : stats?.urgentItems ?? 0}
-            hint="Work orders & low stock"
-            icon={AlertTriangle}
-            accent="red"
-            active={statModal === "urgent"}
-            onClick={() => setStatModal((current) => (current === "urgent" ? null : "urgent"))}
-          />
-        </div>
-        <div className="admin-rise admin-rise-delay-4">
-          <StatCard
-            label="MTD Revenue"
-            value={loading ? "—" : `$${(stats?.mtdRevenue ?? 0).toLocaleString()}`}
-            hint="Completed jobs this month"
-            icon={DollarSign}
-            accent="emerald"
-            active={statModal === "mtd-revenue"}
-            onClick={() => setStatModal((current) => (current === "mtd-revenue" ? null : "mtd-revenue"))}
-          />
-        </div>
+        <Can permission={["dashboard.widget.overview", "dashboard.widget.open_work_orders"]} mode="any">
+          <div className="admin-rise admin-rise-delay-1">
+            <StatCard
+              label="Queued Work Orders"
+              value={loading ? "—" : stats?.openWorkOrders ?? 0}
+              hint={`${stats?.inProgressWorkOrders ?? 0} in shop`}
+              icon={ClipboardList}
+              accent="amber"
+              active={statModal === "open-work-orders"}
+              onClick={() => setStatModal((current) => (current === "open-work-orders" ? null : "open-work-orders"))}
+            />
+          </div>
+        </Can>
+        <Can permission={["dashboard.widget.overview", "dashboard.widget.today_jobs", "dashboard.widget.pending_bookings"]} mode="any">
+          <div className="admin-rise admin-rise-delay-2">
+            <StatCard
+              label="Today's Bookings"
+              value={loading ? "—" : stats?.todayBookings ?? 0}
+              hint={`${stats?.pendingBookings ?? 0} pending confirmation`}
+              icon={Calendar}
+              accent="purple"
+              active={statModal === "today-bookings"}
+              onClick={() => setStatModal((current) => (current === "today-bookings" ? null : "today-bookings"))}
+            />
+          </div>
+        </Can>
+        <Can permission={["dashboard.widget.overview", "dashboard.widget.low_stock"]} mode="any">
+          <div className="admin-rise admin-rise-delay-3">
+            <StatCard
+              label="Urgent Items"
+              value={loading ? "—" : stats?.urgentItems ?? 0}
+              hint="Work orders & low stock"
+              icon={AlertTriangle}
+              accent="red"
+              active={statModal === "urgent"}
+              onClick={() => setStatModal((current) => (current === "urgent" ? null : "urgent"))}
+            />
+          </div>
+        </Can>
+        <Can permission={["dashboard.widget.overview", "dashboard.widget.revenue"]} mode="any">
+          <div className="admin-rise admin-rise-delay-4">
+            <StatCard
+              label="MTD Revenue"
+              value={loading ? "—" : `$${(stats?.mtdRevenue ?? 0).toLocaleString()}`}
+              hint="Completed jobs this month"
+              icon={DollarSign}
+              accent="emerald"
+              active={statModal === "mtd-revenue"}
+              onClick={() => setStatModal((current) => (current === "mtd-revenue" ? null : "mtd-revenue"))}
+            />
+          </div>
+        </Can>
       </div>
 
       <AdminModal
@@ -293,6 +311,7 @@ export function DashboardHome({ name, canManageUsers = false, onNavigate }: Prop
         </div>
       </AdminModal>
 
+      <Can permission="dashboard.widget.quick_actions">
       <div className="mt-8">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
@@ -306,7 +325,7 @@ export function DashboardHome({ name, canManageUsers = false, onNavigate }: Prop
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {quickActions.map(({ label, tab, primary }) => (
             <button
-              key={tab}
+              key={`${tab}-${label}`}
               type="button"
               onClick={() => onNavigate(tab)}
               className={`group rounded-2xl border px-4 py-4 text-left transition duration-200 hover:-translate-y-0.5 ${
@@ -328,78 +347,85 @@ export function DashboardHome({ name, canManageUsers = false, onNavigate }: Prop
           ))}
         </div>
       </div>
+      </Can>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Panel title="Pending Bookings" badge={data?.pendingBookings.length ?? 0} description="Appointments waiting on confirmation">
-          {loading ? (
-            <p className="text-sm text-slate-500">Loading…</p>
-          ) : !data?.pendingBookings.length ? (
-            <EmptyState icon={Calendar} title="No pending bookings" text="Confirmed or pending appointments will appear here." />
-          ) : (
-            <ul className="space-y-3">
-              {data.pendingBookings.map((b) => (
-                <li key={b.id} className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-white">{b.customerName}</p>
-                      <p className="text-sm text-slate-400">{b.service}</p>
-                      <p className="mt-1 text-xs text-slate-500">{new Date(b.date).toLocaleDateString()} at {b.time}</p>
+        <Can permission="dashboard.widget.pending_bookings">
+          <Panel title="Pending Bookings" badge={data?.pendingBookings.length ?? 0} description="Appointments waiting on confirmation">
+            {loading ? (
+              <p className="text-sm text-slate-500">Loading…</p>
+            ) : !data?.pendingBookings.length ? (
+              <EmptyState icon={Calendar} title="No pending bookings" text="Confirmed or pending appointments will appear here." />
+            ) : (
+              <ul className="space-y-3">
+                {data.pendingBookings.map((b) => (
+                  <li key={b.id} className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-white">{b.customerName}</p>
+                        <p className="text-sm text-slate-400">{b.service}</p>
+                        <p className="mt-1 text-xs text-slate-500">{new Date(b.date).toLocaleDateString()} at {b.time}</p>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </Can>
 
-        <Panel title="In Progress" badge={data?.inProgressWorkOrders.length ?? 0} description="Jobs currently on the floor">
-          {loading ? (
-            <p className="text-sm text-slate-500">Loading…</p>
-          ) : !data?.inProgressWorkOrders.length ? (
-            <EmptyState icon={Wrench} title="No work in progress" text="Active jobs will show here once started." />
-          ) : (
-            <ul className="space-y-3">
-              {data.inProgressWorkOrders.map((w) => (
-                <li key={w.id} className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
-                  <p className="font-medium text-white">{w.customerName}</p>
-                  <p className="text-sm text-slate-400">{w.service}</p>
-                  <p className="mt-1 text-xs text-slate-500">{w.vehicle || "No vehicle listed"}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+        <Can permission="dashboard.widget.open_work_orders">
+          <Panel title="In Progress" badge={data?.inProgressWorkOrders.length ?? 0} description="Jobs currently on the floor">
+            {loading ? (
+              <p className="text-sm text-slate-500">Loading…</p>
+            ) : !data?.inProgressWorkOrders.length ? (
+              <EmptyState icon={Wrench} title="No work in progress" text="Active jobs will show here once started." />
+            ) : (
+              <ul className="space-y-3">
+                {data.inProgressWorkOrders.map((w) => (
+                  <li key={w.id} className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
+                    <p className="font-medium text-white">{w.customerName}</p>
+                    <p className="text-sm text-slate-400">{w.service}</p>
+                    <p className="mt-1 text-xs text-slate-500">{w.vehicle || "No vehicle listed"}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </Can>
       </div>
 
-      <div className="mt-6">
-        <Panel title="Today's Schedule" badge={data?.todaySchedule.length ?? 0} description="Confirmed visits for today">
-          {loading ? (
-            <p className="text-sm text-slate-500">Loading…</p>
-          ) : !data?.todaySchedule.length ? (
-            <EmptyState icon={MapPin} title="Nothing scheduled today" text="Confirmed bookings for today will appear here." />
-          ) : (
-            <ul className="space-y-3">
-              {data.todaySchedule.map((b) => (
-                <li
-                  key={b.id}
-                  className="flex items-center gap-4 rounded-xl border border-slate-800/70 bg-gradient-to-r from-slate-950/60 to-slate-900/30 px-4 py-3.5"
-                >
-                  <span className="shrink-0 rounded-xl bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-300 ring-1 ring-amber-500/20">
-                    {b.time}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-white">{b.customerName}</p>
-                    <p className="truncate text-sm text-slate-400">
-                      {b.service}
-                      {b.address ? ` · ${b.address}` : ""}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
+      <Can permission="dashboard.widget.today_jobs">
+        <div className="mt-6">
+          <Panel title="Today's Schedule" badge={data?.todaySchedule.length ?? 0} description="Confirmed visits for today">
+            {loading ? (
+              <p className="text-sm text-slate-500">Loading…</p>
+            ) : !data?.todaySchedule.length ? (
+              <EmptyState icon={MapPin} title="Nothing scheduled today" text="Confirmed bookings for today will appear here." />
+            ) : (
+              <ul className="space-y-3">
+                {data.todaySchedule.map((b) => (
+                  <li
+                    key={b.id}
+                    className="flex items-center gap-4 rounded-xl border border-slate-800/70 bg-gradient-to-r from-slate-950/60 to-slate-900/30 px-4 py-3.5"
+                  >
+                    <span className="shrink-0 rounded-xl bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-300 ring-1 ring-amber-500/20">
+                      {b.time}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-white">{b.customerName}</p>
+                      <p className="truncate text-sm text-slate-400">
+                        {b.service}
+                        {b.address ? ` · ${b.address}` : ""}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
+      </Can>
     </div>
   );
 }

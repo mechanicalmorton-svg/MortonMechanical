@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { SiteLogo } from "@/components/SiteLogo";
+import { canAccessPage, hasPermission } from "@/lib/permissions";
 import { userHasOwnerRole, type RolePermissions } from "@/lib/role-definitions";
 import type { StaffRole } from "@/lib/shop-types";
 import { RoleBadge } from "./admin-ui";
@@ -32,6 +33,7 @@ import { ContentEditor } from "./ContentEditor";
 import { DashboardHome } from "./DashboardHome";
 import { FleetPanel } from "./FleetPanel";
 import { InventoryPanel } from "./InventoryPanel";
+import { PermissionsProvider } from "./permissions";
 import { QuotesPanel } from "./QuotesPanel";
 import { RoutesPanel } from "./RoutesPanel";
 import { SettingsPanel } from "./SettingsPanel";
@@ -66,6 +68,7 @@ type Props = {
     roleName?: string;
     roleColor?: string;
     permissions?: RolePermissions;
+    permissionOverrides?: { grant?: string[]; deny?: string[] };
     avatarUrl?: string;
   };
 };
@@ -80,40 +83,8 @@ function displayRoles(user: Props["user"]) {
   }));
 }
 
-function userCanAccessTab(
-  user: Props["user"],
-  tab: string,
-) {
-  if (userHasOwnerRole(user)) return true;
-  if (tab === "settings") return true;
-  if (tab === "audit-logs") {
-    return (
-      userHasOwnerRole(user) ||
-      Boolean(user.permissions?.manageUsers) ||
-      user.role === "admin" ||
-      Boolean(user.roleIds?.includes("admin")) ||
-      Boolean(user.permissions?.tabs.includes("audit-logs"))
-    );
-  }
-  if (tab === "customizer") {
-    return Boolean(user.permissions?.editSiteContent || user.permissions?.tabs.includes("site-contents"));
-  }
-  if (!user.permissions) {
-    // Fallback for older sessions without embedded permissions.
-    return tab !== "users" && tab !== "site-contents" && tab !== "audit-logs"
-      ? true
-      : user.role === "admin" || Boolean(user.roleIds?.includes("admin"));
-  }
-  return user.permissions.tabs.includes(tab);
-}
-
-function userCanManageUsers(user: Props["user"]) {
-  return (
-    userHasOwnerRole(user) ||
-    Boolean(user.permissions?.manageUsers) ||
-    user.role === "admin" ||
-    Boolean(user.roleIds?.includes("admin"))
-  );
+function userCanAccessTab(user: Props["user"], tab: string) {
+  return canAccessPage(user, tab);
 }
 
 type NavItem = {
@@ -154,6 +125,19 @@ const nav: NavItem[] = [
 
 const accountTab: Tab = "settings";
 
+function firstAccessibleTab(user: Props["user"]): Tab {
+  for (const item of nav) {
+    if (item.children?.length) {
+      for (const child of item.children) {
+        if (userCanAccessTab(user, child.id)) return child.id;
+      }
+    } else if (userCanAccessTab(user, item.id)) {
+      return item.id;
+    }
+  }
+  return "settings";
+}
+
 const validTabs = new Set<Tab>([
   ...nav.flatMap((n) => [n.id, ...(n.children?.map((c) => c.id) ?? [])]),
   accountTab,
@@ -188,8 +172,9 @@ export function AdminDashboard({ user }: Props) {
     const syncTab = () => {
       const next = readTabFromHash();
       if (!userCanAccessTab(user, next)) {
-        setTab("dashboard");
-        window.location.hash = "dashboard";
+        const fallback = firstAccessibleTab(user);
+        setTab(fallback);
+        window.location.hash = fallback;
         return;
       }
       setTab(next);
@@ -402,123 +387,123 @@ export function AdminDashboard({ user }: Props) {
     </>
   );
 
+  const showUsers = userCanAccessTab(user, "users");
+  const canManageCategories = hasPermission(user, "inventory.adjust");
+
   return (
     <AdminToastProvider>
-      <div className="flex min-h-screen">
-        <aside className="admin-glass hidden w-[17.5rem] shrink-0 flex-col border-y-0 border-l-0 xl:flex">
-          {sidebar}
-        </aside>
+      <PermissionsProvider user={user}>
+        <div className="flex min-h-screen">
+          <aside className="admin-glass hidden w-[17.5rem] shrink-0 flex-col border-y-0 border-l-0 xl:flex">
+            {sidebar}
+          </aside>
 
-        {mobileOpen ? (
-          <div className="fixed inset-0 z-50 xl:hidden">
-            <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setMobileOpen(false)} aria-label="Close menu" />
-            <aside className="admin-glass relative flex h-full w-[17.5rem] max-w-[88vw] flex-col shadow-2xl">
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                className="absolute right-3 top-3 z-10 rounded-xl p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
-                aria-label="Close menu"
-              >
-                <X className="h-5 w-5" />
-              </button>
-              {sidebar}
-            </aside>
-          </div>
-        ) : null}
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-40 border-b border-slate-800/70 bg-slate-950/70 px-4 py-3.5 backdrop-blur-xl sm:px-6">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setMobileOpen(true)}
-                className="rounded-xl border border-slate-800 bg-slate-900/60 p-2 text-slate-300 transition hover:bg-slate-800 xl:hidden"
-                aria-label="Open menu"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-              <div className="ml-auto hidden items-center gap-2.5 sm:flex">
+          {mobileOpen ? (
+            <div className="fixed inset-0 z-50 xl:hidden">
+              <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setMobileOpen(false)} aria-label="Close menu" />
+              <aside className="admin-glass relative flex h-full w-[17.5rem] max-w-[88vw] flex-col shadow-2xl">
                 <button
                   type="button"
-                  onClick={() => selectTab(accountTab)}
-                  className="group inline-flex items-center gap-2.5 rounded-full border border-slate-700/70 bg-slate-950/55 py-1 pl-1 pr-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-amber-500/35 hover:bg-slate-900/80 hover:shadow-[0_0_0_1px_rgba(245,158,11,0.12)]"
-                  title="Account settings"
-                  aria-label={`Open account settings for ${user.name}`}
+                  onClick={() => setMobileOpen(false)}
+                  className="absolute right-3 top-3 z-10 rounded-xl p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                  aria-label="Close menu"
                 >
-                  <span className="relative shrink-0">
-                    {user.avatarUrl ? (
-                      <img
-                        src={user.avatarUrl}
-                        alt=""
-                        className={`h-7 w-7 rounded-full object-cover ring-2 ${
-                          userHasOwnerRole(user) ? "ring-sky-400/40" : "ring-amber-500/35"
-                        }`}
-                      />
-                    ) : (
-                      <span
-                        className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold ring-2 ${
-                          userHasOwnerRole(user)
-                            ? "bg-sky-500/15 text-sky-200 ring-sky-400/40"
-                            : "bg-gradient-to-br from-amber-500/25 to-pink-600/20 text-amber-100 ring-amber-500/35"
-                        }`}
-                      >
-                        {userInitials(user.name)}
-                      </span>
-                    )}
-                    <span
-                      className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-slate-950"
-                      aria-hidden
-                    />
-                  </span>
-                  <span className="min-w-0 text-left leading-tight">
-                    <span className="block text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500 transition group-hover:text-slate-400">
-                      Signed in
-                    </span>
-                    <span className="block max-w-[10rem] truncate text-xs font-semibold text-slate-100">
-                      {user.name}
-                    </span>
-                  </span>
+                  <X className="h-5 w-5" />
                 </button>
-              </div>
+                {sidebar}
+              </aside>
             </div>
-          </header>
+          ) : null}
 
-          <main className="relative flex-1 overflow-auto">
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              <div className="admin-soft-pulse absolute -right-24 top-10 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl" />
-              <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-pink-600/10 blur-3xl" />
-            </div>
-            <div key={tab} className="admin-rise relative p-4 sm:p-6 lg:p-8">
-              {tab === "dashboard" && (
-                <DashboardHome
-                  name={user.name}
-                  role={user.role}
-                  canManageUsers={userCanManageUsers(user)}
-                  onNavigate={selectTab}
-                />
-              )}
-              {tab === "inventory-all" && (
-                <InventoryPanel role={user.role} canManageCategories={userCanManageUsers(user)} />
-              )}
-              {tab === "inventory-low" && (
-                <InventoryPanel lowStockOnly role={user.role} canManageCategories={userCanManageUsers(user)} />
-              )}
-              {tab === "work-orders" && <WorkOrdersPanel />}
-              {tab === "bookings" && <BookingsPanel />}
-              {tab === "quotes" && <QuotesPanel />}
-              {tab === "users" && userCanManageUsers(user) && (
-                <StaffPanel currentUserId={user.id} onSelfUpdated={() => router.refresh()} />
-              )}
-              {tab === "fleet" && <FleetPanel />}
-              {tab === "routes-manager" && <RoutesPanel />}
-              {tab === "routes-today" && <RoutesPanel todayOnly userId={user.id} />}
-              {tab === "site-contents" && userCanAccessTab(user, "site-contents") && <ContentEditor />}
-              {tab === "audit-logs" && userCanAccessTab(user, "audit-logs") && <AuditLogsPanel />}
-              {tab === "settings" && <SettingsPanel user={user} />}
-            </div>
-          </main>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="sticky top-0 z-40 border-b border-slate-800/70 bg-slate-950/70 px-4 py-3.5 backdrop-blur-xl sm:px-6">
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(true)}
+                  className="rounded-xl border border-slate-800 bg-slate-900/60 p-2 text-slate-300 transition hover:bg-slate-800 xl:hidden"
+                  aria-label="Open menu"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+                <div className="ml-auto hidden items-center gap-2.5 sm:flex">
+                  <button
+                    type="button"
+                    onClick={() => selectTab(accountTab)}
+                    className="group inline-flex items-center gap-2.5 rounded-full border border-slate-700/70 bg-slate-950/55 py-1 pl-1 pr-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-amber-500/35 hover:bg-slate-900/80 hover:shadow-[0_0_0_1px_rgba(245,158,11,0.12)]"
+                    title="Account settings"
+                    aria-label={`Open account settings for ${user.name}`}
+                  >
+                    <span className="relative shrink-0">
+                      {user.avatarUrl ? (
+                        <img
+                          src={user.avatarUrl}
+                          alt=""
+                          className={`h-7 w-7 rounded-full object-cover ring-2 ${
+                            userHasOwnerRole(user) ? "ring-sky-400/40" : "ring-amber-500/35"
+                          }`}
+                        />
+                      ) : (
+                        <span
+                          className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold ring-2 ${
+                            userHasOwnerRole(user)
+                              ? "bg-sky-500/15 text-sky-200 ring-sky-400/40"
+                              : "bg-gradient-to-br from-amber-500/25 to-pink-600/20 text-amber-100 ring-amber-500/35"
+                          }`}
+                        >
+                          {userInitials(user.name)}
+                        </span>
+                      )}
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-slate-950"
+                        aria-hidden
+                      />
+                    </span>
+                    <span className="min-w-0 text-left leading-tight">
+                      <span className="block text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500 transition group-hover:text-slate-400">
+                        Signed in
+                      </span>
+                      <span className="block max-w-[10rem] truncate text-xs font-semibold text-slate-100">
+                        {user.name}
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </header>
+
+            <main className="relative flex-1 overflow-auto">
+              <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div className="admin-soft-pulse absolute -right-24 top-10 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl" />
+                <div className="absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-pink-600/10 blur-3xl" />
+              </div>
+              <div key={tab} className="admin-rise relative p-4 sm:p-6 lg:p-8">
+                {tab === "dashboard" && userCanAccessTab(user, "dashboard") && (
+                  <DashboardHome name={user.name} role={user.role} onNavigate={selectTab} />
+                )}
+                {tab === "inventory-all" && (
+                  <InventoryPanel role={user.role} canManageCategories={canManageCategories} />
+                )}
+                {tab === "inventory-low" && (
+                  <InventoryPanel lowStockOnly role={user.role} canManageCategories={canManageCategories} />
+                )}
+                {tab === "work-orders" && <WorkOrdersPanel />}
+                {tab === "bookings" && <BookingsPanel />}
+                {tab === "quotes" && <QuotesPanel />}
+                {tab === "users" && showUsers && (
+                  <StaffPanel currentUserId={user.id} onSelfUpdated={() => router.refresh()} />
+                )}
+                {tab === "fleet" && <FleetPanel />}
+                {tab === "routes-manager" && <RoutesPanel />}
+                {tab === "routes-today" && <RoutesPanel todayOnly userId={user.id} />}
+                {tab === "site-contents" && userCanAccessTab(user, "site-contents") && <ContentEditor />}
+                {tab === "audit-logs" && userCanAccessTab(user, "audit-logs") && <AuditLogsPanel />}
+                {tab === "settings" && <SettingsPanel user={user} />}
+              </div>
+            </main>
+          </div>
         </div>
-      </div>
+      </PermissionsProvider>
     </AdminToastProvider>
   );
 }

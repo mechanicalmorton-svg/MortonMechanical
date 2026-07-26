@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import {
   createId,
   deleteBooking,
@@ -16,14 +16,14 @@ function parseStatus(value: unknown): BookingStatus {
 }
 
 export async function GET() {
-  return withAdminAuth(async () => {
+  return withPermission("bookings.view", async () => {
     const items = await loadBookings();
     return NextResponse.json(items.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   });
 }
 
 export async function POST(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("bookings.create", async () => {
     try {
       const body = await req.json();
       let customerId = typeof body.customerId === "string" ? body.customerId.trim() : "";
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("bookings.edit", async () => {
     try {
       const body = await req.json();
       const items = await loadBookings();
@@ -127,7 +127,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("bookings.delete", async () => {
     const { id } = await req.json();
     await deleteBooking(id);
     return NextResponse.json({ ok: true });

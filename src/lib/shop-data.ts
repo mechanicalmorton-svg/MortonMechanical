@@ -1507,7 +1507,17 @@ export async function upsertRoleDefinition(
             ...role,
             name: input.name.trim() || role.name,
             color: (input.color as RoleDefinition["color"]) || role.color,
-            permissions: { tabs: role.permissions.tabs, manageUsers: true, editSiteContent: true },
+            permissions: {
+              ...role.permissions,
+              tabs: role.permissions.tabs,
+              actions: role.permissions.actions,
+              manageUsers: true,
+              editSiteContent: true,
+              description:
+                typeof input.permissions?.description === "string"
+                  ? input.permissions.description
+                  : role.permissions.description,
+            },
             updatedAt: stamp,
           }
         : role,
@@ -1558,6 +1568,12 @@ export async function upsertRoleDefinition(
   await persistRoleDefinitions(next);
   const merged = mergeRoleDefinitions(next);
   const saved = merged.find((role) => role.id === nextRole.id) ?? nextRole;
+  const beforeActions = existing?.permissions?.actions ?? [];
+  const afterActions = saved.permissions?.actions ?? [];
+  const actionsChanged =
+    beforeActions.length !== afterActions.length ||
+    beforeActions.some((key) => !afterActions.includes(key)) ||
+    afterActions.some((key) => !beforeActions.includes(key));
   void auditUpsert({
     module: "roles",
     recordType: "role",
@@ -1565,8 +1581,10 @@ export async function upsertRoleDefinition(
     recordLabel: saved.name,
     before: existing ?? null,
     after: saved,
-    createDescription: `Role created: ${saved.name}`,
-    updateDescription: `Role updated: ${saved.name}`,
+    createDescription: `Role created: ${saved.name} (${afterActions.length} actions)`,
+    updateDescription: actionsChanged
+      ? `Role permissions updated: ${saved.name} (${beforeActions.length} → ${afterActions.length} actions)`
+      : `Role updated: ${saved.name}`,
     page: "/admin#users",
   });
   return merged;

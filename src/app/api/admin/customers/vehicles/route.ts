@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import {
   createId,
   deleteCustomerVehicle,
@@ -10,14 +10,14 @@ import {
 import type { CustomerVehicle } from "@/lib/shop-types";
 
 export async function GET(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("customers.view", async () => {
     const customerId = new URL(req.url).searchParams.get("customerId") ?? undefined;
     return NextResponse.json(await loadCustomerVehicles(customerId));
   });
 }
 
 export async function POST(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("customers.create", async () => {
     const body = await req.json();
     const customerId = String(body.customerId ?? "").trim();
     if (!customerId) return NextResponse.json({ error: "Customer is required." }, { status: 400 });
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("customers.edit", async () => {
     const body = await req.json();
     const vehicles = await loadCustomerVehicles();
     const item = vehicles.find((vehicle) => vehicle.id === body.id);
@@ -59,7 +59,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("customers.delete", async () => {
     const { id } = await req.json();
     await deleteCustomerVehicle(id);
     return NextResponse.json({ ok: true });

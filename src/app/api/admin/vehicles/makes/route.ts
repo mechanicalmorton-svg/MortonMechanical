@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { loadCatalogMakes } from "@/lib/vehicle-catalog";
 
 export type VehicleMakeOption = { id: number; name: string };
@@ -20,7 +20,7 @@ async function fetchMakesForType(type: string) {
 }
 
 export async function GET() {
-  return withAdminAuth(async () => {
+  return withPermission("customers.view", async () => {
     const catalogMakes = await loadCatalogMakes();
     if (catalogMakes.length) {
       return NextResponse.json(catalogMakes);

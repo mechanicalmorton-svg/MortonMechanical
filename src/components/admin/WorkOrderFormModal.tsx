@@ -13,6 +13,7 @@ import { adminGet, adminSend } from "./admin-fetch";
 import { CustomerPickerModal, type CustomerWithVehicles } from "./CustomerPickerModal";
 import { useAdminToast } from "./AdminToast";
 import { btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can } from "./permissions";
 import { VehicleMakeModelFields } from "./VehicleMakeModelFields";
 
 type MakeOption = { id: number; name: string };
@@ -547,15 +548,17 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                     ))}
                   </select>
                 </FormField>
-                <button
-                  type="button"
-                  onClick={addVehicleForCustomer}
-                  disabled={!customer?.id || addingVehicle}
-                  className={`${btnPrimary} w-full lg:w-auto`}
-                >
-                  <Plus className="h-4 w-4" />
-                  {addingVehicle ? "Adding…" : "Add vehicle for customer"}
-                </button>
+                <Can permission="customers.create">
+                  <button
+                    type="button"
+                    onClick={addVehicleForCustomer}
+                    disabled={!customer?.id || addingVehicle}
+                    className={`${btnPrimary} w-full lg:w-auto`}
+                  >
+                    <Plus className="h-4 w-4" />
+                    {addingVehicle ? "Adding…" : "Add vehicle for customer"}
+                  </button>
+                </Can>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { withAdminAuth, withOwnerAdmin } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { getContent, saveContent, validateContent } from "@/lib/content";
 
 function revalidatePublicSite() {
@@ -13,11 +13,11 @@ function revalidatePublicSite() {
 }
 
 export async function GET() {
-  return withAdminAuth(async () => NextResponse.json(await getContent()));
+  return withPermission("content.view", async () => NextResponse.json(await getContent()));
 }
 
 export async function PUT(req: Request) {
-  return withOwnerAdmin(async () => {
+  return withPermission("content.edit", async () => {
     try {
       const before = await getContent();
       const body = await req.json();

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { requireAdminClient } from "@/lib/supabase/db";
 import { isMissingDocumentDataColumn } from "@/lib/work-order-document-store";
 
@@ -8,7 +8,7 @@ import { isMissingDocumentDataColumn } from "@/lib/work-order-document-store";
  * If the column is missing from PostgREST, returns the SQL the owner must run.
  */
 export async function POST() {
-  return withAdminAuth(async () => {
+  return withPermission("work_orders.edit", async () => {
     const client = requireAdminClient();
     const probe = await client.from("work_orders").select("id, document_data").limit(1);
 

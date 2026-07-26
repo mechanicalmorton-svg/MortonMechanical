@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withOwnerAdmin } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { isMissingAuditLogsTable, rowToAuditLog } from "@/lib/audit-log";
 import { AUDIT_SQL } from "@/lib/audit-types";
 import { requireAdminClient } from "@/lib/supabase/db";
@@ -113,8 +113,11 @@ function toCsv(rows: ReturnType<typeof rowToAuditLog>[]) {
 }
 
 export async function GET(req: Request) {
-  return withOwnerAdmin(async () => {
-    const url = new URL(req.url);
+  const url = new URL(req.url);
+  const exportFmt = url.searchParams.get("export");
+  const requiredKey = exportFmt ? "audit_logs.export" : "audit_logs.view";
+
+  return withPermission(requiredKey, async () => {
     const q = url.searchParams.get("q")?.trim() || "";
     const moduleFilter = url.searchParams.get("module")?.trim() || "";
     const action = url.searchParams.get("action")?.trim() || "";
@@ -125,7 +128,6 @@ export async function GET(req: Request) {
     const recordId = url.searchParams.get("recordId")?.trim() || "";
     const preset = url.searchParams.get("preset");
     const sort = url.searchParams.get("sort") || "newest";
-    const exportFmt = url.searchParams.get("export");
     const offset = Math.max(0, Number(url.searchParams.get("offset") || 0) || 0);
     const limit = Math.min(MAX_PAGE, Math.max(1, Number(url.searchParams.get("limit") || 50) || 50));
     const { from, to } = resolveDateRange(preset, url.searchParams.get("from"), url.searchParams.get("to"));

@@ -7,6 +7,7 @@ import { adminGet, adminSend } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can } from "./permissions";
 
 export type CustomerWithVehicles = Customer & { vehicles: CustomerVehicle[] };
 
@@ -92,53 +93,57 @@ export function CustomerPickerModal({ open, onClose, onSelect, stacked }: Props)
           <p className="text-xs text-slate-500">
             {loading ? "Loading customers…" : `${filteredCount} customer${filteredCount === 1 ? "" : "s"} available`}
           </p>
-          <button type="button" onClick={() => setShowCreate((v) => !v)} className={btnSecondary}>
-            <Plus className="h-4 w-4" />
-            + Create new customer
-          </button>
+          <Can permission="customers.create">
+            <button type="button" onClick={() => setShowCreate((v) => !v)} className={btnSecondary}>
+              <Plus className="h-4 w-4" />
+              + Create new customer
+            </button>
+          </Can>
         </div>
 
-        {showCreate && (
-          <form onSubmit={createCustomer} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
-            <p className="mb-3 text-sm font-medium text-white">New customer</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <input
-                className={inputClass}
-                placeholder="Full name *"
-                value={newCustomer.name}
-                onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                required
-              />
-              <input
-                className={inputClass}
-                placeholder="Phone"
-                value={newCustomer.phone}
-                onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-              />
-              <input
-                className={inputClass}
-                placeholder="Email"
-                type="email"
-                value={newCustomer.email}
-                onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-              />
-              <input
-                className={inputClass}
-                placeholder="Address"
-                value={newCustomer.address}
-                onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
-              />
-            </div>
-            <div className="mt-3 flex gap-2">
-              <button type="submit" className={btnPrimary} disabled={creating}>
-                {creating ? "Saving…" : "Save customer"}
-              </button>
-              <button type="button" onClick={() => setShowCreate(false)} className={btnSecondary}>
-                Cancel
-              </button>
-            </div>
-          </form>
-        )}
+        <Can permission="customers.create">
+          {showCreate && (
+            <form onSubmit={createCustomer} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+              <p className="mb-3 text-sm font-medium text-white">New customer</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input
+                  className={inputClass}
+                  placeholder="Full name *"
+                  value={newCustomer.name}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                  required
+                />
+                <input
+                  className={inputClass}
+                  placeholder="Phone"
+                  value={newCustomer.phone}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                />
+                <input
+                  className={inputClass}
+                  placeholder="Email"
+                  type="email"
+                  value={newCustomer.email}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                />
+                <input
+                  className={inputClass}
+                  placeholder="Address"
+                  value={newCustomer.address}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
+                />
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button type="submit" className={btnPrimary} disabled={creating}>
+                  {creating ? "Saving…" : "Save customer"}
+                </button>
+                <button type="button" onClick={() => setShowCreate(false)} className={btnSecondary}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </Can>
 
         <div className="max-h-[360px] space-y-2 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/30 p-2">
           {!loading && !customers.length ? (

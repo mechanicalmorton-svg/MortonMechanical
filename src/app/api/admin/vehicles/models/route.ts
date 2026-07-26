@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { loadCatalogModels } from "@/lib/vehicle-catalog";
 
 const modelCache = new Map<string, { models: string[]; at: number }>();
@@ -13,7 +13,7 @@ async function fetchModels(url: string) {
 }
 
 export async function GET(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("customers.view", async () => {
     const params = new URL(req.url).searchParams;
     const make = params.get("make")?.trim();
     const makeId = params.get("makeId")?.trim();

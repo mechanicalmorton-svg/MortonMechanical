@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import {
   createId,
   deleteCustomer,
@@ -10,7 +10,7 @@ import {
 import type { Customer } from "@/lib/shop-types";
 
 export async function GET(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("customers.view", async () => {
     const url = new URL(req.url);
     const query = url.searchParams.get("q") ?? undefined;
     const includeVehicles = url.searchParams.get("includeVehicles") === "1";
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("customers.create", async () => {
     const body = await req.json();
     const now = new Date().toISOString();
     const customer: Customer = {
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("customers.edit", async () => {
     const body = await req.json();
     const customers = await loadCustomers();
     const item = customers.find((customer) => customer.id === body.id);
@@ -73,7 +73,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("customers.delete", async () => {
     const { id } = await req.json();
     await deleteCustomer(id);
     return NextResponse.json({ ok: true });

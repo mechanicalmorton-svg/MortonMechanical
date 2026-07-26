@@ -1,3 +1,6 @@
+import { actionsFromLegacy, tabsFromActions } from "./permissions/catalog";
+import { getRegisteredKeys } from "./permissions/register";
+
 export const ROLE_COLORS = [
   "sky",
   "violet",
@@ -107,8 +110,14 @@ export function toggleTabsInSet(current: string[], tabIds: string[], enabled: bo
 
 export type RolePermissions = {
   tabs: string[];
+  /** Seeded permission keys (e.g. work_orders.edit). */
+  actions: string[];
   manageUsers: boolean;
   editSiteContent: boolean;
+  /** Optional role builder metadata. */
+  description?: string;
+  /** Soft-archived — hidden from role assignment pickers. */
+  archived?: boolean;
 };
 
 export type RoleDefinition = {
@@ -185,6 +194,10 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function permissionsWithActions(partial: Omit<RolePermissions, "actions"> & { actions?: string[] }): RolePermissions {
+  return normalizeRolePermissions(partial);
+}
+
 export function defaultRoleDefinitions(): RoleDefinition[] {
   const stamp = nowIso();
   return [
@@ -193,7 +206,12 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
       name: "Founder",
       color: "sky",
       system: true,
-      permissions: { tabs: [...ALL_TABS], manageUsers: true, editSiteContent: true },
+      permissions: permissionsWithActions({
+        tabs: [...ALL_TABS],
+        actions: [...getRegisteredKeys()],
+        manageUsers: true,
+        editSiteContent: true,
+      }),
       createdAt: stamp,
       updatedAt: stamp,
     },
@@ -202,7 +220,12 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
       name: "Admin",
       color: "violet",
       system: false,
-      permissions: { tabs: [...ALL_TABS], manageUsers: true, editSiteContent: true },
+      permissions: permissionsWithActions({
+        tabs: [...ALL_TABS],
+        actions: [...getRegisteredKeys()],
+        manageUsers: true,
+        editSiteContent: true,
+      }),
       createdAt: stamp,
       updatedAt: stamp,
     },
@@ -211,7 +234,7 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
       name: "Mechanic",
       color: "slate",
       system: false,
-      permissions: {
+      permissions: permissionsWithActions({
         tabs: [
           "dashboard",
           "inventory-all",
@@ -225,7 +248,7 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
         ],
         manageUsers: false,
         editSiteContent: false,
-      },
+      }),
       createdAt: stamp,
       updatedAt: stamp,
     },
@@ -234,7 +257,7 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
       name: "Dispatcher",
       color: "emerald",
       system: false,
-      permissions: {
+      permissions: permissionsWithActions({
         tabs: [
           "dashboard",
           "work-orders",
@@ -246,7 +269,7 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
         ],
         manageUsers: false,
         editSiteContent: false,
-      },
+      }),
       createdAt: stamp,
       updatedAt: stamp,
     },
@@ -277,15 +300,33 @@ export function normalizeRolePermissions(raw: unknown): RolePermissions {
   const tabs = Array.isArray(source.tabs)
     ? source.tabs.filter((tab): tab is string => typeof tab === "string")
     : [];
-  const uniqueTabs = [...new Set(tabs.filter((tab) => ALL_TABS.includes(tab as DashboardTabId)))];
   const manageUsers = Boolean(source.manageUsers);
   const editSiteContent = Boolean(source.editSiteContent);
-  if (manageUsers && !uniqueTabs.includes("users")) uniqueTabs.push("users");
-  if (editSiteContent && !uniqueTabs.includes("site-contents")) uniqueTabs.push("site-contents");
-  return {
-    tabs: uniqueTabs,
+  const actions = actionsFromLegacy({
+    tabs,
+    actions: source.actions,
     manageUsers,
     editSiteContent,
+  });
+  const derivedTabs = tabsFromActions(actions);
+  const uniqueTabs = [
+    ...new Set(
+      [...tabs, ...derivedTabs].filter((tab) => ALL_TABS.includes(tab as DashboardTabId)),
+    ),
+  ];
+  const effectiveManageUsers =
+    manageUsers || actions.some((key) => key.startsWith("users.") || key.startsWith("roles."));
+  const effectiveEditSiteContent = editSiteContent || actions.includes("content.edit");
+  if (effectiveManageUsers && !uniqueTabs.includes("users")) uniqueTabs.push("users");
+  if (effectiveEditSiteContent && !uniqueTabs.includes("site-contents")) uniqueTabs.push("site-contents");
+  if (actions.includes("audit_logs.view") && !uniqueTabs.includes("audit-logs")) uniqueTabs.push("audit-logs");
+  return {
+    tabs: uniqueTabs,
+    actions,
+    manageUsers: effectiveManageUsers,
+    editSiteContent: effectiveEditSiteContent,
+    description: typeof source.description === "string" ? source.description : undefined,
+    archived: Boolean(source.archived),
   };
 }
 
@@ -320,7 +361,13 @@ export function mergeRoleDefinitions(stored: RoleDefinition[]): RoleDefinition[]
         name: normalized.name || "Founder",
         color: normalized.color,
         system: true,
-        permissions: { tabs: [...ALL_TABS], manageUsers: true, editSiteContent: true },
+        permissions: permissionsWithActions({
+          tabs: [...ALL_TABS],
+          actions: [...getRegisteredKeys()],
+          manageUsers: true,
+          editSiteContent: true,
+          description: normalized.permissions.description,
+        }),
         createdAt: normalized.createdAt || ownerDefault.createdAt,
         updatedAt: normalized.updatedAt,
       });
@@ -380,25 +427,29 @@ export function pickPrimaryRoleId(roleIds: string[]): string {
   return roleIds[0] || "mechanic";
 }
 
-/** Union of tabs/flags across roles — most permissive wins. */
+/** Union of tabs/flags/actions across roles — most permissive wins. */
 export function combineRolePermissions(definitions: RoleDefinition[]): RolePermissions {
   if (definitions.some((role) => role.id === "owner")) {
-    return {
+    return normalizeRolePermissions({
       tabs: [...ALL_TABS],
+      actions: [...getRegisteredKeys()],
       manageUsers: true,
       editSiteContent: true,
-    };
+    });
   }
   const tabs = new Set<string>();
+  const actions = new Set<string>();
   let manageUsers = false;
   let editSiteContent = false;
   for (const role of definitions) {
     for (const tab of role.permissions.tabs) tabs.add(tab);
+    for (const action of role.permissions.actions ?? []) actions.add(action);
     if (role.permissions.manageUsers) manageUsers = true;
     if (role.permissions.editSiteContent) editSiteContent = true;
   }
   return normalizeRolePermissions({
     tabs: [...tabs],
+    actions: [...actions],
     manageUsers,
     editSiteContent,
   });

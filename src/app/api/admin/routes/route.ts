@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { createId, deleteRoute, loadRoutes, upsertRoute } from "@/lib/shop-data";
 import type { RoutePlan } from "@/lib/shop-types";
 
 export async function GET() {
-  return withAdminAuth(async () => {
+  return withPermission("routes.view", async () => {
     const items = await loadRoutes();
     return NextResponse.json(items.sort((a, b) => b.date.localeCompare(a.date)));
   });
 }
 
 export async function POST(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("routes.create", async () => {
     const body = await req.json();
     const route: RoutePlan = {
       id: createId(),
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("routes.edit", async () => {
     const body = await req.json();
     const items = await loadRoutes();
     const item = items.find((r) => r.id === body.id);
@@ -40,7 +40,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("routes.delete", async () => {
     const { id } = await req.json();
     await deleteRoute(id);
     return NextResponse.json({ ok: true });

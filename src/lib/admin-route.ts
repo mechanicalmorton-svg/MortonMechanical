@@ -2,7 +2,8 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { requireAuth, requireOwnerOrAdmin, type AuthUser } from "./admin-api";
 import { sanitizeAuthError } from "./auth-errors";
-import { parseUserAgent, runWithAuditContext, type AuditRequestContext } from "./audit-log";
+import { parseUserAgent, runWithAuditContext, writeAuditEvent, type AuditRequestContext } from "./audit-log";
+import { hasAnyPermission, hasPermission, isFounder } from "./permissions/service";
 import { DatabaseError, isDatabaseConfigured } from "./supabase/db";
 import { createHash } from "node:crypto";
 
@@ -103,4 +104,56 @@ export async function withOwnerAdmin(handler: (user: AuthUser) => Promise<NextRe
     );
   }
   return runAuthed(user, handler);
+}
+
+/** Require one (any) or all permission keys. Returns 403 and audits denial when missing. */
+export async function withPermission(
+  keys: string | string[],
+  handler: (user: AuthUser) => Promise<NextResponse>,
+  mode: "any" | "all" = "any",
+) {
+  const list = Array.isArray(keys) ? keys : [keys];
+  const { user, error } = await requireAuth();
+  if (error || !user) {
+    return (
+      error ??
+      NextResponse.json(
+        { error: "Could not verify your session for that request. Refresh the page if this keeps happening." },
+        { status: 401 },
+      )
+    );
+  }
+
+  const allowed =
+    isFounder(user) ||
+    (mode === "all" ? list.every((key) => hasPermission(user, key)) : list.some((key) => hasPermission(user, key)));
+
+  if (!allowed) {
+    const ctx = await auditContextForUser(user);
+    void runWithAuditContext(ctx, async () => {
+      await writeAuditEvent({
+        module: "auth",
+        action: "permission_denied",
+        description: `Permission denied for ${list.join(" | ")}`,
+        status: "denied",
+        severity: "warning",
+        recordType: "session",
+        recordId: user.id,
+        recordLabel: user.email,
+        page: "api",
+        metadata: { required: list, mode },
+      });
+    });
+    return NextResponse.json({ error: "You do not have permission for this action." }, { status: 403 });
+  }
+
+  return runAuthed(user, handler);
+}
+
+export function userHasPermission(user: AuthUser, key: string) {
+  return isFounder(user) || hasPermission(user, key);
+}
+
+export function userHasAnyPermission(user: AuthUser, keys: string[]) {
+  return isFounder(user) || hasAnyPermission(user, keys);
 }

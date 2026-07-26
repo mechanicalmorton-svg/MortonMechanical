@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { getDashboardStats, loadBookings, loadInventory, loadWorkOrders } from "@/lib/shop-data";
 import {
   WORK_ORDER_DONE_STATUSES,
@@ -9,7 +9,7 @@ import {
 } from "@/lib/work-order-status";
 
 export async function GET() {
-  return withAdminAuth(async () => {
+  return withPermission("dashboard.view", async () => {
     const stats = await getDashboardStats();
     const workOrders = await loadWorkOrders();
     const bookings = await loadBookings();

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
+import { withPermission } from "@/lib/admin-route";
 import { createId, deleteInventoryItem, loadInventory, upsertInventoryItem } from "@/lib/shop-data";
 import type { InventoryItem } from "@/lib/shop-types";
 
 export async function GET(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("inventory.view", async () => {
     const sku = new URL(req.url).searchParams.get("sku")?.trim();
     if (sku) {
       const items = await loadInventory();
@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("inventory.create", async () => {
     const body = await req.json();
     const item: InventoryItem = {
       id: createId(),
@@ -40,11 +40,12 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  return withAdminAuth(async () => {
-    const body = await req.json();
+  const body = await req.json();
+  const isAdjust = Boolean(body.sku && body.adjust !== undefined && !body.id);
+  return withPermission(isAdjust ? "inventory.adjust" : "inventory.edit", async () => {
     const items = await loadInventory();
 
-    if (body.sku && body.adjust !== undefined && !body.id) {
+    if (isAdjust) {
       const item = items.find((i) => i.sku.toLowerCase() === String(body.sku).trim().toLowerCase());
       if (!item) return NextResponse.json({ error: "SKU not found." }, { status: 404 });
       const updated = {
@@ -65,7 +66,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return withAdminAuth(async () => {
+  return withPermission("inventory.delete", async () => {
     const { id } = await req.json();
     await deleteInventoryItem(id);
     return NextResponse.json({ ok: true });

@@ -23,6 +23,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { default: site.name, template: `%s | ${site.name}` },
     description: site.description,
+    icons: {
+      icon: [
+        { url: "/logo.png", type: "image/png" },
+        { url: "/favicon.ico", sizes: "any" },
+      ],
+      apple: [{ url: "/logo.png", type: "image/png" }],
+    },
     openGraph: { title: site.name, description: site.description, type: "website" },
   };
 }

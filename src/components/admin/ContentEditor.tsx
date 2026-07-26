@@ -27,6 +27,7 @@ import {
 import { SITE_CONTENT_BROADCAST } from "@/lib/site-content-live";
 import { useAdminToast } from "./AdminToast";
 import { PageHeader, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can, usePermissions } from "./permissions";
 
 const input = `${inputClass} mt-1`;
 const textarea = `${inputClass} mt-1 min-h-[80px] resize-y`;
@@ -189,6 +190,8 @@ function notifySiteUpdated() {
 
 export function ContentEditor() {
   const toast = useAdminToast();
+  const { hasPermission } = usePermissions();
+  const canEditContent = hasPermission("content.edit");
   const [content, setContent] = useState<SiteContent | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [loading, setLoading] = useState(true);
@@ -277,10 +280,12 @@ export function ContentEditor() {
             <ExternalLink className="h-4 w-4" />
             View website
           </a>
-          <button type="button" onClick={save} disabled={saving || !dirty} className={btnPrimary}>
-            <Save className="h-4 w-4" />
-            {saving ? "Saving…" : dirty ? "Save all changes" : "Saved"}
-          </button>
+          <Can permission="content.edit">
+            <button type="button" onClick={save} disabled={saving || !dirty} className={btnPrimary}>
+              <Save className="h-4 w-4" />
+              {saving ? "Saving…" : dirty ? "Save all changes" : "Saved"}
+            </button>
+          </Can>
         </div>
       </div>
 
@@ -321,7 +326,10 @@ export function ContentEditor() {
           </nav>
         </aside>
 
-        <div className="space-y-4">
+        <div
+          className={`space-y-4 ${canEditContent ? "" : "pointer-events-none select-none"}`}
+          aria-readonly={!canEditContent}
+        >
           <div className="rounded-2xl border border-slate-800/70 bg-slate-900/30 px-5 py-4">
             <h3 className="site-display text-lg font-semibold text-white">{active.label}</h3>
             <p className="mt-1 text-sm text-slate-500">{active.hint}</p>
@@ -825,10 +833,12 @@ export function ContentEditor() {
               <ExternalLink className="h-4 w-4" />
               View website
             </a>
-            <button type="button" onClick={save} disabled={saving || !dirty} className={btnPrimary}>
-              <Save className="h-4 w-4" />
-              {saving ? "Saving…" : dirty ? "Save all changes" : "Saved"}
-            </button>
+            <Can permission="content.edit">
+              <button type="button" onClick={save} disabled={saving || !dirty} className={btnPrimary}>
+                <Save className="h-4 w-4" />
+                {saving ? "Saving…" : dirty ? "Save all changes" : "Saved"}
+              </button>
+            </Can>
           </div>
         </div>
       </div>

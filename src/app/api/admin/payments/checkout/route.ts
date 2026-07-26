@@ -1,25 +1,10 @@
 import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-route";
-import { canManageUsers } from "@/lib/admin-roles";
+import { withPermission } from "@/lib/admin-route";
 import { dollarsToCents, getSiteUrl, getStripe, isStripeConfigured } from "@/lib/stripe";
 import { getCustomerById, loadWorkOrders, upsertWorkOrder } from "@/lib/shop-data";
 
-function canCreateInvoiceCheckout(user: {
-  role: string;
-  roleIds?: string[];
-  permissions?: { manageUsers?: boolean; tabs?: string[] };
-}) {
-  if (user.permissions?.manageUsers || canManageUsers(user.role)) return true;
-  if (user.roleIds?.includes("owner") || user.roleIds?.includes("admin")) return true;
-  const tabs = user.permissions?.tabs ?? [];
-  return tabs.includes("work-orders") || tabs.includes("inventory-all");
-}
-
 export async function POST(req: Request) {
-  return withAdminAuth(async (user) => {
-    if (!canCreateInvoiceCheckout(user)) {
-      return NextResponse.json({ error: "You do not have permission to create payment links." }, { status: 403 });
-    }
+  return withPermission("payments.manage", async () => {
     if (!isStripeConfigured()) {
       return NextResponse.json(
         { error: "Stripe is not configured. Set STRIPE_SECRET_KEY in the environment." },

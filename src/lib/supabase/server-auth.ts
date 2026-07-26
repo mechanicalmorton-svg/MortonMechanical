@@ -6,9 +6,11 @@ import { isJwtKeyError } from "../auth-errors";
 import { getPublishableKey, getSupabaseUrl, getSupabaseAdmin, isSupabaseAuthConfigured } from "./server";
 import type { StaffRole } from "../shop-types";
 import {
+  normalizeRolePermissions,
   resolveUserRoles,
   type RolePermissions,
 } from "../role-definitions";
+import { getRegisteredKeys } from "../permissions/register";
 
 export async function createAuthServerClient() {
   if (!isSupabaseAuthConfigured()) return null;
@@ -83,6 +85,8 @@ export type AdminUser = {
   roleName: string;
   roleColor: string;
   permissions: RolePermissions;
+  /** Optional per-user grant/deny applied after role union. */
+  permissionOverrides?: { grant?: string[]; deny?: string[] };
   phone?: string;
   avatarUrl?: string;
 };
@@ -211,6 +215,11 @@ export async function getSessionFromCookies(): Promise<CookieSession | null> {
   return null;
 }
 
+const STAFF_SELECT_FULL =
+  "name, email, role, role_ids, phone, avatar_url, permission_overrides";
+const STAFF_SELECT_NO_OVERRIDES = "name, email, role, role_ids, phone, avatar_url";
+const STAFF_SELECT_LEGACY = "name, email, role, phone, avatar_url";
+
 async function loadStaffProfile(userId: string) {
   const admin = getSupabaseAdmin();
   if (!admin) return null;
@@ -218,16 +227,28 @@ async function loadStaffProfile(userId: string) {
   try {
     const { data: staffById, error: byIdError } = await admin
       .from("staff")
-      .select("name, email, role, role_ids, phone, avatar_url")
+      .select(STAFF_SELECT_FULL)
       .eq("id", userId)
       .maybeSingle();
     if (!byIdError && staffById) return staffById;
 
+    const missingOverrides = byIdError?.message?.toLowerCase().includes("permission_overrides");
+    const missingRoleIds = byIdError?.message?.toLowerCase().includes("role_ids");
+
+    if (missingOverrides) {
+      const { data, error } = await admin
+        .from("staff")
+        .select(STAFF_SELECT_NO_OVERRIDES)
+        .eq("id", userId)
+        .maybeSingle();
+      if (!error && data) return data;
+    }
+
     // Older DBs may not have role_ids yet — retry without it.
-    if (byIdError?.message?.toLowerCase().includes("role_ids")) {
+    if (missingRoleIds || byIdError) {
       const { data: staffByIdLegacy, error: legacyError } = await admin
         .from("staff")
-        .select("name, email, role, phone, avatar_url")
+        .select(STAFF_SELECT_LEGACY)
         .eq("id", userId)
         .maybeSingle();
       if (!legacyError && staffByIdLegacy) return staffByIdLegacy;
@@ -235,15 +256,24 @@ async function loadStaffProfile(userId: string) {
 
     const { data: staffByAuth, error: byAuthError } = await admin
       .from("staff")
-      .select("name, email, role, role_ids, phone, avatar_url")
+      .select(STAFF_SELECT_FULL)
       .eq("auth_user_id", userId)
       .maybeSingle();
     if (!byAuthError && staffByAuth) return staffByAuth;
 
+    if (byAuthError?.message?.toLowerCase().includes("permission_overrides")) {
+      const { data, error } = await admin
+        .from("staff")
+        .select(STAFF_SELECT_NO_OVERRIDES)
+        .eq("auth_user_id", userId)
+        .maybeSingle();
+      if (!error && data) return data;
+    }
+
     if (byAuthError?.message?.toLowerCase().includes("role_ids")) {
       const { data: staffByAuthLegacy, error: legacyAuthError } = await admin
         .from("staff")
-        .select("name, email, role, phone, avatar_url")
+        .select(STAFF_SELECT_LEGACY)
         .eq("auth_user_id", userId)
         .maybeSingle();
       if (!legacyAuthError && staffByAuthLegacy) return staffByAuthLegacy;
@@ -263,6 +293,7 @@ async function buildAdminUser(
     role_ids?: string[] | null;
     phone?: string | null;
     avatar_url?: string | null;
+    permission_overrides?: { grant?: string[]; deny?: string[] } | null;
   } | null,
 ): Promise<AdminUser | null> {
   const email = (user.email || staff?.email || "").toLowerCase();
@@ -283,11 +314,11 @@ async function buildAdminUser(
   let roles: AdminUser["roles"] = [{ id: "mechanic", name: "Mechanic", color: "slate" }];
   let roleName = "Mechanic";
   let roleColor = "slate";
-  let permissions: RolePermissions = {
+  let permissions: RolePermissions = normalizeRolePermissions({
     tabs: ["dashboard", "work-orders", "bookings", "routes-today"],
     manageUsers: false,
     editSiteContent: false,
-  };
+  });
 
   try {
     // Dynamic import avoids a circular dependency with shop-data/staff-auth.
@@ -316,17 +347,16 @@ async function buildAdminUser(
       : fallbackIds.includes("admin")
         ? "admin"
         : fallbackIds[0] || "mechanic") as StaffRole;
-    if (role === "owner" || role === "admin" || fallbackIds.includes("owner") || fallbackIds.includes("admin")) {
-      const elevated = role === "owner" || fallbackIds.includes("owner");
-      role = elevated ? "owner" : "admin";
-      roleName = elevated ? "Founder" : "Admin";
-      roleColor = elevated ? "sky" : "violet";
+    if (role === "owner" || fallbackIds.includes("owner")) {
+      role = "owner";
+      roleName = "Founder";
+      roleColor = "sky";
       roles = fallbackIds.map((id) => ({
         id,
         name: id === "owner" ? "Founder" : id === "admin" ? "Admin" : id,
         color: id === "owner" ? "sky" : id === "admin" ? "violet" : "slate",
       }));
-      permissions = {
+      permissions = normalizeRolePermissions({
         tabs: [
           "dashboard",
           "inventory-all",
@@ -339,15 +369,32 @@ async function buildAdminUser(
           "routes-manager",
           "routes-today",
           "site-contents",
+          "audit-logs",
         ],
+        actions: [...getRegisteredKeys()],
         manageUsers: true,
         editSiteContent: true,
-      };
+      });
     } else {
-      roles = fallbackIds.map((id) => ({ id, name: id, color: "slate" }));
-      roleName = role;
+      roles = fallbackIds.map((id) => ({
+        id,
+        name: id === "admin" ? "Admin" : id,
+        color: id === "admin" ? "violet" : "slate",
+      }));
+      roleName = role === "admin" ? "Admin" : role;
+      roleColor = role === "admin" ? "violet" : "slate";
+      permissions = normalizeRolePermissions(permissions);
     }
   }
+
+  const overridesRaw = staff?.permission_overrides;
+  const permissionOverrides =
+    overridesRaw && typeof overridesRaw === "object"
+      ? {
+          grant: Array.isArray(overridesRaw.grant) ? overridesRaw.grant.map(String) : [],
+          deny: Array.isArray(overridesRaw.deny) ? overridesRaw.deny.map(String) : [],
+        }
+      : undefined;
 
   return {
     id: user.id,
@@ -360,6 +407,7 @@ async function buildAdminUser(
     roleName,
     roleColor,
     permissions,
+    permissionOverrides,
     phone,
     avatarUrl,
   };

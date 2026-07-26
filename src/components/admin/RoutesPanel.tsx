@@ -7,6 +7,7 @@ import { adminGet, adminSend, asStaffList } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can } from "./permissions";
 
 type Props = { todayOnly?: boolean; userId?: string };
 
@@ -128,7 +129,9 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
           subtitle={todayOnly ? "Routes assigned to you for today." : "Plan daily mobile service routes and assign drivers."}
         />
         {!todayOnly && (
-          <button type="button" onClick={() => setShowForm(true)} className={btnPrimary}><Plus className="h-4 w-4" /> New Route</button>
+          <Can permission="routes.create">
+            <button type="button" onClick={() => setShowForm(true)} className={btnPrimary}><Plus className="h-4 w-4" /> New Route</button>
+          </Can>
         )}
       </div>
 
@@ -180,7 +183,9 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
                 <div className="flex items-center gap-2">
                   <StatusBadge status={route.status} />
                   {!todayOnly && (
-                    <button type="button" onClick={() => remove(route.id)} className={btnDanger}><Trash2 className="h-3.5 w-3.5" /></button>
+                    <Can permission="routes.delete">
+                      <button type="button" onClick={() => remove(route.id)} className={btnDanger}><Trash2 className="h-3.5 w-3.5" /></button>
+                    </Can>
                   )}
                 </div>
               </div>
@@ -201,14 +206,16 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
                       </p>
                       <p className="text-xs text-slate-500">{stop.time} · {stop.service}</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleStop(route.id, stop.id, route.stops)}
-                      className={`shrink-0 rounded-lg p-2 transition ${stop.completed ? "text-emerald-400" : "text-slate-500 hover:text-amber-400"}`}
-                      aria-label={stop.completed ? "Mark incomplete" : "Mark complete"}
-                    >
-                      <CheckCircle2 className="h-5 w-5" />
-                    </button>
+                    <Can permission="routes.edit">
+                      <button
+                        type="button"
+                        onClick={() => toggleStop(route.id, stop.id, route.stops)}
+                        className={`shrink-0 rounded-lg p-2 transition ${stop.completed ? "text-emerald-400" : "text-slate-500 hover:text-amber-400"}`}
+                        aria-label={stop.completed ? "Mark incomplete" : "Mark complete"}
+                      >
+                        <CheckCircle2 className="h-5 w-5" />
+                      </button>
+                    </Can>
                   </li>
                 ))}
               </ol>
