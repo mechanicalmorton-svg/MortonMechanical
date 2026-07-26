@@ -15,6 +15,7 @@ export type PermissionOverrides = {
 };
 
 export type PermissionUser = {
+  email?: string | null;
   role?: string | null;
   roleIds?: string[] | null;
   permissions?: Partial<RolePermissions> | null;
@@ -22,6 +23,7 @@ export type PermissionUser = {
   permissionOverrides?: PermissionOverrides | null;
 };
 
+/** Full access: Founder, Platform Architect (secret Founder), or break-glass emails. */
 export function isFounder(user: PermissionUser | null | undefined): boolean {
   if (!user) return false;
   return userHasOwnerRole(user);

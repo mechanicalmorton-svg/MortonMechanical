@@ -9,11 +9,12 @@ import { useAdminToast } from "./AdminToast";
 import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { Can } from "./permissions";
 import { VehicleMakeModelFields } from "./VehicleMakeModelFields";
+import { vehicleYearOptions } from "@/lib/vehicle-years";
 
 type MakeOption = { id: number; name: string };
 
 const VEHICLE_TYPES = ["Service Van", "Pickup Truck", "Box Truck", "SUV", "Car", "Trailer", "Other"];
-const YEARS = Array.from({ length: new Date().getFullYear() - 1979 }, (_, i) => String(new Date().getFullYear() - i));
+const YEARS = vehicleYearOptions();
 
 const emptyForm = {
   name: "",
@@ -164,7 +165,7 @@ export function FleetPanel() {
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <PageHeader
           title="Fleet Management"
-          subtitle="Full NHTSA vehicle database — every make and model. Use the filter box to search, or scroll the dropdown."
+          subtitle="Shop vans and service units used on routes — not customer cars."
         />
         <Can permission="fleet.create">
           <button type="button" onClick={openAddModal} className={btnPrimary}>
@@ -177,43 +178,139 @@ export function FleetPanel() {
         open={showForm}
         onClose={closeModal}
         title={editingId ? "Edit Vehicle" : "Add Vehicle"}
-        wide
       >
-        <form onSubmit={save} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <input className={inputClass} placeholder="Vehicle name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          <input className={inputClass} placeholder="Plate" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} required />
-          <select className={inputClass} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-            {VEHICLE_TYPES.map((type) => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
-          <VehicleMakeModelFields
-            make={form.make}
-            makeId={form.makeId}
-            model={form.model}
-            makes={makes}
-            models={models}
-            loadingMakes={loadingMakes}
-            loadingModels={loadingModels}
-            onMakeChange={(make, makeId) => setForm({ ...form, make, makeId, model: "" })}
-            onModelChange={(model) => setForm({ ...form, model })}
-          />
-          <select className={inputClass} value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })}>
-            <option value="">Year (optional — narrows models)</option>
-            {YEARS.map((year) => (
-              <option key={year} value={year}>{year}</option>
-            ))}
-          </select>
-          <input className={inputClass} type="number" placeholder="Mileage" value={form.mileage} onChange={(e) => setForm({ ...form, mileage: e.target.value })} />
-          <input className={inputClass} type="date" value={form.lastService} onChange={(e) => setForm({ ...form, lastService: e.target.value })} />
-          <select className={inputClass} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as FleetStatus })}>
-            <option value="active">Active</option>
-            <option value="maintenance">Maintenance</option>
-            <option value="retired">Retired</option>
-          </select>
-          <div className="flex gap-2 lg:col-span-3">
-            <button type="submit" className={btnPrimary}>{editingId ? "Save changes" : "Add vehicle"}</button>
-            <button type="button" onClick={closeModal} className={btnSecondary}>Cancel</button>
+        <form onSubmit={save} className="space-y-5">
+          <section className="space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Unit</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm text-slate-300 sm:col-span-2">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Vehicle name <span className="text-amber-400">*</span>
+                </span>
+                <input
+                  className={inputClass}
+                  placeholder="e.g. Van 1 — North"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  required
+                />
+              </label>
+              <label className="block text-sm text-slate-300">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  License Plate <span className="text-amber-400">*</span>
+                </span>
+                <input
+                  className={inputClass}
+                  placeholder="e.g. ABC1234"
+                  value={form.plate}
+                  onChange={(e) => setForm({ ...form, plate: e.target.value.toUpperCase() })}
+                  required
+                />
+              </label>
+              <label className="block text-sm text-slate-300">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Type
+                </span>
+                <select
+                  className={inputClass}
+                  value={form.type}
+                  onChange={(e) => setForm({ ...form, type: e.target.value })}
+                >
+                  {VEHICLE_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section className="space-y-3 border-t border-slate-800 pt-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vehicle details</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm text-slate-300">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Year
+                </span>
+                <select
+                  className={inputClass}
+                  value={form.year}
+                  onChange={(e) => setForm({ ...form, year: e.target.value })}
+                >
+                  <option value="">Optional</option>
+                  {YEARS.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm text-slate-300">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Status
+                </span>
+                <select
+                  className={inputClass}
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value as FleetStatus })}
+                >
+                  <option value="active">Active</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="retired">Retired</option>
+                </select>
+              </label>
+              <VehicleMakeModelFields
+                make={form.make}
+                makeId={form.makeId}
+                model={form.model}
+                makes={makes}
+                models={models}
+                loadingMakes={loadingMakes}
+                loadingModels={loadingModels}
+                onMakeChange={(make, makeId) => setForm({ ...form, make, makeId, model: "" })}
+                onModelChange={(model) => setForm({ ...form, model })}
+              />
+            </div>
+          </section>
+
+          <section className="space-y-3 border-t border-slate-800 pt-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Service</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm text-slate-300">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Mileage
+                </span>
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={0}
+                  placeholder="Current odometer"
+                  value={form.mileage}
+                  onChange={(e) => setForm({ ...form, mileage: e.target.value })}
+                />
+              </label>
+              <label className="block text-sm text-slate-300">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Last service
+                </span>
+                <input
+                  className={inputClass}
+                  type="date"
+                  value={form.lastService}
+                  onChange={(e) => setForm({ ...form, lastService: e.target.value })}
+                />
+              </label>
+            </div>
+          </section>
+
+          <div className="flex flex-wrap gap-2 border-t border-slate-800 pt-5">
+            <button type="submit" className={btnPrimary}>
+              {editingId ? "Save changes" : "Add vehicle"}
+            </button>
+            <button type="button" onClick={closeModal} className={btnSecondary}>
+              Cancel
+            </button>
           </div>
         </form>
       </AdminModal>

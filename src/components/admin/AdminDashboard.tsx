@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   BookOpen,
   Calendar,
   ChevronDown,
+  ClipboardCheck,
   ClipboardList,
   Clock,
   ExternalLink,
@@ -17,7 +19,6 @@ import {
   Package,
   Paintbrush,
   ScrollText,
-  Sparkles,
   UserCircle,
   Truck,
   Users,
@@ -26,7 +27,7 @@ import {
 } from "lucide-react";
 import { SiteLogo } from "@/components/SiteLogo";
 import { canAccessPage, hasPermission } from "@/lib/permissions";
-import { userHasOwnerRole, type RolePermissions } from "@/lib/role-definitions";
+import { userHasOwnerRole, type RoleColorStyle, type RolePermissions } from "@/lib/role-definitions";
 import type { StaffRole } from "@/lib/shop-types";
 import { RoleBadge } from "./admin-ui";
 import { AuditLogsPanel } from "./AuditLogsPanel";
@@ -73,7 +74,7 @@ type Props = {
     phone?: string;
     role: StaffRole;
     roleIds?: StaffRole[];
-    roles?: { id: string; name: string; color: string }[];
+    roles?: { id: string; name: string; color: string; colorStyle?: RoleColorStyle }[];
     roleName?: string;
     roleColor?: string;
     permissions?: RolePermissions;
@@ -82,7 +83,12 @@ type Props = {
   };
 };
 
-function displayRoles(user: Props["user"]) {
+function displayRoles(user: Props["user"]): {
+  id: string;
+  name: string;
+  color: string;
+  colorStyle?: RoleColorStyle;
+}[] {
   if (user.roles?.length) return user.roles;
   const ids = user.roleIds?.length ? user.roleIds : [user.role];
   return ids.map((id) => ({
@@ -96,71 +102,76 @@ function userCanAccessTab(user: Props["user"], tab: string) {
   return canAccessPage(user, tab);
 }
 
-type NavItem = {
+type NavLeaf = {
   id: Tab;
   label: string;
   icon: typeof LayoutDashboard;
-  children?: { id: Tab; label: string }[];
 };
 
-const nav: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+type NavGroup = {
+  label: string;
+  items: NavLeaf[];
+};
+
+/** Grouped layout with original workspace names. Account Settings stays on the user card. */
+const navGroups: NavGroup[] = [
   {
-    id: "inventory-all",
-    label: "Inventory",
-    icon: Package,
-    children: [
-      { id: "inventory-all", label: "All parts" },
-      { id: "inventory-low", label: "Low stock" },
-    ],
+    label: "Overview",
+    items: [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
-  { id: "work-orders", label: "Work Orders", icon: ClipboardList },
-  { id: "bookings", label: "Bookings", icon: Calendar },
-  { id: "quotes", label: "Quote Requests", icon: BookOpen },
-  { id: "users", label: "User Management", icon: Users },
-  { id: "fleet", label: "Fleet Management", icon: Truck },
   {
-    id: "vehicle-manager",
-    label: "Vehicle Manager",
-    icon: Wrench,
-    children: [
-      { id: "vehicle-manager", label: "Vehicles" },
-      { id: "vehicle-checklists", label: "Checklists" },
+    label: "Jobs",
+    items: [
+      { id: "work-orders", label: "Work Orders", icon: ClipboardList },
+      { id: "bookings", label: "Bookings", icon: Calendar },
+      { id: "quotes", label: "Quote Requests", icon: BookOpen },
     ],
   },
   {
-    id: "routes-manager",
-    label: "Routes",
-    icon: Map,
-    children: [
-      { id: "routes-manager", label: "Route manager" },
-      { id: "routes-today", label: "My route today" },
+    label: "Parts",
+    items: [
+      { id: "inventory-all", label: "All parts", icon: Package },
+      { id: "inventory-low", label: "Low stock", icon: AlertTriangle },
     ],
   },
-  { id: "timesheets", label: "Timesheets", icon: Clock },
-  { id: "site-contents", label: "Site Contents", icon: Paintbrush },
-  { id: "audit-logs", label: "Audit Logs", icon: ScrollText },
+  {
+    label: "Shop vehicles",
+    items: [
+      { id: "fleet", label: "Fleet Management", icon: Truck },
+      { id: "vehicle-manager", label: "Vehicle Manager", icon: Wrench },
+      { id: "vehicle-checklists", label: "Checklists", icon: ClipboardCheck },
+    ],
+  },
+  {
+    label: "Field",
+    items: [
+      { id: "routes-manager", label: "Route manager", icon: Map },
+      { id: "routes-today", label: "My route today", icon: Map },
+      { id: "timesheets", label: "Timesheets", icon: Clock },
+    ],
+  },
+  {
+    label: "Admin",
+    items: [
+      { id: "users", label: "User Management", icon: Users },
+      { id: "site-contents", label: "Site Contents", icon: Paintbrush },
+      { id: "audit-logs", label: "Audit Logs", icon: ScrollText },
+    ],
+  },
 ];
+
+const nav = navGroups.flatMap((group) => group.items);
 
 const accountTab: Tab = "settings";
 
 function firstAccessibleTab(user: Props["user"]): Tab {
   for (const item of nav) {
-    if (item.children?.length) {
-      for (const child of item.children) {
-        if (userCanAccessTab(user, child.id)) return child.id;
-      }
-    } else if (userCanAccessTab(user, item.id)) {
-      return item.id;
-    }
+    if (userCanAccessTab(user, item.id)) return item.id;
   }
   return "settings";
 }
 
-const validTabs = new Set<Tab>([
-  ...nav.flatMap((n) => [n.id, ...(n.children?.map((c) => c.id) ?? [])]),
-  accountTab,
-]);
+const validTabs = new Set<Tab>([...nav.map((n) => n.id), accountTab]);
 
 function readTabFromHash(): Tab {
   if (typeof window === "undefined") return "dashboard";
@@ -175,20 +186,14 @@ export function AdminDashboard({ user }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    "inventory-all": true,
-    "vehicle-manager": true,
-    "routes-manager": true,
-  });
-
-  const visibleNav = useMemo(
+  const visibleGroups = useMemo(
     () =>
-      nav.filter((item) => {
-        if (item.children?.length) {
-          return item.children.some((child) => userCanAccessTab(user, child.id));
-        }
-        return userCanAccessTab(user, item.id);
-      }),
+      navGroups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => userCanAccessTab(user, item.id)),
+        }))
+        .filter((group) => group.items.length > 0),
     [user],
   );
 
@@ -257,7 +262,14 @@ export function AdminDashboard({ user }: Props) {
               <p className="mt-0.5 truncate text-xs text-slate-500">{user.email}</p>
               <div className="mt-2 flex flex-wrap gap-1">
                 {roleBadges.map((role) => (
-                  <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} size="sm" />
+                  <RoleBadge
+                    key={role.id}
+                    role={role.id}
+                    roleName={role.name}
+                    roleColor={role.color}
+                    roleColorStyle={role.colorStyle}
+                    size="sm"
+                  />
                 ))}
               </div>
             </div>
@@ -297,7 +309,7 @@ export function AdminDashboard({ user }: Props) {
         <button
           type="button"
           onClick={() => setUserMenuOpen((open) => !open)}
-          className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition duration-200 ${
+          className={`flex w-full items-center gap-2 rounded-xl border px-2 py-1.5 text-left transition duration-200 ${
             userMenuOpen
               ? "border-amber-500/35 bg-amber-500/10 ring-1 ring-amber-400/20"
               : "border-slate-800/80 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-900/80"
@@ -309,11 +321,11 @@ export function AdminDashboard({ user }: Props) {
             <img
               src={user.avatarUrl}
               alt=""
-              className={`h-10 w-10 shrink-0 rounded-full object-cover ring-2 ${founderRing}`}
+              className={`h-8 w-8 shrink-0 rounded-full object-cover ring-2 ${founderRing}`}
             />
           ) : (
             <span
-              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ring-2 ${
+              className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-2 ${
                 isOwner
                   ? "bg-sky-500/15 text-sky-200 ring-sky-400/40"
                   : "bg-gradient-to-br from-amber-500/20 to-pink-600/20 text-amber-200 ring-amber-500/30"
@@ -323,35 +335,40 @@ export function AdminDashboard({ user }: Props) {
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-slate-100">{user.name}</p>
-            <div className="mt-1 flex flex-wrap items-center gap-1">
-              {roleBadges.map((role) => (
-                <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} size="sm" />
+            <p className="truncate text-xs font-semibold text-slate-100">{user.name}</p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+              {roleBadges.slice(0, 2).map((role) => (
+                <RoleBadge
+                  key={role.id}
+                  role={role.id}
+                  roleName={role.name}
+                  roleColor={role.color}
+                  roleColorStyle={role.colorStyle}
+                  size="sm"
+                />
               ))}
             </div>
           </div>
-          <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition ${userMenuOpen ? "rotate-180" : ""}`} />
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition ${userMenuOpen ? "rotate-180" : ""}`} />
         </button>
       </div>
     );
   }
 
-  function NavButton({ item, nested }: { item: { id: Tab; label: string; icon?: typeof LayoutDashboard }; nested?: boolean }) {
+  function NavButton({ item }: { item: NavLeaf }) {
     const active = tab === item.id;
     return (
       <button
         type="button"
         data-active={active}
         onClick={() => selectTab(item.id)}
-        className={`admin-nav-item flex w-full items-center gap-3 rounded-xl py-2.5 text-sm font-medium ${
-          nested ? "pl-11 pr-3" : "px-3"
-        } ${
+        className={`admin-nav-item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium ${
           active
             ? "bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-pink-600/10 text-amber-100 shadow-sm shadow-amber-950/20"
             : "text-slate-400 hover:bg-slate-800/45 hover:text-slate-100"
         }`}
       >
-        {!nested && item.icon ? <item.icon className={`h-4 w-4 shrink-0 ${active ? "text-amber-300" : ""}`} /> : null}
+        <item.icon className={`h-3.5 w-3.5 shrink-0 ${active ? "text-amber-300" : ""}`} />
         <span className="truncate">{item.label}</span>
       </button>
     );
@@ -359,53 +376,35 @@ export function AdminDashboard({ user }: Props) {
 
   const sidebar = (
     <>
-      <div className="relative shrink-0 border-b border-slate-800/70 px-5 py-6">
+      <div className="relative shrink-0 border-b border-slate-800/70 px-3 py-3">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
-        <SiteLogo size={44} showName subtitle="Dashboard" />
-        <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200/90">
-          <Sparkles className="h-3 w-3" />
-          Operations
-        </div>
+        <SiteLogo size={34} showName subtitle="Dashboard" />
       </div>
 
-      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-3">
-        <p className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">Workspace</p>
-        {visibleNav.map((item) => {
-          const children = item.children?.filter((child) => userCanAccessTab(user, child.id));
-          return (
-            <div key={item.id}>
-              {children?.length ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded((e) => ({ ...e, [item.id]: !e[item.id] }))}
-                    className={`admin-nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                      children.some((c) => c.id === tab)
-                        ? "text-amber-100"
-                        : "text-slate-400 hover:bg-slate-800/45 hover:text-slate-100"
-                    }`}
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 truncate text-left">{item.label}</span>
-                    <ChevronDown className={`h-4 w-4 transition ${expanded[item.id] ? "rotate-180" : ""}`} />
-                  </button>
-                  {expanded[item.id] ? (
-                    <div className="mt-1 space-y-0.5">
-                      {children.map((child) => (
-                        <NavButton key={child.id} item={{ ...child, icon: undefined }} nested />
-                      ))}
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <NavButton item={item} />
-              )}
+      <nav className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-2 py-2">
+        {visibleGroups.map((group) => (
+          <div key={group.label} className="min-h-0">
+            <p className="group/nav-label relative mx-2.5 mb-1.5 inline-flex pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200/80">
+              {group.label}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-amber-400/90 via-amber-300/50 to-transparent"
+              />
+              <span
+                aria-hidden
+                className="pointer-events-none absolute bottom-0 left-0 h-[3px] w-5 rounded-full bg-gradient-to-r from-amber-400 to-pink-500/80 shadow-[0_0_10px_rgba(245,158,11,0.45)]"
+              />
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <NavButton key={item.id} item={item} />
+              ))}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </nav>
 
-      <div className="shrink-0 border-t border-slate-800/70 p-3">
+      <div className="shrink-0 border-t border-slate-800/70 p-2">
         <UserCard />
       </div>
     </>

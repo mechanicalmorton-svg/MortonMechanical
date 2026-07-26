@@ -1,11 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import { getRoleBadgeClass, getRoleLabel } from "@/lib/admin-roles";
 import {
+  buildRoleChipStyle,
   isHexColor,
   isRoleColor,
   normalizeRoleColor,
-  resolveRoleColorHex,
   roleChipClassName,
+  type RoleColorStyle,
 } from "@/lib/role-definitions";
 import type { StaffRole } from "@/lib/shop-types";
 
@@ -13,12 +14,14 @@ export function RoleBadge({
   role,
   roleName,
   roleColor,
+  roleColorStyle,
   size = "md",
   className = "",
 }: {
   role: StaffRole;
   roleName?: string;
   roleColor?: string;
+  roleColorStyle?: RoleColorStyle;
   size?: "sm" | "md";
   className?: string;
 }) {
@@ -30,19 +33,14 @@ export function RoleBadge({
       ? roleChipClassName(color)
       : getRoleBadgeClass(role)
     : getRoleBadgeClass(role);
-  const hex = color ? resolveRoleColorHex(color) : undefined;
-  const customStyle = isCustom && hex
-    ? {
-        background: `linear-gradient(145deg, rgba(255,255,255,0.16) 0%, transparent 42%), linear-gradient(180deg, ${hex}88, ${hex}28)`,
-        borderColor: `${hex}99`,
-        boxShadow: `0 1px 0 rgba(255,255,255,0.16) inset, 0 0 0 1px ${hex}22, 0 4px 14px ${hex}33`,
-      }
-    : undefined;
+  const customStyle = color ? buildRoleChipStyle(color, roleColorStyle) : undefined;
 
   return (
     <span
-      className={`admin-glass-chip ${size === "sm" ? "admin-glass-chip--sm" : ""} ${chip} ${className}`}
-      style={customStyle}
+      className={`admin-glass-chip ${size === "sm" ? "admin-glass-chip--sm" : ""} ${chip} ${
+        customStyle ? "admin-glass-chip--styled" : ""
+      } ${className}`}
+      style={customStyle as React.CSSProperties | undefined}
     >
       <span className="admin-glass-chip__sheen" aria-hidden />
       <span className="relative z-[1] tracking-[0.08em]">{label}</span>

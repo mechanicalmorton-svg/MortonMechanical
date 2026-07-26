@@ -44,10 +44,35 @@ create table if not exists quotes (
 create index if not exists quotes_created_idx on quotes(created_at desc);
 
 -- Shop operations
+create table if not exists shop_services (
+  id text primary key,
+  name text not null,
+  category text not null default 'Custom Repairs',
+  description text default '',
+  estimated_duration_minutes int not null default 60,
+  labor_hours numeric not null default 1,
+  starting_price numeric not null default 0,
+  photo_url text default '',
+  warranty text default '',
+  faqs jsonb not null default '[]'::jsonb,
+  required_parts jsonb not null default '[]'::jsonb,
+  optional_addons jsonb not null default '[]'::jsonb,
+  maintenance_interval_miles int,
+  maintenance_interval_months int,
+  active boolean not null default true,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists shop_services_category_idx on shop_services (category);
+create index if not exists shop_services_active_idx on shop_services (active);
+
 create table if not exists work_orders (
   id text primary key,
   customer_id text,
   customer_vehicle_id text,
+  service_id text references shop_services(id) on delete set null,
   customer_name text not null,
   phone text default '',
   vehicle text default '',
@@ -62,6 +87,7 @@ create table if not exists work_orders (
   payment_status text not null default 'unpaid',
   stripe_checkout_session_id text,
   scheduled_date text,
+  booking_id text,
   document_data jsonb default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -93,10 +119,45 @@ create table if not exists customer_vehicles (
   created_at timestamptz not null default now()
 );
 
+create table if not exists customer_vehicle_documents (
+  id text primary key,
+  customer_vehicle_id text not null references customer_vehicles(id) on delete cascade,
+  kind text not null default 'other',
+  label text not null default '',
+  file_url text not null,
+  file_name text not null default '',
+  content_type text not null default '',
+  expires_on text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists customer_vehicle_documents_vehicle_idx
+  on customer_vehicle_documents (customer_vehicle_id);
+
+create table if not exists customer_vehicle_service_history (
+  id text primary key,
+  customer_vehicle_id text not null references customer_vehicles(id) on delete cascade,
+  performed_on text not null,
+  mileage int,
+  category text not null default 'Service',
+  summary text not null default '',
+  description text default '',
+  work_order_id text,
+  booking_id text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists customer_vehicle_service_history_vehicle_idx
+  on customer_vehicle_service_history (customer_vehicle_id, performed_on desc);
+
 create table if not exists bookings (
   id text primary key,
   customer_id text,
   quote_id text,
+  customer_vehicle_id text,
+  work_order_id text,
+  service_id text references shop_services(id) on delete set null,
+  assigned_to text,
   customer_name text not null,
   phone text not null,
   email text,
@@ -104,6 +165,14 @@ create table if not exists bookings (
   date text not null,
   time text not null,
   address text,
+  location_type text,
+  gate_code text,
+  access_notes text,
+  lat double precision,
+  lng double precision,
+  photo_urls jsonb not null default '[]'::jsonb,
+  problem_description text,
+  duration_minutes int default 60,
   status text not null default 'pending',
   notes text,
   deposit_paid boolean not null default false,
@@ -332,6 +401,8 @@ alter table vm_service_orders enable row level security;
 alter table vm_checklists enable row level security;
 alter table customers enable row level security;
 alter table customer_vehicles enable row level security;
+alter table customer_vehicle_documents enable row level security;
+alter table customer_vehicle_service_history enable row level security;
 
 -- Enterprise audit trail (append-only; service role writes)
 create table if not exists audit_logs (

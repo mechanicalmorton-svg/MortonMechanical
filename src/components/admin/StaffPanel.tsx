@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Download, Pencil, Plus, Shield, Trash2, Upload, Users } from "lucide-react";
+import { Copy, Download, GripVertical, Pencil, Plus, Shield, Trash2, Upload, Users } from "lucide-react";
 import type { StaffMember, StaffRole } from "@/lib/shop-types";
 import {
   dashboardTabLabel,
@@ -11,12 +11,18 @@ import {
   normalizeRoleIds,
   normalizeRolePermissions,
   pickPrimaryRoleId,
+  buildRoleChipStyle,
+  normalizeRoleColorStyle,
+  resolveRoleColorHex,
+  roleChipClassName,
+  type RoleColorStyle,
   type RoleDefinition,
   type RolePermissions,
 } from "@/lib/role-definitions";
+import { moveArrayItem } from "@/lib/page-layout";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
-import { RoleAccessEditor } from "./RoleAccessEditor";
+import { RoleAccessEditor, type RoleAccessFormState } from "./RoleAccessEditor";
 import { EmptyState, PageHeader, RoleBadge, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { Can } from "./permissions";
 import { actionsFromLegacy, ensureWorkspaceActions, tabsFromActions } from "@/lib/permissions/catalog";
@@ -59,41 +65,65 @@ function RoleMultiSelect({
   return (
     <div className={`flex flex-wrap gap-2 ${className}`}>
       {roles.map((role) => {
-        const checked = value.includes(role.id);
-        const locked = role.id === "owner" && lockOwner && checked;
+        const selected = value.includes(role.id);
+        const locked = role.id === "owner" && lockOwner && selected;
+        const hex = resolveRoleColorHex(role.color);
+        const chip = roleChipClassName(role.color);
+        const styled = buildRoleChipStyle(role.color, role.colorStyle);
         return (
-          <label
+          <button
             key={role.id}
-            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
-              locked ? "cursor-default opacity-90" : "cursor-pointer"
-            } ${
-              checked
-                ? "border-amber-500/35 bg-amber-500/10 text-amber-50"
-                : "border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700"
+            type="button"
+            disabled={locked}
+            onClick={() => toggle(role.id)}
+            aria-pressed={selected}
+            title={role.permissions.description || role.name}
+            className={`admin-glass-chip inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition ${chip} ${
+              styled ? "admin-glass-chip--styled" : ""
+            } ${locked ? "cursor-default opacity-90" : "cursor-pointer"} ${
+              selected
+                ? "ring-2 ring-offset-0 ring-offset-slate-950 scale-[1.02]"
+                : "opacity-55 grayscale-[0.25] hover:opacity-90 hover:grayscale-0"
             }`}
+            style={
+              {
+                ...(styled || {}),
+                ...(selected
+                  ? {
+                      borderColor: `${(styled?.borderColor as string) || hex}aa`,
+                      outline: `2px solid ${hex}99`,
+                      outlineOffset: "1px",
+                    }
+                  : styled
+                    ? {}
+                    : { borderColor: `${hex}55` }),
+              } as React.CSSProperties
+            }
           >
-            <input
-              type="checkbox"
-              checked={checked}
-              disabled={locked}
-              onChange={() => toggle(role.id)}
-              className="accent-amber-500"
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{
+                backgroundColor: hex,
+                boxShadow: role.colorStyle?.glowEnabled || role.colorStyle?.glow ? `0 0 8px ${role.colorStyle.glow || hex}` : `0 0 8px ${hex}`,
+              }}
+              aria-hidden
             />
-            {role.name}
-          </label>
+            <span className="relative z-[1]">{role.name}</span>
+            {selected ? <span className="relative z-[1] text-[10px] uppercase tracking-wide opacity-80">On</span> : null}
+          </button>
         );
       })}
     </div>
   );
 }
 
-const emptyRoleForm = {
+const emptyRoleForm: RoleAccessFormState = {
   id: "",
   name: "",
   color: "slate",
   description: "",
   actions: actionsFromLegacy({ tabs: ["dashboard", "work-orders"] }),
-  tabs: ["dashboard", "work-orders"] as string[],
+  tabs: ["dashboard", "work-orders"],
   manageUsers: false,
   editSiteContent: false,
   archived: false,
@@ -127,13 +157,14 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [savingRole, setSavingRole] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
+  const [dragRoleIndex, setDragRoleIndex] = useState<number | null>(null);
+  const [reorderingRoles, setReorderingRoles] = useState(false);
   const [form, setForm] = useState(emptyUserForm);
   const [roleForm, setRoleForm] = useState(emptyRoleForm);
 
-  const roleOptions = useMemo(
-    () => roles.filter((role) => !role.permissions.archived || role.id === "owner"),
-    [roles],
-  );
+  /** Same order as Access Control role cards (drag order / sortOrder). */
+  const roleOptions = roles;
+  const roleRank = useMemo(() => new Map(roles.map((role, index) => [role.id, index])), [roles]);
   const assignedCountByRole = useMemo(() => {
     const counts = new Map<string, number>();
     for (const member of items) {
@@ -149,6 +180,25 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
     () => items.filter((member) => member.active && memberHasOwnerRole(member)).length,
     [items],
   );
+
+  /** Portal users follow Access Control role order (best/highest role first). */
+  const sortedPortalUsers = useMemo(() => {
+    function bestRoleRank(member: StaffMember) {
+      const ids = memberRoleIds(member);
+      let best = Number.MAX_SAFE_INTEGER;
+      for (const id of ids) {
+        const rank = roleRank.get(id);
+        if (rank != null && rank < best) best = rank;
+      }
+      return best;
+    }
+    return [...items].sort((a, b) => {
+      const rankDiff = bestRoleRank(a) - bestRoleRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [items, roleRank]);
 
   async function load() {
     setLoading(true);
@@ -247,6 +297,7 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
       id: role.id,
       name: role.name,
       color: role.color,
+      colorStyle: role.colorStyle,
       description: role.permissions.description ?? "",
       actions,
       tabs: tabsFromActions(actions),
@@ -270,6 +321,7 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
       body: JSON.stringify({
         name: `Copy of ${role.name}`,
         color: role.color,
+        colorStyle: role.colorStyle,
         permissions,
       }),
     });
@@ -292,6 +344,7 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
           id: role.id,
           name: role.name,
           color: role.color,
+          colorStyle: role.colorStyle,
           permissions: {
             actions: role.permissions.actions,
             description: role.permissions.description,
@@ -313,7 +366,12 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
     try {
       const text = await file.text();
       const parsed = JSON.parse(text) as {
-        roles?: { name?: string; color?: string; permissions?: Partial<RolePermissions> }[];
+        roles?: {
+          name?: string;
+          color?: string;
+          colorStyle?: RoleColorStyle;
+          permissions?: Partial<RolePermissions>;
+        }[];
       };
       if (!Array.isArray(parsed.roles) || !parsed.roles.length) {
         toast.error("No roles found in that file.");
@@ -330,6 +388,7 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
           body: JSON.stringify({
             name,
             color: entry.color || "slate",
+            colorStyle: normalizeRoleColorStyle(entry.colorStyle),
             permissions: normalizeRolePermissions(entry.permissions),
           }),
         });
@@ -372,6 +431,7 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
         id: editingRoleId || undefined,
         name: roleForm.name,
         color,
+        colorStyle: normalizeRoleColorStyle(roleForm.colorStyle) ?? null,
         permissions,
       }),
     });
@@ -404,7 +464,30 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
       return;
     }
     setRoles(data);
+    if (editingRoleId === role.id) {
+      setShowRoleForm(false);
+      setEditingRoleId(null);
+    }
     toast.success("Role deleted.");
+  }
+
+  async function persistRoleOrder(nextRoles: RoleDefinition[]) {
+    const previous = roles;
+    setRoles(nextRoles);
+    setReorderingRoles(true);
+    const res = await fetch("/api/admin/roles", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order: nextRoles.map((role) => role.id) }),
+    });
+    const data = await res.json();
+    setReorderingRoles(false);
+    if (!res.ok) {
+      setRoles(previous);
+      toast.error(data.error ?? "Could not save role order.");
+      return;
+    }
+    setRoles(data);
   }
 
   async function createUser(e: React.FormEvent) {
@@ -570,7 +653,7 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-400/80">Access control</p>
               <h2 className="mt-1 text-base font-semibold text-white">Roles & permissions</h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                Assign action permissions; pages unlock from the modules you grant.
+                Drag cards to reorder. Pencil opens the role access editor.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -602,105 +685,94 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
               </Can>
             </div>
           </div>
-          <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-            {roles.map((role) => {
+          <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+            {roles.map((role, index) => {
               const actionCount = role.permissions.actions?.length ?? 0;
               const assigned = assignedCountByRole.get(role.id) ?? 0;
-              const pagePreview = role.permissions.tabs.slice(0, 4).map(dashboardTabLabel);
+              const pagePreview = role.permissions.tabs.slice(0, 2).map(dashboardTabLabel);
               const extraPages = Math.max(0, role.permissions.tabs.length - pagePreview.length);
               return (
                 <article
                   key={role.id}
-                  className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-900/70 via-slate-950/50 to-slate-950/80 p-4 transition hover:border-amber-500/25 hover:shadow-lg hover:shadow-amber-950/10 ${
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => {
+                    if (dragRoleIndex === null || dragRoleIndex === index) return;
+                    const next = moveArrayItem(roles, dragRoleIndex, index);
+                    setDragRoleIndex(null);
+                    void persistRoleOrder(next);
+                  }}
+                  className={`group relative overflow-hidden rounded-xl border bg-gradient-to-br from-slate-900/70 via-slate-950/50 to-slate-950/80 p-3 transition hover:border-amber-500/25 ${
                     role.permissions.archived ? "border-slate-700/60 opacity-70" : "border-slate-800/80"
+                  } ${dragRoleIndex === index ? "opacity-60 ring-1 ring-amber-400/40" : ""} ${
+                    reorderingRoles ? "opacity-80" : ""
                   }`}
                 >
-                  <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-amber-500/5 blur-2xl transition group-hover:bg-amber-500/10" />
-                  <div className="relative flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <RoleBadge role={role.id} roleName={role.name} roleColor={role.color} />
-                      {role.permissions.description ? (
-                        <p className="mt-2 line-clamp-2 text-xs text-slate-500">{role.permissions.description}</p>
-                      ) : null}
-                      <p className="mt-3 text-xs font-medium text-slate-300">
-                        {actionCount} action{actionCount === 1 ? "" : "s"} · {role.permissions.tabs.length} page
-                        {role.permissions.tabs.length === 1 ? "" : "s"} · {assigned} user
-                        {assigned === 1 ? "" : "s"}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {pagePreview.map((label) => (
-                          <span
-                            key={label}
-                            className="rounded-full border border-slate-700/70 bg-slate-950/60 px-2 py-0.5 text-[10px] font-medium text-slate-400"
-                          >
-                            {label}
-                          </span>
-                        ))}
-                        {extraPages > 0 ? (
-                          <span className="rounded-full border border-slate-700/70 bg-slate-950/60 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                            +{extraPages} more
-                          </span>
+                  <div className="relative flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <button
+                        type="button"
+                        draggable={!reorderingRoles}
+                        onDragStart={() => setDragRoleIndex(index)}
+                        onDragEnd={() => setDragRoleIndex(null)}
+                        className="mt-0.5 cursor-grab rounded-md p-0.5 text-slate-600 transition hover:bg-slate-800/70 hover:text-slate-300 active:cursor-grabbing"
+                        aria-label={`Drag to reorder ${role.name}`}
+                        title="Drag to reorder"
+                      >
+                        <GripVertical className="h-4 w-4" aria-hidden />
+                      </button>
+                      <div className="min-w-0">
+                        <RoleBadge
+                          role={role.id}
+                          roleName={role.name}
+                          roleColor={role.color}
+                          roleColorStyle={role.colorStyle}
+                        />
+                        {role.permissions.description ? (
+                          <p className="mt-1 line-clamp-1 text-[11px] text-slate-500">
+                            {role.permissions.description}
+                          </p>
                         ) : null}
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {role.permissions.manageUsers ? (
-                          <span className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-100">
-                            Manage users
-                          </span>
-                        ) : null}
-                        {role.permissions.editSiteContent ? (
-                          <span className="rounded-full border border-fuchsia-400/25 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-fuchsia-100">
-                            Site contents
-                          </span>
-                        ) : null}
-                        {isProtectedRole(role.id) ? (
-                          <span className="rounded-full border border-sky-400/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-100">
-                            Full access
-                          </span>
-                        ) : null}
-                        {role.permissions.archived ? (
-                          <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-300">
-                            Archived
-                          </span>
-                        ) : null}
+                        <p className="mt-1.5 text-[11px] font-medium text-slate-400">
+                          {actionCount} actions · {role.permissions.tabs.length} pages · {assigned} users
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {pagePreview.map((label) => (
+                            <span
+                              key={label}
+                              className="rounded-md border border-slate-700/70 bg-slate-950/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-400"
+                            >
+                              {label}
+                            </span>
+                          ))}
+                          {extraPages > 0 ? (
+                            <span className="rounded-md border border-slate-700/70 bg-slate-950/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                              +{extraPages}
+                            </span>
+                          ) : null}
+                          {isProtectedRole(role.id) ? (
+                            <span className="rounded-md border border-sky-400/25 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-sky-100">
+                              Full
+                            </span>
+                          ) : null}
+                          {role.permissions.archived ? (
+                            <span className="rounded-md border border-slate-500/30 bg-slate-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-300">
+                              Archived
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex shrink-0 flex-col gap-1.5">
-                      <Can permission="roles.create">
-                        <button
-                          type="button"
-                          className={`${btnSecondary} !h-9 !w-9 !px-0`}
-                          onClick={() => cloneRole(role)}
-                          disabled={savingRole}
-                          aria-label={`Clone ${role.name}`}
-                          title="Clone role"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </button>
-                      </Can>
-                      <Can permission="roles.edit">
-                        <button
-                          type="button"
-                          className={`${btnSecondary} !h-9 !w-9 !px-0`}
-                          onClick={() => openEditRole(role)}
-                          aria-label={`Edit ${role.name}`}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                      </Can>
-                      {!isProtectedRole(role.id) ? (
-                        <Can permission="roles.delete">
-                          <button
-                            type="button"
-                            className={`${btnDanger} !h-9 !w-9 !px-0`}
-                            onClick={() => removeRole(role)}
-                            aria-label={`Delete ${role.name}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </Can>
-                      ) : null}
-                    </div>
+                    <Can permission="roles.edit">
+                      <button
+                        type="button"
+                        className={`${btnSecondary} !h-8 !w-8 shrink-0 !px-0`}
+                        onClick={() => openEditRole(role)}
+                        aria-label={`Edit ${role.name}`}
+                        title="Edit role access"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </Can>
                   </div>
                 </article>
               );
@@ -782,11 +854,9 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
                   (editingUser?.active ?? true),
               )}
             />
-            {editingUserId && currentUserId && editingUserId === currentUserId ? (
-              <p className="mt-2 text-xs text-amber-200/80">
-                You can add Mechanic, Dispatcher, or custom roles to your Founder account. Keep Founder checked if you’re the last Founder.
-              </p>
-            ) : null}
+            <p className="mt-2 text-[11px] text-slate-500">
+              Keep checked under Founder and Platform Architect in Edit User.
+            </p>
           </div>
           {editingUserId ? (
             <label className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 sm:col-span-2">
@@ -836,22 +906,60 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
         <form onSubmit={saveRole} className="space-y-5">
           <RoleAccessEditor value={roleForm} onChange={setRoleForm} ownerLocked={ownerLocked} />
 
-          <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
-            <button
-              type="button"
-              className={btnSecondary}
-              disabled={savingRole}
-              onClick={() => {
-                setShowRoleForm(false);
-                setEditingRoleId(null);
-              }}
-            >
-              Cancel
-            </button>
-            <button type="submit" className={btnPrimary} disabled={savingRole || !roleForm.name.trim()}>
-              <Shield className="h-4 w-4" />
-              {savingRole ? "Saving…" : editingRoleId ? "Save Role" : "Add Role"}
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-4">
+            <div className="flex flex-wrap gap-2">
+              {editingRoleId ? (
+                <>
+                  <Can permission="roles.create">
+                    <button
+                      type="button"
+                      className={btnSecondary}
+                      disabled={savingRole}
+                      onClick={() => {
+                        const role = roles.find((item) => item.id === editingRoleId);
+                        if (role) void cloneRole(role);
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy role
+                    </button>
+                  </Can>
+                  {!isProtectedRole(editingRoleId) ? (
+                    <Can permission="roles.delete">
+                      <button
+                        type="button"
+                        className={btnDanger}
+                        disabled={savingRole}
+                        onClick={() => {
+                          const role = roles.find((item) => item.id === editingRoleId);
+                          if (role) void removeRole(role);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </button>
+                    </Can>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={btnSecondary}
+                disabled={savingRole}
+                onClick={() => {
+                  setShowRoleForm(false);
+                  setEditingRoleId(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button type="submit" className={btnPrimary} disabled={savingRole || !roleForm.name.trim()}>
+                <Shield className="h-4 w-4" />
+                {savingRole ? "Saving…" : editingRoleId ? "Save Role" : "Add Role"}
+              </button>
+            </div>
           </div>
         </form>
       </AdminModal>
@@ -881,11 +989,12 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
             />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {items.map((s) => {
+              {sortedPortalUsers.map((s) => {
                 const assignedIds = memberRoleIds(s);
                 const assignedRoles = assignedIds
                   .map((id) => roles.find((item) => item.id === id))
-                  .filter((item): item is RoleDefinition => Boolean(item));
+                  .filter((item): item is RoleDefinition => Boolean(item))
+                  .sort((a, b) => (roleRank.get(a.id) ?? 999) - (roleRank.get(b.id) ?? 999));
                 const isSelf = Boolean(currentUserId && s.id === currentUserId);
                 const isLastOwner = s.active && memberHasOwnerRole(s) && activeOwnerCount <= 1;
                 return (
@@ -919,7 +1028,13 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
                       <div className="flex flex-wrap gap-1.5">
                         {assignedRoles.length
                           ? assignedRoles.map((role) => (
-                              <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} />
+                              <RoleBadge
+                                key={role.id}
+                                role={role.id}
+                                roleName={role.name}
+                                roleColor={role.color}
+                                roleColorStyle={role.colorStyle}
+                              />
                             ))
                           : assignedIds.map((id) => <RoleBadge key={id} role={id} />)}
                       </div>

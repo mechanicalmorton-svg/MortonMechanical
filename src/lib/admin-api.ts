@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { AUTH_COOKIE, getSessionUser } from "./auth";
 import { getSupabaseAuthUser, type AdminUser } from "./supabase/server-auth";
 import { isSupabaseAuthConfigured } from "./supabase/server";
-import { normalizeRolePermissions } from "./role-definitions";
+import { isBreakGlassAdminEmail, normalizeRolePermissions } from "./role-definitions";
 import { getRegisteredKeys } from "./permissions/register";
 import { canManageUsers as userCanManageUsersPerm, hasPermission, isFounder } from "./permissions/service";
 
@@ -15,11 +15,16 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   const user = await getSessionUser(jar.get(AUTH_COOKIE)?.value);
   if (!user) return null;
   const role = user.role ?? "owner";
-  const isElevated = role === "owner" || role === "admin";
+  const email = (user.username || "").toLowerCase();
+  const isElevated =
+    role === "owner" ||
+    role === "admin" ||
+    role === "platform-architect" ||
+    isBreakGlassAdminEmail(email);
   return {
     id: user.id,
     username: user.username,
-    email: user.username,
+    email: email.includes("@") ? email : user.username,
     name: user.name ?? user.username,
     role,
     roleIds: [role],

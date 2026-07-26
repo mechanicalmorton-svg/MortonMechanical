@@ -317,9 +317,30 @@ function seedCatalog() {
     description: "Account and shop settings modules",
     tabs: ["settings"],
     permissions: [
-      { action: "account.view", label: "Own account", description: "Always available to signed-in staff" },
-      { action: "company.view", label: "Company settings", comingSoon: true },
-      { action: "notifications.view", label: "Notifications", comingSoon: true },
+      {
+        action: "view",
+        label: "View settings",
+        description: "Base access to the settings area",
+        unlocksTabs: ["settings"],
+      },
+      {
+        action: "account.view",
+        label: "Own account",
+        description: "Edit own profile, password, and avatar",
+        unlocksTabs: ["settings"],
+      },
+      {
+        action: "company.view",
+        label: "Company settings",
+        unlocksTabs: ["settings"],
+        comingSoon: true,
+      },
+      {
+        action: "notifications.view",
+        label: "Notifications",
+        unlocksTabs: ["settings"],
+        comingSoon: true,
+      },
     ],
   });
 }
@@ -438,7 +459,13 @@ export const TAB_TO_ACTIONS: Record<string, string[]> = {
   users: ["users.view", "users.create", "users.edit", "users.manage", "roles.view", "roles.edit"],
   "site-contents": ["content.view", "content.edit"],
   "audit-logs": ["audit_logs.view", "audit_logs.export"],
-  settings: ["payments.view", "settings.account.view"],
+  settings: [
+    "settings.view",
+    "settings.account.view",
+    "settings.company.view",
+    "settings.notifications.view",
+    "payments.view",
+  ],
 };
 
 /**

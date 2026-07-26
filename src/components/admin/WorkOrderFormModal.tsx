@@ -2,23 +2,40 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, MapPin, Plus, UserRound } from "lucide-react";
-import type { CustomerVehicle, Priority, StaffMember, WorkOrder, WorkOrderStatus } from "@/lib/shop-types";
+import type {
+  CustomerVehicle,
+  Priority,
+  ShopService,
+  StaffMember,
+  WorkOrder,
+  WorkOrderStatus,
+} from "@/lib/shop-types";
+import { SHOP_SERVICE_CATEGORIES } from "@/lib/shop-types";
 import {
   WORK_ORDER_STATUSES,
   WORK_ORDER_STATUS_LABELS,
   normalizeWorkOrderStatus,
 } from "@/lib/work-order-status";
-import { formatCustomerVehicleOption, parseWorkOrderVehicleLabel } from "@/lib/customer-vehicles";
+import {
+  formatCustomerVehicleOption,
+  normalizePlate,
+  normalizeVin,
+  parseWorkOrderVehicleLabel,
+  plateValidationError,
+  vinValidationError,
+} from "@/lib/customer-vehicles";
 import { adminGet, adminSend } from "./admin-fetch";
 import { CustomerPickerModal, type CustomerWithVehicles } from "./CustomerPickerModal";
+import { CustomerVehicleDetailModal } from "./CustomerVehicleDetailModal";
 import { useAdminToast } from "./AdminToast";
 import { btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { Can } from "./permissions";
 import { VehicleMakeModelFields } from "./VehicleMakeModelFields";
+import { vehicleYearOptions } from "@/lib/vehicle-years";
 
 type MakeOption = { id: number; name: string };
 
-const YEARS = Array.from({ length: new Date().getFullYear() - 1979 }, (_, i) => String(new Date().getFullYear() - i));
+const YEARS = vehicleYearOptions();
 const POWERTRAINS = ["Gasoline", "Diesel", "Hybrid", "Electric", "Other"];
 
 const emptyVehicle = {
@@ -36,6 +53,7 @@ const emptyVehicle = {
 const emptyForm = {
   customerAddress: "",
   customerConcern: "",
+  serviceId: "",
   service: "",
   status: "draft" as WorkOrderStatus,
   priority: "normal" as Priority,
@@ -134,8 +152,8 @@ function vehiclePayload(form: typeof emptyForm, id?: string) {
     make: form.make || undefined,
     model: form.model || undefined,
     trim: form.trim || undefined,
-    vin: form.vin || undefined,
-    plate: form.plate || undefined,
+    vin: normalizeVin(form.vin) || undefined,
+    plate: normalizePlate(form.plate) || undefined,
     powertrain: form.powertrain || undefined,
     notes: form.vehicleNotes || undefined,
   };
@@ -159,8 +177,11 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
   const [loadingMakes, setLoadingMakes] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
+  const [services, setServices] = useState<ShopService[]>([]);
+  const [vehicleDetailOpen, setVehicleDetailOpen] = useState(false);
 
   const addressListId = useMemo(() => `wo-address-${editingOrder?.id ?? "new"}`, [editingOrder?.id]);
+  const activeServices = useMemo(() => services.filter((item) => item.active), [services]);
 
   useEffect(() => {
     setLoadingMakes(true);
@@ -176,7 +197,24 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
       setCustomerCount(rows.length);
       setAddressSuggestions([...new Set(rows.map((row) => row.address?.trim()).filter(Boolean) as string[])].sort());
     });
+
+    adminGet<ShopService[]>("/api/admin/services?activeOnly=1").then(({ data }) => {
+      setServices(data ?? []);
+    });
   }, []);
+
+  function applyCatalogService(serviceId: string) {
+    const selected = services.find((item) => item.id === serviceId);
+    if (!selected) {
+      setForm((prev) => ({ ...prev, serviceId: "" }));
+      return;
+    }
+    setForm((prev) => ({
+      ...prev,
+      serviceId: selected.id,
+      service: selected.name,
+    }));
+  }
 
   useEffect(() => {
     if (!form.make.trim()) {
@@ -283,6 +321,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
       setForm({
         customerAddress,
         customerConcern: editingOrder.customerConcern ?? "",
+        serviceId: editingOrder.serviceId ?? "",
         service: editingOrder.service,
         status: normalizeWorkOrderStatus(editingOrder.status),
         priority: editingOrder.priority,
@@ -380,16 +419,24 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
     }
     if (!validateVehicle("Year, make, model, and powertrain are required for the vehicle on this job.")) return;
     if (!editingOrder) {
-      if (!form.vin.trim()) {
-        toast.error("VIN is required.");
+      const vinError = vinValidationError(form.vin);
+      if (vinError) {
+        toast.error(vinError);
         return;
       }
-      if (!form.plate.trim()) {
-        toast.error("License plate is required.");
+      const plateError = plateValidationError(form.plate);
+      if (plateError) {
+        toast.error(plateError);
         return;
       }
-      if (!form.assignedTo) {
+      if (!form.assignedTo.trim()) {
         toast.error("Assigned to is required.");
+        return;
+      }
+    } else if (form.vin.trim()) {
+      const vinError = vinValidationError(form.vin);
+      if (vinError) {
+        toast.error(vinError);
         return;
       }
     }
@@ -402,7 +449,10 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
       customerId: customer.id,
       customerVehicleId: customerVehicleId || undefined,
       saveVehicleToFile: !vehicleJobOnly,
+      bookingId: editingOrder?.bookingId,
       customerConcern: form.customerConcern,
+      // Empty string clears catalog link when switching to free-text service.
+      serviceId: form.serviceId,
       service: form.service,
       status: form.status,
       priority: form.priority,
@@ -548,17 +598,28 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                     ))}
                   </select>
                 </FormField>
-                <Can permission="customers.create">
-                  <button
-                    type="button"
-                    onClick={addVehicleForCustomer}
-                    disabled={!customer?.id || addingVehicle}
-                    className={`${btnPrimary} w-full lg:w-auto`}
-                  >
-                    <Plus className="h-4 w-4" />
-                    {addingVehicle ? "Adding…" : "Add vehicle for customer"}
-                  </button>
-                </Can>
+                <div className="flex flex-wrap gap-2">
+                  {customerVehicleId ? (
+                    <button
+                      type="button"
+                      onClick={() => setVehicleDetailOpen(true)}
+                      className={`${btnSecondary} w-full lg:w-auto`}
+                    >
+                      Vehicle file
+                    </button>
+                  ) : null}
+                  <Can permission="customers.create">
+                    <button
+                      type="button"
+                      onClick={addVehicleForCustomer}
+                      disabled={!customer?.id || addingVehicle}
+                      className={`${btnPrimary} w-full lg:w-auto`}
+                    >
+                      <Plus className="h-4 w-4" />
+                      {addingVehicle ? "Adding…" : "Add vehicle for customer"}
+                    </button>
+                  </Can>
+                </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -602,7 +663,12 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                     onChange={(e) => setForm({ ...form, trim: e.target.value })}
                   />
                 </FormField>
-                <FormField label="VIN" htmlFor="wo-vin" required={!editingOrder}>
+                <FormField
+                  label="VIN"
+                  htmlFor="wo-vin"
+                  required={!editingOrder}
+                  hint={customerVehicleId ? "Filled from the vehicle on file — edit here or in Vehicle file." : undefined}
+                >
                   <input
                     id="wo-vin"
                     className={inputClass}
@@ -610,17 +676,26 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                     maxLength={17}
                     value={form.vin}
                     disabled={!customer?.id}
-                    onChange={(e) => setForm({ ...form, vin: e.target.value.toUpperCase() })}
+                    required={!editingOrder}
+                    onChange={(e) =>
+                      setForm({ ...form, vin: normalizeVin(e.target.value).slice(0, 17) })
+                    }
                   />
                 </FormField>
-                <FormField label="License plate" htmlFor="wo-plate" required={!editingOrder}>
+                <FormField
+                  label="License Plate"
+                  htmlFor="wo-plate"
+                  required={!editingOrder}
+                  hint={customerVehicleId ? "Filled from the vehicle on file." : undefined}
+                >
                   <input
                     id="wo-plate"
                     className={inputClass}
                     placeholder="e.g. ABC1234"
                     value={form.plate}
                     disabled={!customer?.id}
-                    onChange={(e) => setForm({ ...form, plate: e.target.value.toUpperCase() })}
+                    required={!editingOrder}
+                    onChange={(e) => setForm({ ...form, plate: normalizePlate(e.target.value) })}
                   />
                 </FormField>
                 <FormField label="Powertrain / fuel" htmlFor="wo-powertrain" required>
@@ -661,6 +736,30 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
 
           <FormSection title="Work & assignment">
             <div className="grid gap-4">
+              <FormField label="Service catalog" htmlFor="wo-service-catalog">
+                <select
+                  id="wo-service-catalog"
+                  className={inputClass}
+                  value={form.serviceId}
+                  onChange={(e) => applyCatalogService(e.target.value)}
+                >
+                  <option value="">Custom / free-text service</option>
+                  {SHOP_SERVICE_CATEGORIES.map((category) => {
+                    const options = activeServices.filter((item) => item.category === category);
+                    if (!options.length) return null;
+                    return (
+                      <optgroup key={category} label={category}>
+                        {options.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                            {item.startingPrice > 0 ? ` · from $${item.startingPrice.toFixed(0)}` : ""}
+                          </option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                </select>
+              </FormField>
               <FormField label="Work description" htmlFor="wo-service">
                 <textarea
                   id="wo-service"
@@ -668,7 +767,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                   rows={3}
                   placeholder="Describe the work to be performed…"
                   value={form.service}
-                  onChange={(e) => setForm({ ...form, service: e.target.value })}
+                  onChange={(e) => setForm({ ...form, service: e.target.value, serviceId: "" })}
                 />
               </FormField>
 
@@ -717,6 +816,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                     id="wo-assigned"
                     className={inputClass}
                     value={form.assignedTo}
+                    required={!editingOrder}
                     onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
                   >
                     <option value="">Select technician</option>
@@ -781,6 +881,22 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
         onClose={() => setPickerOpen(false)}
         onSelect={handleCustomerSelect}
         stacked
+      />
+
+      <CustomerVehicleDetailModal
+        open={vehicleDetailOpen}
+        customerVehicleId={customerVehicleId || null}
+        stacked
+        onClose={() => setVehicleDetailOpen(false)}
+        onUpdated={(updated) => {
+          setVehicles((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+          setForm((prev) => ({
+            ...prev,
+            vin: updated.vin ?? prev.vin,
+            plate: updated.plate ?? prev.plate,
+            vehicleNotes: updated.notes ?? prev.vehicleNotes,
+          }));
+        }}
       />
     </>
   );

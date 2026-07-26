@@ -13,8 +13,11 @@ import {
   isHexColor,
   isRoleColor,
   isValidRoleColor,
+  normalizeOptionalHex,
   normalizeRoleColor,
+  normalizeRoleColorStyle,
   resolveRoleColorHex,
+  type RoleColorStyle,
 } from "@/lib/role-definitions";
 import { ChevronDown, Search } from "lucide-react";
 import { RoleBadge, inputClass } from "./admin-ui";
@@ -23,6 +26,7 @@ export type RoleAccessFormState = {
   id: string;
   name: string;
   color: string;
+  colorStyle?: RoleColorStyle;
   description: string;
   actions: string[];
   tabs: string[];
@@ -30,6 +34,70 @@ export type RoleAccessFormState = {
   editSiteContent: boolean;
   archived: boolean;
 };
+
+function ColorPickerField({
+  label,
+  hint,
+  enabled,
+  onEnabledChange,
+  value,
+  fallback,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  value: string;
+  fallback: string;
+  onChange: (hex: string) => void;
+}) {
+  const hex = normalizeOptionalHex(value) || resolveRoleColorHex(fallback);
+  return (
+    <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-2.5">
+      <label className="flex cursor-pointer items-center justify-between gap-2">
+        <span>
+          <span className="block text-sm font-medium text-slate-200">{label}</span>
+          {hint ? <span className="mt-0.5 block text-[11px] text-slate-500">{hint}</span> : null}
+        </span>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onEnabledChange(e.target.checked)}
+          className="accent-amber-500"
+        />
+      </label>
+      {enabled ? (
+        <div className="mt-2.5 flex items-center gap-2">
+          <label className="relative inline-flex h-9 w-9 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
+            <span className="absolute inset-1 rounded-md" style={{ background: hex }} />
+            <input
+              type="color"
+              value={hex}
+              onChange={(e) => onChange(normalizeRoleColor(e.target.value))}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              aria-label={`${label} color picker`}
+            />
+          </label>
+          <input
+            className={`${inputClass} font-mono text-xs uppercase`}
+            value={hex}
+            onChange={(e) => {
+              const next = e.target.value.trim();
+              onChange(next.startsWith("#") ? next : `#${next}`);
+            }}
+            onBlur={() => {
+              const normalized = normalizeOptionalHex(hex);
+              if (normalized) onChange(normalized);
+            }}
+            spellCheck={false}
+            aria-label={`${label} hex`}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 type Props = {
   value: RoleAccessFormState;
@@ -105,8 +173,13 @@ export function RoleAccessEditor({ value, onChange, ownerLocked = false }: Props
   function toggleAction(key: string, enabled: boolean) {
     if (ownerLocked) return;
     const next = new Set(value.actions);
-    if (enabled) next.add(key);
-    else next.delete(key);
+    if (enabled) {
+      next.add(key);
+      const def = modules.flatMap((module) => module.permissions).find((permission) => permission.key === key);
+      for (const dep of def?.dependsOn ?? []) next.add(dep);
+    } else {
+      next.delete(key);
+    }
     setActions([...next]);
   }
 
@@ -116,8 +189,12 @@ export function RoleAccessEditor({ value, onChange, ownerLocked = false }: Props
     if (!module) return;
     const next = new Set(value.actions);
     for (const permission of module.permissions) {
-      if (enabled) next.add(permission.key);
-      else next.delete(permission.key);
+      if (enabled) {
+        next.add(permission.key);
+        for (const dep of permission.dependsOn ?? []) next.add(dep);
+      } else {
+        next.delete(permission.key);
+      }
     }
     setActions([...next]);
   }
@@ -160,74 +237,172 @@ export function RoleAccessEditor({ value, onChange, ownerLocked = false }: Props
                 Archive role (hidden from user assignment)
               </label>
             ) : null}
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Badge color</p>
-              <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
-                {ROLE_COLORS.map((color) => {
-                  const selected = value.color === color;
-                  return (
-                    <button
-                      key={color}
-                      type="button"
-                      title={color}
-                      aria-label={`${color} badge color`}
-                      onClick={() => patch({ color })}
-                      className={`relative h-8 w-8 rounded-full transition ${
-                        selected
-                          ? "scale-110 ring-2 ring-amber-300/70 ring-offset-2 ring-offset-slate-950"
-                          : "opacity-85 hover:scale-105 hover:opacity-100"
-                      }`}
-                      style={{
-                        background: `radial-gradient(circle at 30% 28%, rgba(255,255,255,0.55), transparent 40%), ${ROLE_COLOR_HEX[color]}`,
-                        boxShadow: `0 0 0 1px ${ROLE_COLOR_HEX[color]}66, 0 6px 14px ${ROLE_COLOR_HEX[color]}33`,
-                      }}
+            <div className="space-y-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Badge look
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">Presets, color picker, and style overrides.</p>
+                <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
+                  {ROLE_COLORS.map((color) => {
+                    const selected = value.color === color;
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        title={color}
+                        aria-label={`${color} badge color`}
+                        onClick={() => patch({ color })}
+                        className={`relative h-8 w-8 rounded-full transition ${
+                          selected
+                            ? "scale-110 ring-2 ring-amber-300/70 ring-offset-2 ring-offset-slate-950"
+                            : "opacity-85 hover:scale-105 hover:opacity-100"
+                        }`}
+                        style={{
+                          background: `radial-gradient(circle at 30% 28%, rgba(255,255,255,0.55), transparent 40%), ${ROLE_COLOR_HEX[color]}`,
+                          boxShadow: `0 0 0 1px ${ROLE_COLOR_HEX[color]}66, 0 6px 14px ${ROLE_COLOR_HEX[color]}33`,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 px-3 py-2.5">
+                <p className="text-sm font-medium text-slate-200">Base color</p>
+                <p className="mt-0.5 text-[11px] text-slate-500">Main fill for the role badge.</p>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <label className="relative inline-flex h-10 w-10 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-inner">
+                    <span className="absolute inset-1 rounded-md" style={{ background: colorHex }} />
+                    <input
+                      type="color"
+                      value={colorHex}
+                      onChange={(e) => patch({ color: normalizeRoleColor(e.target.value) })}
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                      aria-label="Base badge color picker"
                     />
-                  );
-                })}
-                <label className="relative ml-1 inline-flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-dashed border-slate-600 bg-slate-900/70 transition hover:border-amber-400/50">
-                  <span className="pointer-events-none absolute inset-[3px] rounded-full" style={{ background: colorHex }} />
+                  </label>
                   <input
-                    type="color"
-                    value={colorHex}
-                    onChange={(e) => patch({ color: normalizeRoleColor(e.target.value) })}
-                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                    aria-label="Custom badge color"
-                  />
-                </label>
-                <input
-                  className={`${inputClass} max-w-[7.5rem] font-mono text-xs uppercase`}
-                  value={
-                    isHexColor(value.color)
-                      ? value.color
-                      : isRoleColor(value.color)
-                        ? ROLE_COLOR_HEX[value.color]
-                        : value.color
-                  }
-                  onChange={(e) => {
-                    const next = e.target.value.trim();
-                    patch({
-                      color: next.startsWith("#") || isRoleColor(next) ? next : `#${next}`,
-                    });
-                  }}
-                  onBlur={() => {
-                    if (isValidRoleColor(value.color)) {
-                      patch({ color: normalizeRoleColor(value.color) });
+                    className={`${inputClass} font-mono text-xs uppercase`}
+                    value={
+                      isHexColor(value.color)
+                        ? value.color
+                        : isRoleColor(value.color)
+                          ? ROLE_COLOR_HEX[value.color]
+                          : value.color
                     }
+                    onChange={(e) => {
+                      const next = e.target.value.trim();
+                      patch({
+                        color: next.startsWith("#") || isRoleColor(next) ? next : `#${next}`,
+                      });
+                    }}
+                    onBlur={() => {
+                      if (isValidRoleColor(value.color)) {
+                        patch({ color: normalizeRoleColor(value.color) });
+                      }
+                    }}
+                    placeholder="#RRGGBB"
+                    spellCheck={false}
+                    aria-label="Base hex color"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <ColorPickerField
+                  label="Text color"
+                  hint="Label text on the badge"
+                  enabled={Boolean(value.colorStyle?.text)}
+                  onEnabledChange={(enabled) => {
+                    const next = { ...value.colorStyle };
+                    if (enabled) next.text = value.colorStyle?.text || "#ffffff";
+                    else delete next.text;
+                    patch({ colorStyle: normalizeRoleColorStyle(next) });
                   }}
-                  placeholder="#RRGGBB"
-                  spellCheck={false}
-                  aria-label="Hex color"
+                  value={value.colorStyle?.text || "#ffffff"}
+                  fallback="#ffffff"
+                  onChange={(hex) =>
+                    patch({
+                      colorStyle: normalizeRoleColorStyle({ ...value.colorStyle, text: hex }),
+                    })
+                  }
+                />
+                <ColorPickerField
+                  label="Border color"
+                  hint="Outline around the badge"
+                  enabled={Boolean(value.colorStyle?.border)}
+                  onEnabledChange={(enabled) => {
+                    const next = { ...value.colorStyle };
+                    if (enabled) next.border = value.colorStyle?.border || colorHex;
+                    else delete next.border;
+                    patch({ colorStyle: normalizeRoleColorStyle(next) });
+                  }}
+                  value={value.colorStyle?.border || colorHex}
+                  fallback={value.color}
+                  onChange={(hex) =>
+                    patch({
+                      colorStyle: normalizeRoleColorStyle({ ...value.colorStyle, border: hex }),
+                    })
+                  }
+                />
+                <ColorPickerField
+                  label="Glow"
+                  hint="Soft outer glow around the badge"
+                  enabled={Boolean(value.colorStyle?.glowEnabled || value.colorStyle?.glow)}
+                  onEnabledChange={(enabled) => {
+                    const next: RoleColorStyle = { ...value.colorStyle };
+                    if (enabled) {
+                      next.glowEnabled = true;
+                      next.glow = value.colorStyle?.glow || colorHex;
+                    } else {
+                      delete next.glowEnabled;
+                      delete next.glow;
+                    }
+                    patch({ colorStyle: normalizeRoleColorStyle(next) });
+                  }}
+                  value={value.colorStyle?.glow || colorHex}
+                  fallback={value.color}
+                  onChange={(hex) =>
+                    patch({
+                      colorStyle: normalizeRoleColorStyle({
+                        ...value.colorStyle,
+                        glowEnabled: true,
+                        glow: hex,
+                      }),
+                    })
+                  }
+                />
+                <ColorPickerField
+                  label="Hover color"
+                  hint="Accent when the badge is hovered"
+                  enabled={Boolean(value.colorStyle?.hover)}
+                  onEnabledChange={(enabled) => {
+                    const next = { ...value.colorStyle };
+                    if (enabled) next.hover = value.colorStyle?.hover || colorHex;
+                    else delete next.hover;
+                    patch({ colorStyle: normalizeRoleColorStyle(next) });
+                  }}
+                  value={value.colorStyle?.hover || colorHex}
+                  fallback={value.color}
+                  onChange={(hex) =>
+                    patch({
+                      colorStyle: normalizeRoleColorStyle({ ...value.colorStyle, hover: hex }),
+                    })
+                  }
                 />
               </div>
             </div>
           </div>
           <div className="rounded-2xl border border-slate-700/60 bg-slate-950/50 px-4 py-3 text-center shadow-inner shadow-black/30">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Preview</p>
-            <div className="mt-2 flex justify-center">
+            <p className="mt-1 text-[10px] text-slate-600">Hover to test hover style</p>
+            <div className="mt-3 flex justify-center">
               <RoleBadge
                 role={(value.id || "custom") as never}
                 roleName={value.name.trim() || "Role preview"}
                 roleColor={normalizeRoleColor(value.color)}
+                roleColorStyle={value.colorStyle}
               />
             </div>
           </div>

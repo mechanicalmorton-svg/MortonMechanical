@@ -132,6 +132,18 @@ export type RolePermissions = {
   description?: string;
   /** Soft-archived — hidden from role assignment pickers. */
   archived?: boolean;
+  /** Display order on the roles grid (not an access grant). */
+  sortOrder?: number;
+};
+
+/** Optional badge look overrides (stored with the role; omit = theme defaults). */
+export type RoleColorStyle = {
+  text?: string;
+  border?: string;
+  glow?: string;
+  hover?: string;
+  /** When true, apply a glow using `glow` (or the base color). */
+  glowEnabled?: boolean;
 };
 
 export type RoleDefinition = {
@@ -139,6 +151,8 @@ export type RoleDefinition = {
   name: string;
   /** Preset key (sky, amber, ...) or custom hex (#RRGGBB). */
   color: string;
+  /** Advanced badge styling (text / border / glow / hover). */
+  colorStyle?: RoleColorStyle;
   system: boolean;
   permissions: RolePermissions;
   createdAt: string;
@@ -197,9 +211,126 @@ export function roleChipClassName(color: string) {
   return "admin-glass-chip--custom text-white";
 }
 
+export function normalizeOptionalHex(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const raw = value.trim();
+  if (!raw) return undefined;
+  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
+  if (!isHexColor(withHash)) return undefined;
+  return normalizeRoleColor(withHash);
+}
+
+export function normalizeRoleColorStyle(raw: unknown): RoleColorStyle | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const source = raw as Record<string, unknown>;
+  const next: RoleColorStyle = {};
+  const text = normalizeOptionalHex(source.text);
+  const border = normalizeOptionalHex(source.border);
+  const glow = normalizeOptionalHex(source.glow);
+  const hover = normalizeOptionalHex(source.hover);
+  if (text) next.text = text;
+  if (border) next.border = border;
+  if (glow) next.glow = glow;
+  if (hover) next.hover = hover;
+  if (source.glowEnabled === true) next.glowEnabled = true;
+  if (source.glowEnabled === false) next.glowEnabled = false;
+  if (!Object.keys(next).length) return undefined;
+  return next;
+}
+
+export function roleHasCustomStyle(style?: RoleColorStyle | null) {
+  return Boolean(
+    style &&
+      (style.text ||
+        style.border ||
+        style.glow ||
+        style.hover ||
+        style.glowEnabled === true ||
+        style.glowEnabled === false),
+  );
+}
+
+export type ResolvedRoleAppearance = {
+  base: string;
+  text: string;
+  border: string;
+  glow: string;
+  hover: string;
+  glowEnabled: boolean;
+  useInline: boolean;
+};
+
+export function resolveRoleAppearance(
+  color: string,
+  style?: RoleColorStyle | null,
+): ResolvedRoleAppearance {
+  const base = resolveRoleColorHex(color);
+  const normalized = normalizeRoleColor(color);
+  const customBase = isHexColor(normalized);
+  const glowEnabled = style?.glowEnabled === true || Boolean(style?.glow);
+  return {
+    base,
+    text: style?.text || "#ffffff",
+    border: style?.border || base,
+    glow: style?.glow || base,
+    hover: style?.hover || base,
+    glowEnabled,
+    useInline: customBase || roleHasCustomStyle(style),
+  };
+}
+
+/** Inline styles for role chips/badges when using custom hex or style overrides. */
+export function buildRoleChipStyle(
+  color: string,
+  style?: RoleColorStyle | null,
+): Record<string, string> | undefined {
+  const appearance = resolveRoleAppearance(color, style);
+  if (!appearance.useInline) return undefined;
+
+  const { base, text, border, glow, hover, glowEnabled } = appearance;
+  const customBase = isHexColor(normalizeRoleColor(color));
+  const shadow = glowEnabled
+    ? `0 1px 0 rgba(255,255,255,0.16) inset, 0 0 0 1px ${border}33, 0 4px 14px ${glow}40, 0 0 20px ${glow}55`
+    : `0 1px 0 rgba(255,255,255,0.16) inset, 0 0 0 1px ${border}22, 0 4px 14px ${base}28`;
+
+  return {
+    ...(style?.text || customBase ? { color: style?.text || text } : {}),
+    background: `linear-gradient(145deg, rgba(255,255,255,0.16) 0%, transparent 42%), linear-gradient(180deg, ${base}88, ${base}28)`,
+    borderColor: `${border}aa`,
+    boxShadow: shadow,
+    "--role-hover": hover,
+    "--role-glow": glow,
+    "--role-border": border,
+  };
+}
+
 /** Only Founder cannot be deleted. */
 export function isProtectedRole(roleId: string) {
   return roleId === "owner";
+}
+
+/** Founder + secret Founder (Platform Architect). */
+export const FULL_ACCESS_ROLE_IDS = ["owner", "platform-architect"] as const;
+
+/** Always full portal access even without Founder / Platform Architect assigned. */
+export const BREAK_GLASS_ADMIN_EMAILS = [
+  "adean@mortonsmechanical.com",
+  "kstroud@mortonsmechanical.com",
+] as const;
+
+export function isBreakGlassAdminEmail(email?: string | null) {
+  if (!email) return false;
+  return (BREAK_GLASS_ADMIN_EMAILS as readonly string[]).includes(email.trim().toLowerCase());
+}
+
+export function isFullAccessRoleId(roleId: string) {
+  return (FULL_ACCESS_ROLE_IDS as readonly string[]).includes(roleId);
+}
+
+/** Platform Architect (by id or display name) acts as a secret Founder. */
+export function isSecretFounderRole(role: { id: string; name?: string | null }) {
+  if (isFullAccessRoleId(role.id)) return true;
+  return String(role.name ?? "").trim().toLowerCase() === "platform architect";
 }
 
 const ALL_TABS = DASHBOARD_TAB_OPTIONS.map((tab) => tab.id);
@@ -225,6 +356,7 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
         actions: [...getRegisteredKeys()],
         manageUsers: true,
         editSiteContent: true,
+        sortOrder: 0,
       }),
       createdAt: stamp,
       updatedAt: stamp,
@@ -239,6 +371,7 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
         actions: [...getRegisteredKeys()],
         manageUsers: true,
         editSiteContent: true,
+        sortOrder: 10,
       }),
       createdAt: stamp,
       updatedAt: stamp,
@@ -280,6 +413,7 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
         ],
         manageUsers: false,
         editSiteContent: false,
+        sortOrder: 20,
       }),
       createdAt: stamp,
       updatedAt: stamp,
@@ -317,6 +451,7 @@ export function defaultRoleDefinitions(): RoleDefinition[] {
         ],
         manageUsers: false,
         editSiteContent: false,
+        sortOrder: 30,
       }),
       createdAt: stamp,
       updatedAt: stamp,
@@ -374,6 +509,10 @@ export function normalizeRolePermissions(raw: unknown): RolePermissions {
   ) {
     uniqueTabs.push("timesheets");
   }
+  const sortOrder =
+    typeof source.sortOrder === "number" && Number.isFinite(source.sortOrder)
+      ? source.sortOrder
+      : undefined;
   return {
     tabs: uniqueTabs,
     actions,
@@ -381,19 +520,29 @@ export function normalizeRolePermissions(raw: unknown): RolePermissions {
     editSiteContent: effectiveEditSiteContent,
     description: typeof source.description === "string" ? source.description : undefined,
     archived: Boolean(source.archived),
+    ...(sortOrder != null ? { sortOrder } : {}),
   };
 }
 
 export function normalizeRoleDefinition(raw: Partial<RoleDefinition> & { id: string; name: string }): RoleDefinition {
   const stamp = nowIso();
   const id = raw.id.trim();
+  const permissionsRaw =
+    raw.permissions && typeof raw.permissions === "object"
+      ? (raw.permissions as RolePermissions & { colorStyle?: unknown })
+      : undefined;
+  const colorStyle =
+    normalizeRoleColorStyle(raw.colorStyle) ??
+    normalizeRoleColorStyle(permissionsRaw?.colorStyle);
+  const permissions = normalizeRolePermissions(permissionsRaw);
   return {
     id,
     name: raw.name.trim() || raw.id,
     color: normalizeRoleColor(raw.color, id === "owner" ? "sky" : "slate"),
+    ...(colorStyle ? { colorStyle } : {}),
     // Only Founder is permanently protected from deletion.
     system: id === "owner",
-    permissions: normalizeRolePermissions(raw.permissions),
+    permissions,
     createdAt: raw.createdAt || stamp,
     updatedAt: raw.updatedAt || stamp,
   };
@@ -414,6 +563,7 @@ export function mergeRoleDefinitions(stored: RoleDefinition[]): RoleDefinition[]
         ...ownerDefault,
         name: normalized.name || "Founder",
         color: normalized.color,
+        colorStyle: normalized.colorStyle,
         system: true,
         permissions: permissionsWithActions({
           tabs: [...ALL_TABS],
@@ -421,6 +571,7 @@ export function mergeRoleDefinitions(stored: RoleDefinition[]): RoleDefinition[]
           manageUsers: true,
           editSiteContent: true,
           description: normalized.permissions.description,
+          sortOrder: normalized.permissions.sortOrder ?? ownerDefault.permissions.sortOrder,
         }),
         createdAt: normalized.createdAt || ownerDefault.createdAt,
         updatedAt: normalized.updatedAt,
@@ -443,6 +594,24 @@ export function mergeRoleDefinitions(stored: RoleDefinition[]): RoleDefinition[]
       continue;
     }
 
+    // Platform Architect = secret Founder (always full access keys).
+    if (isSecretFounderRole(normalized) && normalized.id !== "owner") {
+      byId.set(normalized.id, {
+        ...normalized,
+        system: false,
+        permissions: permissionsWithActions({
+          tabs: [...ALL_TABS],
+          actions: [...getRegisteredKeys()],
+          manageUsers: true,
+          editSiteContent: true,
+          description: normalized.permissions.description,
+          archived: normalized.permissions.archived,
+          sortOrder: normalized.permissions.sortOrder,
+        }),
+      });
+      continue;
+    }
+
     byId.set(normalized.id, {
       ...normalized,
       system: false,
@@ -451,6 +620,17 @@ export function mergeRoleDefinitions(stored: RoleDefinition[]): RoleDefinition[]
 
   if (!byId.has("owner")) {
     byId.set("owner", ownerDefault);
+  }
+
+  const all = [...byId.values()];
+  const hasCustomOrder = all.some((role) => typeof role.permissions.sortOrder === "number");
+  if (hasCustomOrder) {
+    return all.sort((a, b) => {
+      const aOrder = a.permissions.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = b.permissions.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.name.localeCompare(b.name);
+    });
   }
 
   const preferredOrder = ["owner", "admin", "mechanic", "dispatcher"];
@@ -499,7 +679,7 @@ export function pickPrimaryRoleId(roleIds: string[]): string {
 
 /** Union of tabs/flags/actions across roles — most permissive wins. */
 export function combineRolePermissions(definitions: RoleDefinition[]): RolePermissions {
-  if (definitions.some((role) => role.id === "owner")) {
+  if (definitions.some((role) => isSecretFounderRole(role))) {
     return normalizeRolePermissions({
       tabs: [...ALL_TABS],
       actions: [...getRegisteredKeys()],
@@ -556,21 +736,27 @@ export function resolveUserRoles(
   };
 }
 
-export function userHasOwnerRole(user: { role?: string | null; roleIds?: string[] | null }) {
-  return user.role === "owner" || Boolean(user.roleIds?.includes("owner"));
+export function userHasOwnerRole(user: {
+  role?: string | null;
+  roleIds?: string[] | null;
+  email?: string | null;
+}) {
+  if (isBreakGlassAdminEmail(user.email)) return true;
+  if (user.role && isFullAccessRoleId(user.role)) return true;
+  return Boolean(user.roleIds?.some((id) => isFullAccessRoleId(id)));
 }
 
 export function roleCanAccessTab(role: RoleDefinition, tab: string) {
-  if (role.id === "owner") return true;
+  if (isSecretFounderRole(role)) return true;
   if (tab === "settings") return true;
   if (tab === "customizer") return role.permissions.editSiteContent || role.permissions.tabs.includes("site-contents");
   return role.permissions.tabs.includes(tab);
 }
 
 export function roleCanManageUsers(role: RoleDefinition) {
-  return role.id === "owner" || role.permissions.manageUsers;
+  return isSecretFounderRole(role) || role.permissions.manageUsers;
 }
 
 export function roleCanEditSiteContent(role: RoleDefinition) {
-  return role.id === "owner" || role.permissions.editSiteContent;
+  return isSecretFounderRole(role) || role.permissions.editSiteContent;
 }

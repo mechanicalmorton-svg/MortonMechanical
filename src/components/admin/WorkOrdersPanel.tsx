@@ -619,6 +619,11 @@ export function WorkOrdersPanel() {
               {isOverdue(viewOrder) && <StatusBadge status="overdue" />}
             </div>
             <dl className="grid gap-3 sm:grid-cols-2">
+              {viewOrder.bookingId ? (
+                <div className="sm:col-span-2 rounded-xl border border-indigo-500/25 bg-indigo-500/10 px-3 py-2 text-sm text-indigo-100">
+                  From booking — linked appointment drives this work order.
+                </div>
+              ) : null}
               <div>
                 <dt className="text-xs uppercase tracking-wide text-slate-500">Customer</dt>
                 <dd className="mt-1 text-sm text-white">{viewOrder.customerName}</dd>
@@ -831,6 +836,9 @@ export function WorkOrdersPanel() {
                         <td className="px-4 py-3">
                           <p className="font-medium text-white">{order.customerName}</p>
                           <p className="text-xs text-slate-500 lg:hidden">{order.vehicle || "No vehicle"}</p>
+                          {order.bookingId ? (
+                            <p className="mt-0.5 text-[11px] text-indigo-300/90">From booking</p>
+                          ) : null}
                         </td>
                         <td className="hidden px-4 py-3 text-slate-400 lg:table-cell">{order.vehicle || "—"}</td>
                         <td className="max-w-[220px] px-4 py-3 text-slate-300">

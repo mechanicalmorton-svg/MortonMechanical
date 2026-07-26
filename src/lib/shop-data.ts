@@ -36,6 +36,7 @@ import {
   mergeRoleDefinitions,
   normalizeRoleDefinition,
   normalizeRoleIds,
+  normalizeRolePermissions,
   pickPrimaryRoleId,
   slugifyRoleId,
   type RoleDefinition,
@@ -92,6 +93,8 @@ function rowToWorkOrder(r: Record<string, unknown>): WorkOrder {
     id: r.id as string,
     customerId: (r.customer_id as string) || undefined,
     customerVehicleId: (r.customer_vehicle_id as string) || undefined,
+    bookingId: (r.booking_id as string) || undefined,
+    serviceId: (r.service_id as string) || undefined,
     customerName: r.customer_name as string,
     phone: (r.phone as string) ?? "",
     vehicle: (r.vehicle as string) ?? "",
@@ -142,6 +145,12 @@ function workOrderToRow(w: WorkOrder) {
   }
   if (w.stripeCheckoutSessionId !== undefined) {
     row.stripe_checkout_session_id = w.stripeCheckoutSessionId || null;
+  }
+  if (w.bookingId !== undefined) {
+    row.booking_id = w.bookingId?.trim() || null;
+  }
+  if (w.serviceId !== undefined) {
+    row.service_id = w.serviceId?.trim() || null;
   }
 
   return row;
@@ -217,10 +226,15 @@ function customerVehicleToRow(v: CustomerVehicle) {
 }
 
 function rowToBooking(r: Record<string, unknown>): Booking {
+  const locationType = r.location_type as Booking["locationType"] | undefined;
   return {
     id: r.id as string,
     customerId: (r.customer_id as string) || undefined,
     quoteId: (r.quote_id as string) || undefined,
+    customerVehicleId: (r.customer_vehicle_id as string) || undefined,
+    workOrderId: (r.work_order_id as string) || undefined,
+    serviceId: (r.service_id as string) || undefined,
+    assignedTo: (r.assigned_to as string) || undefined,
     customerName: r.customer_name as string,
     phone: (r.phone as string) ?? "",
     email: (r.email as string) || undefined,
@@ -228,6 +242,27 @@ function rowToBooking(r: Record<string, unknown>): Booking {
     date: r.date as string,
     time: r.time as string,
     address: (r.address as string) || undefined,
+    locationType:
+      locationType === "home" ||
+      locationType === "work" ||
+      locationType === "business" ||
+      locationType === "apartment" ||
+      locationType === "roadside" ||
+      locationType === "other"
+        ? locationType
+        : undefined,
+    problemDescription: (r.problem_description as string) || undefined,
+    gateCode: (r.gate_code as string) || undefined,
+    accessNotes: (r.access_notes as string) || undefined,
+    lat: r.lat != null && Number.isFinite(Number(r.lat)) ? Number(r.lat) : undefined,
+    lng: r.lng != null && Number.isFinite(Number(r.lng)) ? Number(r.lng) : undefined,
+    photoUrls: Array.isArray(r.photo_urls)
+      ? (r.photo_urls as unknown[]).filter((url): url is string => typeof url === "string" && Boolean(url.trim()))
+      : undefined,
+    durationMinutes:
+      r.duration_minutes != null && Number.isFinite(Number(r.duration_minutes))
+        ? Number(r.duration_minutes)
+        : undefined,
     status: r.status as Booking["status"],
     notes: (r.notes as string) || undefined,
     depositPaid: Boolean(r.deposit_paid),
@@ -252,6 +287,42 @@ function bookingToRow(b: Booking) {
     notes: b.notes ?? "",
     created_at: b.createdAt,
   };
+  if (b.customerVehicleId !== undefined) {
+    row.customer_vehicle_id = b.customerVehicleId?.trim() || null;
+  }
+  if (b.workOrderId !== undefined) {
+    row.work_order_id = b.workOrderId?.trim() || null;
+  }
+  if (b.serviceId !== undefined) {
+    row.service_id = b.serviceId?.trim() || null;
+  }
+  if (b.assignedTo !== undefined) {
+    row.assigned_to = b.assignedTo?.trim() || null;
+  }
+  if (b.locationType !== undefined) {
+    row.location_type = b.locationType || null;
+  }
+  if (b.problemDescription !== undefined) {
+    row.problem_description = b.problemDescription ?? "";
+  }
+  if (b.gateCode !== undefined) {
+    row.gate_code = b.gateCode?.trim() || null;
+  }
+  if (b.accessNotes !== undefined) {
+    row.access_notes = b.accessNotes?.trim() || null;
+  }
+  if (b.lat !== undefined) {
+    row.lat = b.lat != null && Number.isFinite(b.lat) ? b.lat : null;
+  }
+  if (b.lng !== undefined) {
+    row.lng = b.lng != null && Number.isFinite(b.lng) ? b.lng : null;
+  }
+  if (b.photoUrls !== undefined) {
+    row.photo_urls = Array.isArray(b.photoUrls) ? b.photoUrls : [];
+  }
+  if (b.durationMinutes !== undefined) {
+    row.duration_minutes = b.durationMinutes ?? 60;
+  }
   if (b.depositPaid !== undefined) {
     row.deposit_paid = b.depositPaid;
   }
@@ -259,6 +330,32 @@ function bookingToRow(b: Booking) {
     row.stripe_checkout_session_id = b.stripeCheckoutSessionId || null;
   }
   return row;
+}
+
+function isMissingBookingWorkflowColumn(message: string) {
+  const lower = message.toLowerCase();
+  return (
+    (lower.includes("customer_vehicle_id") ||
+      lower.includes("work_order_id") ||
+      lower.includes("assigned_to") ||
+      lower.includes("location_type") ||
+      lower.includes("problem_description") ||
+      lower.includes("duration_minutes") ||
+      lower.includes("booking_id") ||
+      lower.includes("gate_code") ||
+      lower.includes("access_notes") ||
+      lower.includes("photo_urls") ||
+      lower.includes(" lat") ||
+      lower.includes(".lat") ||
+      lower.includes(" lng") ||
+      lower.includes(".lng") ||
+      lower.includes("column \"lat\"") ||
+      lower.includes("column \"lng\"")) &&
+    (lower.includes("schema cache") ||
+      lower.includes("could not find") ||
+      lower.includes("does not exist") ||
+      lower.includes("column"))
+  );
 }
 
 function rowToInventory(r: Record<string, unknown>): InventoryItem {
@@ -470,6 +567,12 @@ export async function upsertWorkOrder(item: WorkOrder) {
         page: "/admin#work-orders",
       });
       return;
+    }
+
+    if (error && isMissingBookingWorkflowColumn(error.message)) {
+      throw new Error(
+        "Work order booking link column is missing. Run supabase/add-booking-workflow-links.sql in the Supabase SQL editor.",
+      );
     }
 
     throwOnError(error, "Could not save work order");
@@ -935,6 +1038,22 @@ export async function upsertBooking(item: Booking) {
       } = row;
       const retry = await client.from("bookings").upsert(rowWithoutPayment);
       throwOnError(retry.error, "Could not save booking");
+    } else if (error && isMissingBookingWorkflowColumn(error.message)) {
+      const lower = error.message.toLowerCase();
+      if (
+        lower.includes("gate_code") ||
+        lower.includes("access_notes") ||
+        lower.includes("photo_urls") ||
+        lower.includes("column \"lat\"") ||
+        lower.includes("column \"lng\"")
+      ) {
+        throw new Error(
+          "Booking location/media columns are missing. Run supabase/add-booking-media-location.sql in the Supabase SQL editor.",
+        );
+      }
+      throw new Error(
+        "Booking workflow columns are missing. Run supabase/add-booking-workflow-links.sql in the Supabase SQL editor.",
+      );
     } else {
       throwOnError(error, "Could not save booking");
     }
@@ -990,7 +1109,7 @@ export async function markBookingDepositPaid(bookingId: string, sessionId: strin
       throwOnError(updateError, "Could not mark booking deposit paid");
     }
     if (!updated) throw new Error("Booking not found.");
-    const next = rowToBooking(updated as Record<string, unknown>);
+    let next = rowToBooking(updated as Record<string, unknown>);
     void writeAuditEvent({
       module: "payments",
       action: "deposit_paid",
@@ -1004,6 +1123,15 @@ export async function markBookingDepositPaid(bookingId: string, sessionId: strin
       actorKind: "system",
       page: "/api/stripe/webhook",
     });
+    if (next.status === "confirmed" || next.status === "completed") {
+      try {
+        const { orchestrateBookingConfirmed } = await import("@/lib/booking-workflow");
+        const result = await orchestrateBookingConfirmed(next);
+        next = result.booking;
+      } catch (err) {
+        console.warn("[markBookingDepositPaid] orchestration skipped", err);
+      }
+    }
     return next;
   }
   const items = await loadBookings();
@@ -1032,7 +1160,17 @@ export async function markBookingDepositPaid(bookingId: string, sessionId: strin
     actorKind: "system",
     page: "/api/stripe/webhook",
   });
-  return items[idx];
+  let next = items[idx];
+  if (next.status === "confirmed" || next.status === "completed") {
+    try {
+      const { orchestrateBookingConfirmed } = await import("@/lib/booking-workflow");
+      const result = await orchestrateBookingConfirmed(next);
+      next = result.booking;
+    } catch (err) {
+      console.warn("[markBookingDepositPaid] orchestration skipped", err);
+    }
+  }
+  return next;
 }
 
 export async function markWorkOrderInvoicePaid(workOrderId: string, sessionId: string) {
@@ -1415,19 +1553,24 @@ function roleToRow(role: RoleDefinition) {
     name: role.name,
     color: role.color,
     system: role.system,
-    permissions: role.permissions,
+    permissions: {
+      ...role.permissions,
+      ...(role.colorStyle ? { colorStyle: role.colorStyle } : {}),
+    },
     created_at: role.createdAt,
     updated_at: role.updatedAt,
   };
 }
 
 function rowToRole(row: Record<string, unknown>): RoleDefinition {
+  const permissions = row.permissions as RoleDefinition["permissions"] & { colorStyle?: unknown };
   return normalizeRoleDefinition({
     id: String(row.id ?? ""),
     name: String(row.name ?? ""),
     color: String(row.color ?? "slate") as RoleDefinition["color"],
+    colorStyle: permissions?.colorStyle as RoleDefinition["colorStyle"],
     system: Boolean(row.system),
-    permissions: row.permissions as RoleDefinition["permissions"],
+    permissions,
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? ""),
   });
@@ -1512,6 +1655,7 @@ export async function upsertRoleDefinition(
             ...role,
             name: input.name.trim() || role.name,
             color: (input.color as RoleDefinition["color"]) || role.color,
+            colorStyle: "colorStyle" in input ? input.colorStyle : role.colorStyle,
             permissions: {
               ...role.permissions,
               tabs: role.permissions.tabs,
@@ -1556,12 +1700,24 @@ export async function upsertRoleDefinition(
     id = candidate;
   }
 
+  const maxSort = roles.reduce(
+    (max, role) => Math.max(max, typeof role.permissions.sortOrder === "number" ? role.permissions.sortOrder : -10),
+    -10,
+  );
+  const incomingPermissions = input.permissions ?? existing?.permissions;
   const nextRole = normalizeRoleDefinition({
     id,
     name: input.name,
     color: input.color,
+    colorStyle: "colorStyle" in input ? input.colorStyle : existing?.colorStyle,
     system: existing?.system ?? false,
-    permissions: input.permissions ?? existing?.permissions,
+    permissions: {
+      ...normalizeRolePermissions(incomingPermissions),
+      sortOrder:
+        typeof incomingPermissions?.sortOrder === "number"
+          ? incomingPermissions.sortOrder
+          : existing?.permissions.sortOrder ?? maxSort + 10,
+    },
     createdAt: existing?.createdAt || stamp,
     updatedAt: stamp,
   });
@@ -1593,6 +1749,44 @@ export async function upsertRoleDefinition(
     page: "/admin#users",
   });
   return merged;
+}
+
+export async function reorderRoleDefinitions(orderedIds: string[]): Promise<RoleDefinition[]> {
+  const roles = await loadRoleDefinitions();
+  const byId = new Map(roles.map((role) => [role.id, role]));
+  const stamp = new Date().toISOString();
+  const next: RoleDefinition[] = [];
+  let order = 0;
+
+  for (const id of orderedIds) {
+    const role = byId.get(id);
+    if (!role) continue;
+    next.push({
+      ...role,
+      permissions: {
+        ...role.permissions,
+        sortOrder: order,
+      },
+      updatedAt: stamp,
+    });
+    byId.delete(id);
+    order += 10;
+  }
+
+  for (const role of byId.values()) {
+    next.push({
+      ...role,
+      permissions: {
+        ...role.permissions,
+        sortOrder: order,
+      },
+      updatedAt: stamp,
+    });
+    order += 10;
+  }
+
+  await persistRoleDefinitions(next);
+  return mergeRoleDefinitions(next);
 }
 
 export async function deleteRoleDefinition(roleId: string): Promise<RoleDefinition[]> {

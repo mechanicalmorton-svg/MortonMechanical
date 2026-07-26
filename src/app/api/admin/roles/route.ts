@@ -4,9 +4,14 @@ import {
   deleteRoleDefinition,
   ensureDefaultRolesSeeded,
   loadRoleDefinitions,
+  reorderRoleDefinitions,
   upsertRoleDefinition,
 } from "@/lib/shop-data";
-import { isValidRoleColor, normalizeRolePermissions } from "@/lib/role-definitions";
+import {
+  isValidRoleColor,
+  normalizeRoleColorStyle,
+  normalizeRolePermissions,
+} from "@/lib/role-definitions";
 
 export async function GET() {
   return withPermission("roles.view", async () => {
@@ -27,6 +32,7 @@ export async function POST(req: Request) {
       const roles = await upsertRoleDefinition({
         name,
         color: body.color,
+        colorStyle: normalizeRoleColorStyle(body.colorStyle),
         permissions: normalizeRolePermissions(body.permissions),
         system: false,
       });
@@ -43,6 +49,24 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   return withPermission("roles.edit", async () => {
     const body = await req.json().catch(() => ({}));
+
+    if (Array.isArray(body.order)) {
+      const order = body.order
+        .map((value: unknown) => String(value ?? "").trim())
+        .filter(Boolean);
+      if (!order.length) {
+        return NextResponse.json({ error: "Role order is required." }, { status: 400 });
+      }
+      try {
+        return NextResponse.json(await reorderRoleDefinitions(order));
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Could not reorder roles." },
+          { status: 400 },
+        );
+      }
+    }
+
     const id = String(body.id ?? "").trim();
     const name = String(body.name ?? "").trim();
     if (!id) return NextResponse.json({ error: "Role id is required." }, { status: 400 });
@@ -55,6 +79,9 @@ export async function PATCH(req: Request) {
         id,
         name,
         color: body.color,
+        ...(Object.prototype.hasOwnProperty.call(body, "colorStyle")
+          ? { colorStyle: normalizeRoleColorStyle(body.colorStyle) }
+          : {}),
         permissions: body.permissions ? normalizeRolePermissions(body.permissions) : undefined,
       });
       return NextResponse.json(roles);

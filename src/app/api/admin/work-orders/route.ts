@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withPermission } from "@/lib/admin-route";
+import { normalizePlate, normalizeVin, plateValidationError, vinValidationError } from "@/lib/customer-vehicles";
 import { createId, deleteWorkOrder, loadWorkOrders, resolveWorkOrderLinks, upsertWorkOrder } from "@/lib/shop-data";
 import type { Priority, WorkOrder } from "@/lib/shop-types";
 import { normalizeWorkOrderStatus } from "@/lib/work-order-status";
@@ -42,14 +43,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Select a customer for this work order." }, { status: 400 });
       }
 
-      const vin = typeof body.vehicle?.vin === "string" ? body.vehicle.vin.trim() : "";
-      const plate = typeof body.vehicle?.plate === "string" ? body.vehicle.plate.trim() : "";
+      const vin = typeof body.vehicle?.vin === "string" ? normalizeVin(body.vehicle.vin) : "";
+      const plate = typeof body.vehicle?.plate === "string" ? normalizePlate(body.vehicle.plate) : "";
       const assignedTo = typeof body.assignedTo === "string" ? body.assignedTo.trim() : "";
-      if (!vin) {
-        return NextResponse.json({ error: "VIN is required." }, { status: 400 });
+      const vinError = vinValidationError(vin);
+      if (vinError) {
+        return NextResponse.json({ error: vinError }, { status: 400 });
       }
-      if (!plate) {
-        return NextResponse.json({ error: "License plate is required." }, { status: 400 });
+      const plateError = plateValidationError(plate);
+      if (plateError) {
+        return NextResponse.json({ error: plateError }, { status: 400 });
       }
       if (!assignedTo) {
         return NextResponse.json({ error: "Assigned to is required." }, { status: 400 });
@@ -60,6 +63,8 @@ export async function POST(req: Request) {
         id: createId(),
         customerId: optionalId(links.customerId),
         customerVehicleId: optionalId(links.customerVehicleId),
+        bookingId: optionalId(body.bookingId),
+        serviceId: optionalId(body.serviceId) || undefined,
         customerName: links.customerName,
         phone: links.phone,
         vehicle: links.vehicle,
@@ -117,6 +122,9 @@ export async function PATCH(req: Request) {
         customerVehicleId: manualJobVehicle
           ? undefined
           : optionalId(links.customerVehicleId ?? body.customerVehicleId ?? item.customerVehicleId),
+        bookingId: optionalId(body.bookingId) ?? item.bookingId,
+        // Empty string clears the catalog link (workOrderToRow writes null).
+        serviceId: body.serviceId !== undefined ? optionalId(body.serviceId) || "" : item.serviceId,
         customerName: links.customerName || item.customerName,
         phone: links.phone || item.phone,
         vehicle: links.vehicle || item.vehicle,

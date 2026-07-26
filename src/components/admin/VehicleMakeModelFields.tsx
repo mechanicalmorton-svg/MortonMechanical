@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import { inputClass } from "./admin-ui";
 
@@ -16,10 +16,16 @@ type Props = {
   loadingModels?: boolean;
   disabled?: boolean;
   required?: boolean;
+  /** Extra class on each field wrapper (e.g. grid column span). */
+  className?: string;
   onMakeChange: (make: string, makeId: number | null) => void;
   onModelChange: (model: string) => void;
 };
 
+/**
+ * Single searchable make + model fields (catalog suggestions via datalist).
+ * Type freely or pick from the list — no separate filter/select/manual stack.
+ */
 export function VehicleMakeModelFields({
   make,
   makeId,
@@ -30,124 +36,86 @@ export function VehicleMakeModelFields({
   loadingModels = false,
   disabled = false,
   required = false,
+  className,
   onMakeChange,
   onModelChange,
 }: Props) {
-  const [makeFilter, setMakeFilter] = useState("");
-  const [modelFilter, setModelFilter] = useState("");
+  const uid = useId();
+  const makeListId = `${uid}-makes`;
+  const modelListId = `${uid}-models`;
 
-  const filteredMakes = useMemo(() => {
-    const q = makeFilter.trim().toLowerCase();
-    if (!q) return makes;
-    return makes.filter((m) => m.name.toLowerCase().includes(q));
-  }, [makeFilter, makes]);
+  const makeSuggestions = useMemo(() => {
+    const q = make.trim().toLowerCase();
+    if (!q) return makes.slice(0, 80);
+    return makes.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 80);
+  }, [make, makes]);
 
-  const filteredModels = useMemo(() => {
-    const q = modelFilter.trim().toLowerCase();
-    if (!q) return models;
-    return models.filter((m) => m.toLowerCase().includes(q));
-  }, [modelFilter, models]);
+  const modelSuggestions = useMemo(() => {
+    const q = model.trim().toLowerCase();
+    if (!q) return models.slice(0, 80);
+    return models.filter((m) => m.toLowerCase().includes(q)).slice(0, 80);
+  }, [model, models]);
 
-  const selectedMakeId =
-    makeId ?? makes.find((m) => m.name.toLowerCase() === make.toLowerCase())?.id ?? "";
+  const fieldClass = className ?? "";
 
   return (
     <>
-      <label className="block text-sm text-slate-400 sm:col-span-2 lg:col-span-1">
-        Make{required ? <span className="text-amber-400"> *</span> : null}
-        <p className="mt-0.5 text-xs font-normal text-slate-500">Pick from catalog or type any make below.</p>
-        <div className="mt-1 space-y-2">
+      <label className={`block text-sm text-slate-300 ${fieldClass}`}>
+        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          Make{required ? <span className="text-amber-400"> *</span> : null}
+        </span>
+        <div className="relative">
           <input
-            className={inputClass}
-            placeholder={`Filter ${makes.length.toLocaleString()} makes…`}
-            value={makeFilter}
-            onChange={(e) => setMakeFilter(e.target.value)}
-            disabled={disabled || loadingMakes}
-          />
-          <div className="relative">
-            <select
-              className={`${inputClass} pr-9`}
-              value={selectedMakeId}
-              disabled={disabled || loadingMakes || !makes.length}
-              onChange={(e) => {
-                const id = Number(e.target.value);
-                const selected = makes.find((m) => m.id === id);
-                onMakeChange(selected?.name ?? "", selected?.id ?? null);
-                setModelFilter("");
-              }}
-              size={1}
-            >
-              <option value="">{loadingMakes ? "Loading all makes…" : `Select make (${filteredMakes.length.toLocaleString()} shown)`}</option>
-              {filteredMakes.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            {loadingMakes && (
-              <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-500" />
-            )}
-          </div>
-          {make && !makeId && (
-            <p className="text-xs text-amber-300">Using manual make: {make}</p>
-          )}
-          <input
-            className={inputClass}
-            placeholder="Or type make manually"
+            className={`${inputClass} ${loadingMakes ? "pr-9" : ""}`}
+            list={makeListId}
+            placeholder={loadingMakes ? "Loading makes…" : "Start typing, e.g. Ford"}
             value={make}
+            required={required}
+            disabled={disabled || loadingMakes}
+            autoComplete="off"
             onChange={(e) => {
-              onMakeChange(e.target.value, null);
-              setMakeFilter("");
+              const value = e.target.value;
+              const matched = makes.find((m) => m.name.toLowerCase() === value.trim().toLowerCase());
+              onMakeChange(value, matched?.id ?? null);
             }}
-            disabled={disabled}
           />
+          {loadingMakes ? (
+            <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-500" />
+          ) : null}
+          <datalist id={makeListId}>
+            {makeSuggestions.map((m) => (
+              <option key={m.id} value={m.name} />
+            ))}
+          </datalist>
         </div>
+        {make && !makeId && !loadingMakes ? (
+          <p className="mt-1 text-[11px] text-slate-500">Custom make (not from catalog)</p>
+        ) : null}
       </label>
 
-      <label className="block text-sm text-slate-400 sm:col-span-2 lg:col-span-1">
-        Model{required ? <span className="text-amber-400"> *</span> : null}
-        <p className="mt-0.5 text-xs font-normal text-slate-500">Pick from catalog or type any model.</p>
-        <div className="mt-1 space-y-2">
+      <label className={`block text-sm text-slate-300 ${fieldClass}`}>
+        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          Model{required ? <span className="text-amber-400"> *</span> : null}
+        </span>
+        <div className="relative">
           <input
-            className={inputClass}
-            placeholder={make ? `Filter ${models.length.toLocaleString()} models…` : "Select a make first"}
-            value={modelFilter}
-            onChange={(e) => setModelFilter(e.target.value)}
-            disabled={disabled || !make || loadingModels}
-          />
-          <div className="relative">
-            <select
-              className={`${inputClass} pr-9`}
-              value={model}
-              disabled={disabled || !make || loadingModels}
-              onChange={(e) => onModelChange(e.target.value)}
-            >
-              <option value="">
-                {!make
-                  ? "Select make first"
-                  : loadingModels
-                    ? "Loading all models…"
-                    : models.length
-                      ? `Select model (${filteredModels.length.toLocaleString()} shown)`
-                      : "No models found — type below"}
-              </option>
-              {filteredModels.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            {loadingModels && (
-              <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-500" />
-            )}
-          </div>
-          <input
-            className={inputClass}
-            placeholder="Or type model manually"
+            className={`${inputClass} ${loadingModels ? "pr-9" : ""}`}
+            list={modelListId}
+            placeholder={!make.trim() ? "Enter make first" : loadingModels ? "Loading models…" : "Start typing, e.g. F-150"}
             value={model}
+            required={required}
+            disabled={disabled || !make.trim() || loadingModels}
+            autoComplete="off"
             onChange={(e) => onModelChange(e.target.value)}
-            disabled={disabled || !make}
           />
+          {loadingModels ? (
+            <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-500" />
+          ) : null}
+          <datalist id={modelListId}>
+            {modelSuggestions.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
         </div>
       </label>
     </>

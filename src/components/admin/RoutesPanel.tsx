@@ -87,7 +87,9 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
   }
 
   async function toggleStop(routeId: string, stopId: string, stops: RouteStop[]) {
-    const updated = stops.map((stop) => (stop.id === stopId ? { ...stop, completed: !stop.completed } : stop));
+    const target = stops.find((stop) => stop.id === stopId);
+    const nextCompleted = !target?.completed;
+    const updated = stops.map((stop) => (stop.id === stopId ? { ...stop, completed: nextCompleted } : stop));
     const { error: message } = await adminSend("/api/admin/routes", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -97,8 +99,23 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
         status: updated.every((stop) => stop.completed) ? "completed" : "in_progress",
       }),
     });
-    if (message) toast.error(message);
-    else load();
+    if (message) {
+      toast.error(message);
+      return;
+    }
+
+    if (nextCompleted && target?.bookingId && target.workOrderId) {
+      const bookingRes = await adminSend("/api/admin/bookings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: target.bookingId, status: "completed" }),
+      });
+      if (bookingRes.error) {
+        toast.error(bookingRes.error);
+      }
+    }
+
+    load();
   }
 
   async function remove(id: string) {
@@ -275,6 +292,24 @@ export function RoutesPanel({ todayOnly, userId }: Props) {
                         <span className="truncate">{stop.address}</span>
                       </p>
                       <p className="text-xs text-slate-500">{stop.time} · {stop.service}</p>
+                      {stop.notes ? <p className="mt-1 text-[11px] text-amber-200/90">{stop.notes}</p> : null}
+                      {stop.lat != null && stop.lng != null ? (
+                        <a
+                          href={`https://maps.google.com/?q=${stop.lat},${stop.lng}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-300 hover:text-sky-200"
+                        >
+                          Open GPS pin
+                        </a>
+                      ) : null}
+                      {stop.bookingId || stop.workOrderId ? (
+                        <p className="mt-1 text-[11px] text-indigo-300/90">
+                          {stop.bookingId ? "From booking" : null}
+                          {stop.bookingId && stop.workOrderId ? " · " : null}
+                          {stop.workOrderId ? "Work order linked" : null}
+                        </p>
+                      ) : null}
                     </div>
                     <Can permission="routes.edit">
                       <button

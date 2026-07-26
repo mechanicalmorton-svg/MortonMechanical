@@ -6,6 +6,7 @@ import { isJwtKeyError } from "../auth-errors";
 import { getPublishableKey, getSupabaseUrl, getSupabaseAdmin, isSupabaseAuthConfigured } from "./server";
 import type { StaffRole } from "../shop-types";
 import {
+  isBreakGlassAdminEmail,
   normalizeRolePermissions,
   resolveUserRoles,
   type RolePermissions,
@@ -69,6 +70,7 @@ export type AdminUserRoleSummary = {
   id: string;
   name: string;
   color: string;
+  colorStyle?: import("../role-definitions").RoleColorStyle;
 };
 
 export type AdminUser = {
@@ -331,6 +333,7 @@ async function buildAdminUser(
       id: item.id,
       name: item.name,
       color: item.color,
+      ...(item.colorStyle ? { colorStyle: item.colorStyle } : {}),
     }));
     roleName = resolved.primary.name;
     roleColor = resolved.primary.color;
@@ -398,6 +401,15 @@ async function buildAdminUser(
         }
       : undefined;
 
+  // Break-glass operators always keep full portal access regardless of assigned roles.
+  if (isBreakGlassAdminEmail(email)) {
+    permissions = normalizeRolePermissions({
+      actions: [...getRegisteredKeys()],
+      manageUsers: true,
+      editSiteContent: true,
+    });
+  }
+
   return {
     id: user.id,
     email,
@@ -409,7 +421,8 @@ async function buildAdminUser(
     roleName,
     roleColor,
     permissions,
-    permissionOverrides,
+    // Break-glass accounts ignore deny overrides.
+    permissionOverrides: isBreakGlassAdminEmail(email) ? undefined : permissionOverrides,
     phone,
     avatarUrl,
   };

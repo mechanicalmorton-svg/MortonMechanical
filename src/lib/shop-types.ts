@@ -9,7 +9,47 @@ export type WorkOrderStatus =
   | "cancelled";
 export type Priority = "normal" | "urgent";
 export type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled";
+export type BookingLocationType = "home" | "work" | "business" | "apartment" | "roadside" | "other";
 export type PaymentStatus = "unpaid" | "paid" | "deposit_paid";
+
+export type ShopServiceFaq = { question: string; answer: string };
+export type ShopServicePartRef = { inventoryId?: string; name: string; quantity?: number };
+export type ShopServiceAddon = { name: string; price?: number; description?: string };
+
+/** Operational service catalog item (shop_services). */
+export type ShopService = {
+  id: string;
+  name: string;
+  category: string;
+  description?: string;
+  estimatedDurationMinutes: number;
+  laborHours: number;
+  startingPrice: number;
+  photoUrl?: string;
+  warranty?: string;
+  faqs: ShopServiceFaq[];
+  requiredParts: ShopServicePartRef[];
+  optionalAddons: ShopServiceAddon[];
+  maintenanceIntervalMiles?: number;
+  maintenanceIntervalMonths?: number;
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const SHOP_SERVICE_CATEGORIES = [
+  "Oil Changes",
+  "Brake Repairs",
+  "Diagnostics",
+  "AC Repair",
+  "Suspension",
+  "Steering",
+  "Tires",
+  "Roadside Assistance",
+  "Mobile Diagnostics",
+  "Custom Repairs",
+] as const;
 /** Built-in role ids plus any custom role ids created in User Management. */
 export type StaffRole = string;
 export type BuiltInStaffRole = "owner" | "mechanic" | "dispatcher" | "admin";
@@ -45,6 +85,55 @@ export type CustomerVehicle = {
   notes?: string;
   createdAt: string;
 };
+
+/** Digital glovebox doc on a customer vehicle (registration, insurance, etc.). */
+export type VehicleGloveboxKind = "registration" | "insurance" | "inspection" | "other";
+
+export type VehicleGloveboxDoc = {
+  id: string;
+  customerVehicleId: string;
+  kind: VehicleGloveboxKind;
+  label: string;
+  fileUrl: string;
+  fileName: string;
+  contentType: string;
+  expiresOn?: string;
+  createdAt: string;
+};
+
+export const VEHICLE_GLOVEBOX_KINDS: { id: VehicleGloveboxKind; label: string }[] = [
+  { id: "registration", label: "Registration" },
+  { id: "insurance", label: "Insurance" },
+  { id: "inspection", label: "Inspection" },
+  { id: "other", label: "Other" },
+];
+
+/** Maintenance / service log entry on a customer vehicle. */
+export type VehicleServiceHistoryEntry = {
+  id: string;
+  customerVehicleId: string;
+  performedOn: string;
+  mileage?: number;
+  category: string;
+  summary: string;
+  description?: string;
+  workOrderId?: string;
+  bookingId?: string;
+  createdAt: string;
+};
+
+export const VEHICLE_SERVICE_CATEGORIES = [
+  "Oil Change",
+  "Brakes",
+  "Tires",
+  "Inspection",
+  "Diagnostics",
+  "AC / Heating",
+  "Suspension",
+  "Electrical",
+  "Service",
+  "Other",
+] as const;
 
 export type WorkOrderDocumentKind = "work-order" | "estimate" | "invoice";
 
@@ -108,6 +197,8 @@ export type WorkOrder = {
   id: string;
   customerId?: string;
   customerVehicleId?: string;
+  bookingId?: string;
+  serviceId?: string;
   customerName: string;
   phone: string;
   vehicle: string;
@@ -131,6 +222,10 @@ export type Booking = {
   id: string;
   customerId?: string;
   quoteId?: string;
+  customerVehicleId?: string;
+  workOrderId?: string;
+  serviceId?: string;
+  assignedTo?: string;
   customerName: string;
   phone: string;
   email?: string;
@@ -138,6 +233,18 @@ export type Booking = {
   date: string;
   time: string;
   address?: string;
+  locationType?: BookingLocationType;
+  /** Gate / door / entry code for mobile jobs. */
+  gateCode?: string;
+  /** Parking, pets, building access, etc. */
+  accessNotes?: string;
+  /** Optional GPS pin for the job site. */
+  lat?: number;
+  lng?: number;
+  /** Public Supabase storage URLs for site photos. */
+  photoUrls?: string[];
+  problemDescription?: string;
+  durationMinutes?: number;
   status: BookingStatus;
   notes?: string;
   depositPaid?: boolean;
@@ -259,6 +366,14 @@ export type RouteStop = {
   time: string;
   service: string;
   completed: boolean;
+  /** Optional links when stop was created from booking orchestration. */
+  bookingId?: string;
+  workOrderId?: string;
+  customerId?: string;
+  customerVehicleId?: string;
+  notes?: string;
+  lat?: number;
+  lng?: number;
 };
 
 export type RoutePlan = {
