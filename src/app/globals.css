@@ -265,49 +265,105 @@ body {
 }
 
 .admin-glass-chip--sky {
-  color: rgb(224 242 254);
-  background: linear-gradient(180deg, rgba(56, 189, 248, 0.2), rgba(14, 165, 233, 0.06));
-  border-color: rgba(125, 211, 252, 0.28);
+  color: rgb(240 249 255);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(56, 189, 248, 0.28), rgba(14, 165, 233, 0.08));
+  border-color: rgba(125, 211, 252, 0.4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 0 0 1px rgba(56, 189, 248, 0.08),
+    0 4px 14px rgba(14, 165, 233, 0.12);
 }
 
 .admin-glass-chip--violet {
-  color: rgb(237 233 254);
-  background: linear-gradient(180deg, rgba(167, 139, 250, 0.2), rgba(124, 58, 237, 0.06));
-  border-color: rgba(196, 181, 253, 0.28);
+  color: rgb(245 243 255);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(167, 139, 250, 0.28), rgba(124, 58, 237, 0.08));
+  border-color: rgba(196, 181, 253, 0.4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 0 0 1px rgba(167, 139, 250, 0.1),
+    0 4px 14px rgba(124, 58, 237, 0.14);
 }
 
 .admin-glass-chip--slate {
-  color: rgb(226 232 240);
-  background: linear-gradient(180deg, rgba(148, 163, 184, 0.16), rgba(51, 65, 85, 0.08));
-  border-color: rgba(148, 163, 184, 0.22);
+  color: rgb(248 250 252);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(148, 163, 184, 0.22), rgba(51, 65, 85, 0.1));
+  border-color: rgba(148, 163, 184, 0.34);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 4px 12px rgba(15, 23, 42, 0.2);
 }
 
 .admin-glass-chip--emerald {
-  color: rgb(209 250 229);
-  background: linear-gradient(180deg, rgba(52, 211, 153, 0.18), rgba(16, 185, 129, 0.06));
-  border-color: rgba(110, 231, 183, 0.28);
+  color: rgb(236 253 245);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(52, 211, 153, 0.26), rgba(16, 185, 129, 0.08));
+  border-color: rgba(110, 231, 183, 0.4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 0 0 1px rgba(52, 211, 153, 0.08),
+    0 4px 14px rgba(16, 185, 129, 0.12);
 }
 
 .admin-glass-chip--amber {
-  color: rgb(254 243 199);
-  background: linear-gradient(180deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.06));
-  border-color: rgba(252, 211, 77, 0.28);
+  color: rgb(255 251 235);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(251, 191, 36, 0.28), rgba(245, 158, 11, 0.08));
+  border-color: rgba(252, 211, 77, 0.42);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.18) inset,
+    0 0 0 1px rgba(251, 191, 36, 0.1),
+    0 4px 14px rgba(245, 158, 11, 0.14);
 }
 
 .admin-glass-chip--red {
-  color: rgb(254 226 226);
-  background: linear-gradient(180deg, rgba(248, 113, 113, 0.2), rgba(239, 68, 68, 0.06));
-  border-color: rgba(252, 165, 165, 0.28);
+  color: rgb(254 242 242);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(248, 113, 113, 0.26), rgba(239, 68, 68, 0.08));
+  border-color: rgba(252, 165, 165, 0.4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 0 0 1px rgba(248, 113, 113, 0.1),
+    0 4px 14px rgba(239, 68, 68, 0.12);
 }
 
 .admin-glass-chip--fuchsia {
-  color: rgb(250 232 255);
-  background: linear-gradient(180deg, rgba(232, 121, 249, 0.18), rgba(217, 70, 239, 0.06));
-  border-color: rgba(240, 171, 252, 0.28);
+  color: rgb(253 244 255);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(232, 121, 249, 0.26), rgba(217, 70, 239, 0.08));
+  border-color: rgba(240, 171, 252, 0.4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 0 0 1px rgba(232, 121, 249, 0.1),
+    0 4px 14px rgba(217, 70, 239, 0.12);
+}
+
+.admin-glass-chip--cyan {
+  color: rgb(236 254 255);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14) 0%, transparent 42%),
+    linear-gradient(180deg, rgba(34, 211, 238, 0.26), rgba(6, 182, 212, 0.08));
+  border-color: rgba(103, 232, 249, 0.42);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 0 0 1px rgba(34, 211, 238, 0.1),
+    0 4px 14px rgba(6, 182, 212, 0.12);
 }
 
 .admin-glass-chip--custom {
   color: #fff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 4px 14px rgba(0, 0, 0, 0.18);
 }
 
 .admin-glass-title {

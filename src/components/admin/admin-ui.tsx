@@ -33,8 +33,9 @@ export function RoleBadge({
   const hex = color ? resolveRoleColorHex(color) : undefined;
   const customStyle = isCustom && hex
     ? {
-        background: `linear-gradient(180deg, ${hex}66, ${hex}22)`,
-        borderColor: `${hex}66`,
+        background: `linear-gradient(145deg, rgba(255,255,255,0.16) 0%, transparent 42%), linear-gradient(180deg, ${hex}88, ${hex}28)`,
+        borderColor: `${hex}99`,
+        boxShadow: `0 1px 0 rgba(255,255,255,0.16) inset, 0 0 0 1px ${hex}22, 0 4px 14px ${hex}33`,
       }
     : undefined;
 
@@ -44,7 +45,7 @@ export function RoleBadge({
       style={customStyle}
     >
       <span className="admin-glass-chip__sheen" aria-hidden />
-      <span className="relative z-[1]">{label}</span>
+      <span className="relative z-[1] tracking-[0.08em]">{label}</span>
     </span>
   );
 }

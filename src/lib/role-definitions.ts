@@ -28,6 +28,83 @@ export const DASHBOARD_TAB_OPTIONS = [
 
 export type DashboardTabId = (typeof DASHBOARD_TAB_OPTIONS)[number]["id"];
 
+export type PermissionPage = {
+  id: DashboardTabId;
+  label: string;
+  description?: string;
+};
+
+export type PermissionPageGroup = {
+  id: string;
+  label: string;
+  description: string;
+  /** When true, UI shows a section select-all control. */
+  selectableAll?: boolean;
+  pages: PermissionPage[];
+};
+
+/** Grouped catalog for the User Management role editor (mirrors sidebar structure). */
+export const PERMISSION_PAGE_GROUPS: PermissionPageGroup[] = [
+  {
+    id: "operations",
+    label: "Operations",
+    description: "Day-to-day shop floor and front desk pages",
+    pages: [
+      { id: "dashboard", label: "Dashboard", description: "Overview, stats, and quick actions" },
+      { id: "work-orders", label: "Work Orders", description: "Create and manage jobs" },
+      { id: "bookings", label: "Bookings", description: "Appointments and schedule" },
+      { id: "quotes", label: "Quote Requests", description: "Incoming website quote leads" },
+    ],
+  },
+  {
+    id: "inventory",
+    label: "Inventory",
+    description: "Parts stock and low-stock alerts",
+    selectableAll: true,
+    pages: [
+      { id: "inventory-all", label: "All parts", description: "Full inventory catalog" },
+      { id: "inventory-low", label: "Low stock", description: "Items at or below minimum" },
+    ],
+  },
+  {
+    id: "fleet-routes",
+    label: "Fleet & Routes",
+    description: "Vehicles on the road and daily routes",
+    selectableAll: true,
+    pages: [
+      { id: "fleet", label: "Fleet Management", description: "Shop vehicles and status" },
+      { id: "routes-manager", label: "Route manager", description: "Plan and assign routes" },
+      { id: "routes-today", label: "My route today", description: "Assigned stops for today" },
+    ],
+  },
+  {
+    id: "admin",
+    label: "Administration",
+    description: "Sensitive shop admin pages",
+    pages: [
+      { id: "users", label: "User Management", description: "Staff accounts and roles" },
+      { id: "site-contents", label: "Site Contents", description: "Public website content" },
+      { id: "audit-logs", label: "Audit Logs", description: "Who changed what and when" },
+    ],
+  },
+];
+
+export function dashboardTabLabel(tabId: string) {
+  const fromGroups = PERMISSION_PAGE_GROUPS.flatMap((group) => group.pages).find((page) => page.id === tabId);
+  if (fromGroups) return fromGroups.label;
+  const fromOptions = DASHBOARD_TAB_OPTIONS.find((tab) => tab.id === tabId);
+  return fromOptions?.label ?? tabId;
+}
+
+export function toggleTabsInSet(current: string[], tabIds: string[], enabled: boolean) {
+  const next = new Set(current);
+  for (const id of tabIds) {
+    if (enabled) next.add(id);
+    else next.delete(id);
+  }
+  return [...next];
+}
+
 export type RolePermissions = {
   tabs: string[];
   manageUsers: boolean;
@@ -46,14 +123,14 @@ export type RoleDefinition = {
 };
 
 export const ROLE_COLOR_CHIP: Record<RoleColor, string> = {
-  sky: "admin-glass-chip--sky text-sky-100",
-  violet: "admin-glass-chip--violet text-violet-100",
-  slate: "admin-glass-chip--slate text-slate-100",
-  emerald: "admin-glass-chip--emerald text-emerald-100",
-  amber: "admin-glass-chip--amber text-amber-100",
-  red: "admin-glass-chip--red text-red-100",
-  fuchsia: "admin-glass-chip--fuchsia text-fuchsia-100",
-  cyan: "admin-glass-chip--sky text-sky-100",
+  sky: "admin-glass-chip--sky text-sky-50",
+  violet: "admin-glass-chip--violet text-violet-50",
+  slate: "admin-glass-chip--slate text-slate-50",
+  emerald: "admin-glass-chip--emerald text-emerald-50",
+  amber: "admin-glass-chip--amber text-amber-50",
+  red: "admin-glass-chip--red text-red-50",
+  fuchsia: "admin-glass-chip--fuchsia text-fuchsia-50",
+  cyan: "admin-glass-chip--cyan text-cyan-50",
 };
 
 export const ROLE_COLOR_HEX: Record<RoleColor, string> = {

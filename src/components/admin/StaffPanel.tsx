@@ -4,22 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Shield, Trash2, Users } from "lucide-react";
 import type { StaffMember, StaffRole } from "@/lib/shop-types";
 import {
-  DASHBOARD_TAB_OPTIONS,
-  ROLE_COLORS,
-  ROLE_COLOR_CHIP,
-  isHexColor,
+  dashboardTabLabel,
   isProtectedRole,
-  isRoleColor,
   isValidRoleColor,
   normalizeRoleColor,
   normalizeRoleIds,
   pickPrimaryRoleId,
-  resolveRoleColorHex,
   type RoleDefinition,
   type RolePermissions,
 } from "@/lib/role-definitions";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
+import { RoleAccessEditor } from "./RoleAccessEditor";
 import { EmptyState, PageHeader, RoleBadge, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 
 function formatWhen(value?: string | null) {
@@ -230,16 +226,6 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
     setShowRoleForm(true);
   }
 
-  function toggleTab(tabId: string) {
-    setRoleForm((prev) => {
-      const exists = prev.tabs.includes(tabId);
-      return {
-        ...prev,
-        tabs: exists ? prev.tabs.filter((tab) => tab !== tabId) : [...prev.tabs, tabId],
-      };
-    });
-  }
-
   async function saveRole(e: React.FormEvent) {
     e.preventDefault();
     const color = normalizeRoleColor(roleForm.color);
@@ -422,7 +408,7 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="User Management"
-        subtitle="Assign multiple roles per person. Everyone uses the same /admin login — sidebar pages combine from all their roles."
+        subtitle="Design roles with exact page access, then assign one or more roles to each staff member. Sidebar pages combine from every role they hold."
         actions={
           <>
             <button type="button" onClick={openCreateRole} className={btnSecondary}>
@@ -448,41 +434,93 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
       ) : null}
 
       {!loading && roles.length ? (
-        <section className="mb-6 overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/30">
-          <div className="flex items-center justify-between border-b border-slate-800/80 px-4 py-3">
+        <section className="admin-glass admin-glass-panel mb-6 overflow-hidden rounded-2xl">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-800/70 px-5 py-4">
             <div>
-              <h2 className="text-sm font-semibold text-white">Roles</h2>
-              <p className="text-xs text-slate-500">Customize name, color, and dashboard access.</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-400/80">Access control</p>
+              <h2 className="mt-1 text-base font-semibold text-white">Roles & page permissions</h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Fully customize which dashboard pages each role can see.
+              </p>
             </div>
+            <button type="button" onClick={openCreateRole} className={`${btnSecondary} !py-2`}>
+              <Plus className="h-3.5 w-3.5" />
+              New role
+            </button>
           </div>
           <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-            {roles.map((role) => (
-              <article
-                key={role.id}
-                className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <RoleBadge role={role.id} roleName={role.name} roleColor={role.color} />
-                    <p className="mt-2 text-xs text-slate-500">
-                      {role.permissions.tabs.length} page{role.permissions.tabs.length === 1 ? "" : "s"}
-                      {role.permissions.manageUsers ? " · Manage users" : ""}
-                      {role.permissions.editSiteContent ? " · Site contents" : ""}
-                    </p>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <button type="button" className={btnSecondary} onClick={() => openEditRole(role)} aria-label={`Edit ${role.name}`}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    {!isProtectedRole(role.id) ? (
-                      <button type="button" className={btnDanger} onClick={() => removeRole(role)} aria-label={`Delete ${role.name}`}>
-                        <Trash2 className="h-3.5 w-3.5" />
+            {roles.map((role) => {
+              const pagePreview = role.permissions.tabs.slice(0, 4).map(dashboardTabLabel);
+              const extraPages = Math.max(0, role.permissions.tabs.length - pagePreview.length);
+              return (
+                <article
+                  key={role.id}
+                  className="group relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900/70 via-slate-950/50 to-slate-950/80 p-4 transition hover:border-amber-500/25 hover:shadow-lg hover:shadow-amber-950/10"
+                >
+                  <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-amber-500/5 blur-2xl transition group-hover:bg-amber-500/10" />
+                  <div className="relative flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <RoleBadge role={role.id} roleName={role.name} roleColor={role.color} />
+                      <p className="mt-3 text-xs font-medium text-slate-300">
+                        {role.permissions.tabs.length} page{role.permissions.tabs.length === 1 ? "" : "s"} unlocked
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {pagePreview.map((label) => (
+                          <span
+                            key={label}
+                            className="rounded-full border border-slate-700/70 bg-slate-950/60 px-2 py-0.5 text-[10px] font-medium text-slate-400"
+                          >
+                            {label}
+                          </span>
+                        ))}
+                        {extraPages > 0 ? (
+                          <span className="rounded-full border border-slate-700/70 bg-slate-950/60 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                            +{extraPages} more
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {role.permissions.manageUsers ? (
+                          <span className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-100">
+                            Manage users
+                          </span>
+                        ) : null}
+                        {role.permissions.editSiteContent ? (
+                          <span className="rounded-full border border-fuchsia-400/25 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-fuchsia-100">
+                            Site contents
+                          </span>
+                        ) : null}
+                        {isProtectedRole(role.id) ? (
+                          <span className="rounded-full border border-sky-400/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-100">
+                            Full access
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col gap-1.5">
+                      <button
+                        type="button"
+                        className={`${btnSecondary} !h-9 !w-9 !px-0`}
+                        onClick={() => openEditRole(role)}
+                        aria-label={`Edit ${role.name}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
                       </button>
-                    ) : null}
+                      {!isProtectedRole(role.id) ? (
+                        <button
+                          type="button"
+                          className={`${btnDanger} !h-9 !w-9 !px-0`}
+                          onClick={() => removeRole(role)}
+                          aria-label={`Delete ${role.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -608,150 +646,11 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
           setShowRoleForm(false);
           setEditingRoleId(null);
         }}
-        title={editingRoleId ? "Edit Role" : "Add Role"}
+        title={editingRoleId ? "Edit Role Access" : "Create Role"}
         wide
       >
         <form onSubmit={saveRole} className="space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm text-slate-300 sm:col-span-2">
-              <span className="font-medium text-slate-200">Role name</span>
-              <input
-                className={`${inputClass} mt-1.5`}
-                value={roleForm.name}
-                onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
-                placeholder="e.g. Service Advisor"
-                required
-              />
-            </label>
-            <div className="sm:col-span-2">
-              <p className="text-sm font-medium text-slate-200">Badge color</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {ROLE_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setRoleForm({ ...roleForm, color })}
-                    className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ring-2 transition ${
-                      ROLE_COLOR_CHIP[color]
-                    } ${roleForm.color === color ? "ring-white/50" : "ring-transparent opacity-80 hover:opacity-100"}`}
-                  >
-                    {color}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <label className="flex items-center gap-2 text-sm text-slate-300">
-                  <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400">Custom</span>
-                  <input
-                    type="color"
-                    value={resolveRoleColorHex(roleForm.color)}
-                    onChange={(e) => setRoleForm({ ...roleForm, color: normalizeRoleColor(e.target.value) })}
-                    className="h-9 w-12 cursor-pointer rounded-md border border-slate-700 bg-slate-950 p-0.5"
-                    aria-label="Custom badge color"
-                  />
-                </label>
-                <input
-                  className={`${inputClass} max-w-[8.5rem] font-mono text-sm uppercase`}
-                  value={isHexColor(roleForm.color) ? roleForm.color : isRoleColor(roleForm.color) ? resolveRoleColorHex(roleForm.color) : roleForm.color}
-                  onChange={(e) => {
-                    const next = e.target.value.trim();
-                    setRoleForm({ ...roleForm, color: next.startsWith("#") || isRoleColor(next) ? next : `#${next}` });
-                  }}
-                  onBlur={() => {
-                    if (isValidRoleColor(roleForm.color)) {
-                      setRoleForm((prev) => ({ ...prev, color: normalizeRoleColor(prev.color) }));
-                    }
-                  }}
-                  placeholder="#RRGGBB"
-                  spellCheck={false}
-                  aria-label="Hex color"
-                />
-                {isHexColor(normalizeRoleColor(roleForm.color)) && !isRoleColor(roleForm.color) ? (
-                  <span className="text-xs text-slate-500">Using custom hex</span>
-                ) : null}
-              </div>
-              <div className="mt-3">
-                <RoleBadge role={roleForm.id || "custom"} roleName={roleForm.name || "Role preview"} roleColor={normalizeRoleColor(roleForm.color)} />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-sm font-medium text-slate-200">Pages this role can see on the dashboard</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Choose what Mechanics, Dispatchers, and other roles see in the shared dashboard. Unchecked pages stay hidden from their sidebar.
-            </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {DASHBOARD_TAB_OPTIONS.map((tab) => {
-                const checked = roleForm.tabs.includes(tab.id);
-                const disabled = ownerLocked;
-                return (
-                  <label
-                    key={tab.id}
-                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
-                      checked
-                        ? "border-amber-500/30 bg-amber-500/10 text-amber-50"
-                        : "border-slate-800 bg-slate-950/40 text-slate-300"
-                    } ${disabled ? "opacity-70" : "cursor-pointer"}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked || ownerLocked}
-                      disabled={disabled}
-                      onChange={() => toggleTab(tab.id)}
-                      className="accent-amber-500"
-                    />
-                    {tab.label}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200">
-              <input
-                type="checkbox"
-                checked={ownerLocked || roleForm.manageUsers}
-                disabled={ownerLocked}
-                onChange={(e) =>
-                  setRoleForm((prev) => ({
-                    ...prev,
-                    manageUsers: e.target.checked,
-                    tabs: e.target.checked
-                      ? [...new Set([...prev.tabs, "users"])]
-                      : prev.tabs,
-                  }))
-                }
-                className="accent-amber-500"
-              />
-              Can manage users & roles
-            </label>
-            <label className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200">
-              <input
-                type="checkbox"
-                checked={ownerLocked || roleForm.editSiteContent}
-                disabled={ownerLocked}
-                onChange={(e) =>
-                  setRoleForm((prev) => ({
-                    ...prev,
-                    editSiteContent: e.target.checked,
-                    tabs: e.target.checked
-                      ? [...new Set([...prev.tabs, "site-contents"])]
-                      : prev.tabs,
-                  }))
-                }
-                className="accent-amber-500"
-              />
-              Can edit Site Contents
-            </label>
-          </div>
-
-          {ownerLocked ? (
-            <p className="text-xs text-sky-200/80">
-              Founder always keeps full access. You can still rename the badge and change its color.
-            </p>
-          ) : null}
+          <RoleAccessEditor value={roleForm} onChange={setRoleForm} ownerLocked={ownerLocked} />
 
           <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
             <button
@@ -773,92 +672,118 @@ export function StaffPanel({ currentUserId, onSelfUpdated }: Props) {
         </form>
       </AdminModal>
 
-      {loading ? (
-        <p className="text-slate-500">Loading…</p>
-      ) : !items.length ? (
-        <EmptyState
-          icon={Users}
-          title="No portal users yet"
-          text="Add a @mortonsmechanical.com user here or create one in Supabase Authentication — they will appear automatically."
-        />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {items.map((s) => {
-            const assignedIds = memberRoleIds(s);
-            const assignedRoles = assignedIds
-              .map((id) => roles.find((item) => item.id === id))
-              .filter((item): item is RoleDefinition => Boolean(item));
-            const isSelf = Boolean(currentUserId && s.id === currentUserId);
-            const isLastOwner = s.active && memberHasOwnerRole(s) && activeOwnerCount <= 1;
-            return (
-              <article key={s.id} className="rounded-2xl border border-slate-800/80 bg-slate-900/40 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-pink-600/20 text-sm font-bold text-amber-300">
-                      {s.name.split(" ").map((p) => p[0]).join("").slice(0, 2)}
-                    </span>
-                    <div>
-                      <p className="font-semibold text-white">
-                        {s.name}
-                        {isSelf ? <span className="ml-2 text-xs font-normal text-slate-500">(you)</span> : null}
-                      </p>
-                      <p className="text-sm text-slate-400">{s.email}</p>
-                      <p className="text-xs text-slate-500">{s.phone || "No phone"} · Last sign-in: {formatWhen(s.lastSignIn)}</p>
-                    </div>
-                  </div>
-                  <StatusBadge status={s.active ? "active" : "retired"} />
-                </div>
-                <div className="mt-4 space-y-3">
-                  <div className="flex flex-wrap gap-1.5">
-                    {assignedRoles.length
-                      ? assignedRoles.map((role) => (
-                          <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} />
-                        ))
-                      : assignedIds.map((id) => <RoleBadge key={id} role={id} />)}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => openEditUser(s)} className={btnPrimary}>
-                      <Pencil className="h-3.5 w-3.5" />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActive(s, !s.active)}
-                      className={btnSecondary}
-                      disabled={isSelf || (s.active && isLastOwner)}
-                      title={
-                        isSelf
-                          ? "You cannot deactivate yourself"
-                          : s.active && isLastOwner
-                            ? "Cannot deactivate the last Founder"
-                            : undefined
-                      }
-                    >
-                      {s.active ? "Deactivate" : "Activate"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => remove(s.id, s.email)}
-                      className={btnDanger}
-                      disabled={isSelf || isLastOwner}
-                      title={
-                        isSelf
-                          ? "You cannot delete yourself"
-                          : isLastOwner
-                            ? "Cannot delete the last Founder"
-                            : `Delete ${s.email}`
-                      }
-                      aria-label={`Delete ${s.email}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+      <section className="admin-glass admin-glass-panel overflow-hidden rounded-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800/70 px-5 py-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-400/80">Team</p>
+            <h2 className="mt-1 text-base font-semibold text-white">Portal users</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Assign roles to control which pages each person can open.
+            </p>
+          </div>
+          <button type="button" onClick={openCreateUser} className={`${btnPrimary} !py-2`}>
+            <Plus className="h-3.5 w-3.5" />
+            Add user
+          </button>
         </div>
-      )}
+        <div className="p-4">
+          {loading ? (
+            <p className="text-slate-500">Loading…</p>
+          ) : !items.length ? (
+            <EmptyState
+              icon={Users}
+              title="No portal users yet"
+              text="Add a @mortonsmechanical.com user here or create one in Supabase Authentication — they will appear automatically."
+            />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {items.map((s) => {
+                const assignedIds = memberRoleIds(s);
+                const assignedRoles = assignedIds
+                  .map((id) => roles.find((item) => item.id === id))
+                  .filter((item): item is RoleDefinition => Boolean(item));
+                const isSelf = Boolean(currentUserId && s.id === currentUserId);
+                const isLastOwner = s.active && memberHasOwnerRole(s) && activeOwnerCount <= 1;
+                return (
+                  <article
+                    key={s.id}
+                    className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900/60 via-slate-950/40 to-slate-950/70 p-4 transition hover:border-slate-700"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-pink-600/20 text-sm font-bold text-amber-300 ring-1 ring-amber-500/20">
+                          {s.name
+                            .split(" ")
+                            .map((p) => p[0])
+                            .join("")
+                            .slice(0, 2)}
+                        </span>
+                        <div>
+                          <p className="font-semibold text-white">
+                            {s.name}
+                            {isSelf ? <span className="ml-2 text-xs font-normal text-slate-500">(you)</span> : null}
+                          </p>
+                          <p className="text-sm text-slate-400">{s.email}</p>
+                          <p className="text-xs text-slate-500">
+                            {s.phone || "No phone"} · Last sign-in: {formatWhen(s.lastSignIn)}
+                          </p>
+                        </div>
+                      </div>
+                      <StatusBadge status={s.active ? "active" : "retired"} />
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {assignedRoles.length
+                          ? assignedRoles.map((role) => (
+                              <RoleBadge key={role.id} role={role.id} roleName={role.name} roleColor={role.color} />
+                            ))
+                          : assignedIds.map((id) => <RoleBadge key={id} role={id} />)}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => openEditUser(s)} className={btnPrimary}>
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActive(s, !s.active)}
+                          className={btnSecondary}
+                          disabled={isSelf || (s.active && isLastOwner)}
+                          title={
+                            isSelf
+                              ? "You cannot deactivate yourself"
+                              : s.active && isLastOwner
+                                ? "Cannot deactivate the last Founder"
+                                : undefined
+                          }
+                        >
+                          {s.active ? "Deactivate" : "Activate"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => remove(s.id, s.email)}
+                          className={btnDanger}
+                          disabled={isSelf || isLastOwner}
+                          title={
+                            isSelf
+                              ? "You cannot delete yourself"
+                              : isLastOwner
+                                ? "Cannot delete the last Founder"
+                                : `Delete ${s.email}`
+                          }
+                          aria-label={`Delete ${s.email}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
