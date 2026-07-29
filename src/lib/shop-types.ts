@@ -147,6 +147,8 @@ export type WorkOrderPartLine = {
   description: string;
   partNumber: string;
   unitPrice: number | null;
+  /** Inventory item id when pulled from stock — used to restock on remove. */
+  inventoryId?: string;
 };
 
 export type WorkOrderDocumentFields = {

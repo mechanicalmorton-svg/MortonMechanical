@@ -41,7 +41,24 @@ function emptyPartLines(count = PART_ROW_COUNT): WorkOrderPartLine[] {
     description: "",
     partNumber: "",
     unitPrice: null,
+    inventoryId: undefined,
   }));
+}
+
+export function isFilledPartLine(line: WorkOrderPartLine) {
+  return Boolean(
+    line.description?.trim() ||
+      line.partNumber?.trim() ||
+      (line.qty != null && Number(line.qty) > 0),
+  );
+}
+
+/** Filled part rows on the work-order document, with their document indices. */
+export function getWorkOrderParts(order: WorkOrder) {
+  const fields = resolveDocumentFields(order, "work-order");
+  return fields.parts
+    .map((line, index) => ({ index, line }))
+    .filter(({ line }) => isFilledPartLine(line));
 }
 
 export function formatOrderNumber(id: string) {
@@ -108,6 +125,7 @@ function ensurePartRows(parts?: WorkOrderPartLine[]) {
       description: line?.description ?? "",
       partNumber: line?.partNumber ?? "",
       unitPrice: line?.unitPrice ?? null,
+      inventoryId: line?.inventoryId || undefined,
     };
   });
   return next;

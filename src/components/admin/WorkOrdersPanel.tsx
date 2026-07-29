@@ -8,10 +8,11 @@ import {
   ChevronDown,
   ClipboardList,
   Clock,
+  CreditCard,
   Eye,
   FileText,
+  Package,
   Pencil,
-  CreditCard,
   Plus,
   Receipt,
   RefreshCw,
@@ -19,7 +20,7 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import type { StaffMember, WorkOrder, WorkOrderDocumentKind, WorkOrderStatus } from "@/lib/shop-types";
+import type { InventoryItem, StaffMember, WorkOrder, WorkOrderDocumentKind, WorkOrderStatus } from "@/lib/shop-types";
 import {
   WORK_ORDER_DONE_STATUSES,
   WORK_ORDER_IN_SHOP_STATUSES,
@@ -28,11 +29,18 @@ import {
   WORK_ORDER_STATUS_LABELS,
   isWorkOrderClosed,
 } from "@/lib/work-order-status";
+import {
+  PART_ROW_COUNT,
+  getWorkOrderParts,
+  partLineTotal,
+  resolveDocumentFields,
+} from "@/lib/work-order-documents";
 import { adminGet, adminSend, asStaffList } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
 import { WorkOrderDocumentEditor } from "./WorkOrderDocumentEditor";
 import { WorkOrderFormModal } from "./WorkOrderFormModal";
+import { InventoryPartPickerModal } from "./InventoryPartPickerModal";
 import { EmptyState, PageHeader, StatusBadge, btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { Can } from "./permissions";
 
@@ -158,6 +166,8 @@ export function WorkOrdersPanel() {
   const [search, setSearch] = useState("");
   const [filterAssigned, setFilterAssigned] = useState("");
   const [createdOn, setCreatedOn] = useState("");
+  const [showPartPicker, setShowPartPicker] = useState(false);
+  const [addingPart, setAddingPart] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -317,6 +327,92 @@ export function WorkOrdersPanel() {
     setDocumentEditor({ kind, order });
   }
 
+  async function addInventoryPartToWorkOrder(item: InventoryItem, qty: number) {
+    if (!viewOrder) return;
+    setAddingPart(true);
+    try {
+      const fields = resolveDocumentFields(viewOrder, "work-order", {
+        advisorName: staffName(viewOrder.assignedTo),
+      });
+      const parts = fields.parts.map((line) => ({ ...line }));
+      const sameIdx = parts.findIndex(
+        (line) =>
+          (line.inventoryId && line.inventoryId === item.id) ||
+          (Boolean(line.description || line.partNumber) &&
+            line.description.trim().toLowerCase() === item.name.trim().toLowerCase() &&
+            (line.partNumber || "").trim().toLowerCase() ===
+              (item.partNumber || item.sku || "").trim().toLowerCase()),
+      );
+      const emptyIdx = parts.findIndex(
+        (line) => !line.description.trim() && !line.partNumber.trim() && (line.qty == null || line.qty === 0),
+      );
+
+      if (sameIdx >= 0) {
+        parts[sameIdx] = {
+          ...parts[sameIdx],
+          qty: (parts[sameIdx].qty ?? 0) + qty,
+          unitPrice: parts[sameIdx].unitPrice ?? item.sellPrice,
+          inventoryId: parts[sameIdx].inventoryId || item.id,
+        };
+      } else if (emptyIdx >= 0) {
+        parts[emptyIdx] = {
+          qty,
+          description: item.name,
+          partNumber: item.partNumber || item.sku || "",
+          unitPrice: item.sellPrice ?? 0,
+          inventoryId: item.id,
+        };
+      } else {
+        toast.error(`Work order part list is full (${PART_ROW_COUNT} lines). Open Work order to edit lines.`);
+        return;
+      }
+
+      const documentData = {
+        ...(viewOrder.documentData ?? {}),
+        documents: {
+          ...(viewOrder.documentData?.documents ?? {}),
+          "work-order": {
+            ...fields,
+            parts,
+          },
+        },
+      };
+
+      const { data, error } = await adminSend<WorkOrder>("/api/admin/work-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: viewOrder.id, documentData }),
+      });
+      if (error) {
+        toast.error(error);
+        return;
+      }
+
+      const { error: stockError } = await adminSend("/api/admin/inventory", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: item.id,
+          quantity: Math.max(0, item.quantity - qty),
+        }),
+      });
+      if (stockError) {
+        toast.error(`Part added to work order, but stock update failed: ${stockError}`);
+      } else {
+        toast.success(`Added ${qty}× ${item.name} and pulled from inventory.`);
+      }
+
+      const updated = data ?? { ...viewOrder, documentData };
+      setViewOrder(updated);
+      setItems((current) => current.map((order) => (order.id === updated.id ? updated : order)));
+      if (documentEditor?.order.id === updated.id) {
+        setDocumentEditor({ ...documentEditor, order: updated });
+      }
+    } finally {
+      setAddingPart(false);
+    }
+  }
+
   function toggleStatusFilter(next: StatusFilter) {
     setStatusFilter((current) => (current === next ? null : next));
   }
@@ -347,19 +443,6 @@ export function WorkOrdersPanel() {
       toast.success("Work order updated.");
       load();
     }
-  }
-
-  async function complete(id: string) {
-    const current = items.find((order) => order.id === id);
-    const input = window.prompt("Total charge for this job ($)?", String(current?.revenue ?? 0));
-    if (input === null) return;
-    const revenue = Number(input);
-    if (Number.isNaN(revenue) || revenue < 0) {
-      toast.error("Enter a valid total charge.");
-      return;
-    }
-    await patch(id, { status: "completed", revenue });
-    setViewOrder(null);
   }
 
   async function remove(id: string) {
@@ -586,6 +669,11 @@ export function WorkOrdersPanel() {
           <WorkOrderFormModal
             onClose={closeFormModal}
             onSaved={load}
+            onOrderUpdated={(updated) => {
+              setItems((current) => current.map((order) => (order.id === updated.id ? updated : order)));
+              setEditingOrder(updated);
+              if (viewOrder?.id === updated.id) setViewOrder(updated);
+            }}
             editingOrder={editingOrder}
             staff={staff}
           />
@@ -609,7 +697,15 @@ export function WorkOrdersPanel() {
         />
       ) : null}
 
-      <AdminModal open={!!viewOrder} onClose={() => setViewOrder(null)} title={viewOrder ? formatOrderNumber(viewOrder.id) : "Work Order"} wide>
+      <InventoryPartPickerModal
+        open={showPartPicker && Boolean(viewOrder)}
+        stacked
+        busy={addingPart}
+        onClose={() => setShowPartPicker(false)}
+        onPick={addInventoryPartToWorkOrder}
+      />
+
+      <AdminModal open={!!viewOrder} onClose={() => { setShowPartPicker(false); setViewOrder(null); }} title={viewOrder ? formatOrderNumber(viewOrder.id) : "Work Order"} wide>
         {viewOrder && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -658,6 +754,39 @@ export function WorkOrdersPanel() {
                 <dt className="text-xs uppercase tracking-wide text-slate-500">Description</dt>
                 <dd className="mt-1 text-sm text-slate-300">{viewOrder.service}</dd>
               </div>
+              {(() => {
+                const parts = getWorkOrderParts(viewOrder);
+                if (!parts.length) return null;
+                return (
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs uppercase tracking-wide text-slate-500">Parts</dt>
+                    <dd className="mt-2 overflow-hidden rounded-xl border border-slate-800">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-950/60 text-xs uppercase tracking-wide text-slate-500">
+                          <tr>
+                            <th className="px-3 py-2 font-medium">Qty</th>
+                            <th className="px-3 py-2 font-medium">Part</th>
+                            <th className="px-3 py-2 font-medium">#</th>
+                            <th className="px-3 py-2 text-right font-medium">Line</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/80">
+                          {parts.map(({ index, line }) => (
+                            <tr key={`${index}-${line.partNumber}-${line.description}`} className="text-slate-300">
+                              <td className="px-3 py-2 tabular-nums">{line.qty ?? "—"}</td>
+                              <td className="px-3 py-2">{line.description || "—"}</td>
+                              <td className="px-3 py-2 text-slate-400">{line.partNumber || "—"}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-emerald-300">
+                                ${partLineTotal(line).toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </dd>
+                  </div>
+                );
+              })()}
               {viewOrder.customerConcern ? (
                 <div className="sm:col-span-2">
                   <dt className="text-xs uppercase tracking-wide text-slate-500">Customer concern</dt>
@@ -678,62 +807,6 @@ export function WorkOrdersPanel() {
               ) : null}
             </dl>
             <div className="flex flex-wrap gap-2 border-t border-slate-800 pt-4">
-              <Can permission={["work_orders.edit", "work_orders.status.change"]} mode="any">
-                {(viewOrder.status === "draft" || viewOrder.status === "scheduled") && (
-                  <>
-                    {viewOrder.status === "draft" ? (
-                      <button type="button" onClick={() => patch(viewOrder.id, { status: "scheduled" })} className={btnSecondary}>
-                        Mark scheduled
-                      </button>
-                    ) : null}
-                    <button type="button" onClick={() => patch(viewOrder.id, { status: "in_progress" })} className={btnPrimary}>
-                      Start job
-                    </button>
-                    <button type="button" onClick={() => patch(viewOrder.id, { status: "cancelled" })} className={btnSecondary}>
-                      Cancel
-                    </button>
-                  </>
-                )}
-                {(viewOrder.status === "in_progress" ||
-                  viewOrder.status === "waiting_on_parts" ||
-                  viewOrder.status === "waiting_customer") && (
-                  <>
-                    {viewOrder.status !== "in_progress" ? (
-                      <button type="button" onClick={() => patch(viewOrder.id, { status: "in_progress" })} className={btnSecondary}>
-                        Resume job
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => patch(viewOrder.id, { status: "waiting_on_parts" })}
-                          className={btnSecondary}
-                        >
-                          Waiting on parts
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => patch(viewOrder.id, { status: "waiting_customer" })}
-                          className={btnSecondary}
-                        >
-                          Waiting customer
-                        </button>
-                      </>
-                    )}
-                    <button type="button" onClick={() => complete(viewOrder.id)} className={btnPrimary}>
-                      Complete
-                    </button>
-                    <button type="button" onClick={() => patch(viewOrder.id, { status: "cancelled" })} className={btnSecondary}>
-                      Cancel
-                    </button>
-                  </>
-                )}
-                {viewOrder.status === "completed" && (
-                  <button type="button" onClick={() => patch(viewOrder.id, { status: "delivered" })} className={btnPrimary}>
-                    Mark delivered
-                  </button>
-                )}
-              </Can>
               <Can permission={["work_orders.view", "work_orders.document.edit"]} mode="any">
                 <button type="button" onClick={() => openDocument("work-order", viewOrder)} className={btnSecondary}>
                   <ClipboardList className="h-3.5 w-3.5" /> Work order
@@ -742,35 +815,34 @@ export function WorkOrdersPanel() {
                   <FileText className="h-3.5 w-3.5" /> Estimate
                 </button>
               </Can>
+              <Can permission={["inventory.view", "work_orders.document.edit"]} mode="all">
+                <button
+                  type="button"
+                  onClick={() => setShowPartPicker(true)}
+                  className={btnSecondary}
+                  disabled={addingPart}
+                >
+                  <Package className="h-3.5 w-3.5" /> Add parts
+                </button>
+              </Can>
               {invoicePaymentStatus(viewOrder) === "paid" ? (
                 <span className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-200">
                   <CreditCard className="h-3.5 w-3.5" />
                   Paid
                 </span>
               ) : (
-                <>
-                  <Can permission={["payments.manage", "work_orders.payments.link"]} mode="any">
-                    <button
-                      type="button"
-                      onClick={() => createPayNowLink(viewOrder)}
-                      className={btnPrimary}
-                      disabled={payNowLoadingId === viewOrder.id || !(Number(viewOrder.revenue) > 0)}
-                      title={Number(viewOrder.revenue) > 0 ? "Create Stripe invoice payment link" : "Set Total charge before invoicing"}
-                    >
-                      <CreditCard className="h-3.5 w-3.5" />
-                      {payNowLoadingId === viewOrder.id ? "Creating…" : "Stripe invoice"}
-                    </button>
-                  </Can>
-                  <Can permission={["payments.manage", "work_orders.edit"]} mode="any">
-                    <button
-                      type="button"
-                      onClick={() => patch(viewOrder.id, { paymentStatus: "paid" })}
-                      className={btnSecondary}
-                    >
-                      Mark paid
-                    </button>
-                  </Can>
-                </>
+                <Can permission={["payments.manage", "work_orders.payments.link"]} mode="any">
+                  <button
+                    type="button"
+                    onClick={() => createPayNowLink(viewOrder)}
+                    className={btnPrimary}
+                    disabled={payNowLoadingId === viewOrder.id || !(Number(viewOrder.revenue) > 0)}
+                    title={Number(viewOrder.revenue) > 0 ? "Create Stripe invoice payment link" : "Set Total charge before invoicing"}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    {payNowLoadingId === viewOrder.id ? "Creating…" : "Stripe invoice"}
+                  </button>
+                </Can>
               )}
               <Can permission="work_orders.edit">
                 <button

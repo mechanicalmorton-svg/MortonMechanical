@@ -96,7 +96,7 @@ export function CustomerPickerModal({ open, onClose, onSelect, stacked }: Props)
           <Can permission="customers.create">
             <button type="button" onClick={() => setShowCreate((v) => !v)} className={btnSecondary}>
               <Plus className="h-4 w-4" />
-              + Create new customer
+              Create new customer
             </button>
           </Can>
         </div>
@@ -164,8 +164,20 @@ export function CustomerPickerModal({ open, onClose, onSelect, stacked }: Props)
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block font-medium text-white">{customer.name}</span>
-                  <span className="mt-0.5 block text-xs text-slate-400">
-                    {[customer.email, customer.phone].filter(Boolean).join(" · ") || "No contact details"}
+                  <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] font-medium text-slate-200">
+                    {customer.email || customer.phone ? (
+                      <>
+                        {customer.email ? <span className="truncate">{customer.email}</span> : null}
+                        {customer.email && customer.phone ? (
+                          <span className="text-slate-600" aria-hidden>
+                            ·
+                          </span>
+                        ) : null}
+                        {customer.phone ? <span className="whitespace-nowrap">{customer.phone}</span> : null}
+                      </>
+                    ) : (
+                      <span className="text-slate-500">No contact details</span>
+                    )}
                   </span>
                   <span className="mt-1 block text-xs text-slate-500">
                     {customer.vehicles.length} vehicle{customer.vehicles.length === 1 ? "" : "s"} on file

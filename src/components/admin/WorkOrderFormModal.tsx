@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, MapPin, Plus, UserRound } from "lucide-react";
+import { ChevronDown, ChevronUp, MapPin, Package, Plus, Trash2, UserRound } from "lucide-react";
 import type {
   CustomerVehicle,
   Priority,
@@ -24,12 +24,14 @@ import {
   plateValidationError,
   vinValidationError,
 } from "@/lib/customer-vehicles";
+import { getWorkOrderParts, partLineTotal } from "@/lib/work-order-documents";
 import { adminGet, adminSend } from "./admin-fetch";
 import { CustomerPickerModal, type CustomerWithVehicles } from "./CustomerPickerModal";
 import { CustomerVehicleDetailModal } from "./CustomerVehicleDetailModal";
+import { PasswordRequiredModal } from "./PasswordRequiredModal";
 import { useAdminToast } from "./AdminToast";
-import { btnPrimary, btnSecondary, inputClass } from "./admin-ui";
-import { Can } from "./permissions";
+import { btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
+import { Can, usePermissions } from "./permissions";
 import { VehicleMakeModelFields } from "./VehicleMakeModelFields";
 import { vehicleYearOptions } from "@/lib/vehicle-years";
 
@@ -67,6 +69,8 @@ const emptyForm = {
 type Props = {
   onClose: () => void;
   onSaved: () => void;
+  /** Called when a part is removed so the parent list/detail stays in sync. */
+  onOrderUpdated?: (order: WorkOrder) => void;
   editingOrder?: WorkOrder | null;
   staff: StaffMember[];
 };
@@ -159,8 +163,9 @@ function vehiclePayload(form: typeof emptyForm, id?: string) {
   };
 }
 
-export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Props) {
+export function WorkOrderFormModal({ onClose, onSaved, onOrderUpdated, editingOrder, staff }: Props) {
   const toast = useAdminToast();
+  const { isFounder } = usePermissions();
   const [form, setForm] = useState(emptyForm);
   const [customer, setCustomer] = useState<CustomerWithVehicles | null>(null);
   const [vehicles, setVehicles] = useState<CustomerVehicle[]>([]);
@@ -179,6 +184,9 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [services, setServices] = useState<ShopService[]>([]);
   const [vehicleDetailOpen, setVehicleDetailOpen] = useState(false);
+  const [orderSnapshot, setOrderSnapshot] = useState<WorkOrder | null>(editingOrder ?? null);
+  const [removePartIndex, setRemovePartIndex] = useState<number | null>(null);
+  const [removingPart, setRemovingPart] = useState(false);
 
   const addressListId = useMemo(() => `wo-address-${editingOrder?.id ?? "new"}`, [editingOrder?.id]);
   const activeServices = useMemo(() => services.filter((item) => item.active), [services]);
@@ -243,6 +251,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
         setCustomerVehicleId("");
         setVehicleJobOnly(true);
         setShowInternalNotes(false);
+        setOrderSnapshot(null);
         return;
       }
 
@@ -318,6 +327,7 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
       setCustomerVehicleId(nextCustomerVehicleId);
       setVehicleJobOnly(nextVehicleJobOnly);
       setShowInternalNotes(Boolean(editingOrder.internalNotes?.trim()));
+      setOrderSnapshot(editingOrder);
       setForm({
         customerAddress,
         customerConcern: editingOrder.customerConcern ?? "",
@@ -336,6 +346,37 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
 
     hydrate();
   }, [editingOrder]);
+
+  const workOrderParts = useMemo(
+    () => (orderSnapshot ? getWorkOrderParts(orderSnapshot) : []),
+    [orderSnapshot],
+  );
+
+  async function confirmRemovePart(password: string) {
+    if (!orderSnapshot || removePartIndex == null) return false;
+    setRemovingPart(true);
+    try {
+      const { data, error } = await adminSend<WorkOrder>("/api/admin/work-orders/parts/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workOrderId: orderSnapshot.id,
+          partIndex: removePartIndex,
+          password,
+        }),
+      });
+      if (error) throw new Error(error);
+      if (data) {
+        setOrderSnapshot(data);
+        onOrderUpdated?.(data);
+      }
+      toast.success("Part removed and stock restored when linked.");
+      setRemovePartIndex(null);
+      return true;
+    } finally {
+      setRemovingPart(false);
+    }
+  }
 
   function applyVehicle(vehicle: CustomerVehicle | null) {
     if (!vehicle) {
@@ -771,6 +812,58 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
                 />
               </FormField>
 
+              {editingOrder ? (
+                <div className="rounded-xl border border-slate-800 bg-slate-950/30">
+                  <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
+                    <Package className="h-4 w-4 text-amber-400/80" />
+                    <div>
+                      <p className="text-sm font-medium text-slate-200">Parts on this work order</p>
+                      <p className="text-xs text-slate-500">
+                        Added from inventory. Removing a part requires the Founder password.
+                      </p>
+                    </div>
+                  </div>
+                  {workOrderParts.length ? (
+                    <ul className="divide-y divide-slate-800/80">
+                      {workOrderParts.map(({ index, line }) => (
+                        <li
+                          key={`${index}-${line.partNumber}-${line.description}`}
+                          className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-white">
+                              {line.qty != null ? `${line.qty}× ` : ""}
+                              {line.description || "Part"}
+                            </p>
+                            <p className="truncate text-xs text-slate-500">
+                              {[line.partNumber ? `#${line.partNumber}` : null, `$${partLineTotal(line).toFixed(2)}`]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </p>
+                          </div>
+                          {isFounder ? (
+                            <button
+                              type="button"
+                              className={btnDanger}
+                              onClick={() => setRemovePartIndex(index)}
+                              disabled={removingPart}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Remove
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-500">Founder only to remove</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="px-4 py-3 text-sm text-slate-500">
+                      No parts added yet. Use Add parts on the work order detail view.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField label="Status" htmlFor="wo-status" required>
                   <select
@@ -897,6 +990,16 @@ export function WorkOrderFormModal({ onClose, onSaved, editingOrder, staff }: Pr
             vehicleNotes: updated.notes ?? prev.vehicleNotes,
           }));
         }}
+      />
+      <PasswordRequiredModal
+        open={removePartIndex != null}
+        onClose={() => setRemovePartIndex(null)}
+        onConfirm={confirmRemovePart}
+        title="Password Required"
+        description="Enter the Founder password to remove this part from the work order. Linked inventory stock will be restored."
+        confirmLabel="Remove part"
+        stacked
+        busy={removingPart}
       />
     </>
   );
