@@ -192,6 +192,8 @@ export type WorkOrderDocumentFields = {
 
 export type WorkOrderDocumentData = {
   viewToken?: string;
+  /** Shop notes / story corrections shown on the work order detail. */
+  storyCorrections?: string;
   documents?: Partial<Record<WorkOrderDocumentKind, WorkOrderDocumentFields>>;
 };
 

@@ -11,6 +11,7 @@ import {
   CreditCard,
   Eye,
   FileText,
+  MessageSquareText,
   Package,
   Pencil,
   Plus,
@@ -168,6 +169,9 @@ export function WorkOrdersPanel() {
   const [createdOn, setCreatedOn] = useState("");
   const [showPartPicker, setShowPartPicker] = useState(false);
   const [addingPart, setAddingPart] = useState(false);
+  const [showStoryCorrections, setShowStoryCorrections] = useState(false);
+  const [storyCorrectionsDraft, setStoryCorrectionsDraft] = useState("");
+  const [savingStoryCorrections, setSavingStoryCorrections] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -325,6 +329,42 @@ export function WorkOrdersPanel() {
 
   function openDocument(kind: WorkOrderDocumentKind, order: WorkOrder) {
     setDocumentEditor({ kind, order });
+  }
+
+  function getStoryCorrections(order: WorkOrder) {
+    return order.documentData?.storyCorrections?.trim() || "";
+  }
+
+  function openStoryCorrections(order: WorkOrder) {
+    setStoryCorrectionsDraft(order.documentData?.storyCorrections ?? "");
+    setShowStoryCorrections(true);
+  }
+
+  async function saveStoryCorrections() {
+    if (!viewOrder) return;
+    setSavingStoryCorrections(true);
+    try {
+      const documentData = {
+        ...(viewOrder.documentData ?? {}),
+        storyCorrections: storyCorrectionsDraft.trim(),
+      };
+      const { data, error } = await adminSend<WorkOrder>("/api/admin/work-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: viewOrder.id, documentData }),
+      });
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      const updated = data ?? { ...viewOrder, documentData };
+      setViewOrder(updated);
+      setItems((current) => current.map((order) => (order.id === updated.id ? updated : order)));
+      setShowStoryCorrections(false);
+      toast.success("Story corrections saved.");
+    } finally {
+      setSavingStoryCorrections(false);
+    }
   }
 
   async function addInventoryPartToWorkOrder(item: InventoryItem, qty: number) {
@@ -705,7 +745,50 @@ export function WorkOrdersPanel() {
         onPick={addInventoryPartToWorkOrder}
       />
 
-      <AdminModal open={!!viewOrder} onClose={() => { setShowPartPicker(false); setViewOrder(null); }} title={viewOrder ? formatOrderNumber(viewOrder.id) : "Work Order"} wide>
+      <AdminModal
+        open={showStoryCorrections && Boolean(viewOrder)}
+        onClose={() => {
+          if (savingStoryCorrections) return;
+          setShowStoryCorrections(false);
+        }}
+        title="Story corrections"
+        stacked
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-400">
+            Add corrections or story notes for this job. They show next to due date, description, and customer
+            concern on the work order.
+          </p>
+          <textarea
+            className={inputClass}
+            rows={6}
+            value={storyCorrectionsDraft}
+            onChange={(e) => setStoryCorrectionsDraft(e.target.value)}
+            placeholder="Enter story corrections…"
+            autoFocus
+          />
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className={btnSecondary}
+              onClick={() => setShowStoryCorrections(false)}
+              disabled={savingStoryCorrections}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={btnPrimary}
+              onClick={() => void saveStoryCorrections()}
+              disabled={savingStoryCorrections}
+            >
+              {savingStoryCorrections ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      </AdminModal>
+
+      <AdminModal open={!!viewOrder} onClose={() => { setShowPartPicker(false); setShowStoryCorrections(false); setViewOrder(null); }} title={viewOrder ? formatOrderNumber(viewOrder.id) : "Work Order"} wide>
         {viewOrder && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -754,6 +837,20 @@ export function WorkOrdersPanel() {
                 <dt className="text-xs uppercase tracking-wide text-slate-500">Description</dt>
                 <dd className="mt-1 text-sm text-slate-300">{viewOrder.service}</dd>
               </div>
+              {viewOrder.customerConcern ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs uppercase tracking-wide text-slate-500">Customer concern</dt>
+                  <dd className="mt-1 text-sm text-slate-300">{viewOrder.customerConcern}</dd>
+                </div>
+              ) : null}
+              {getStoryCorrections(viewOrder) ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs uppercase tracking-wide text-slate-500">Story corrections</dt>
+                  <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-300">
+                    {getStoryCorrections(viewOrder)}
+                  </dd>
+                </div>
+              ) : null}
               {(() => {
                 const parts = getWorkOrderParts(viewOrder);
                 if (!parts.length) return null;
@@ -787,12 +884,6 @@ export function WorkOrdersPanel() {
                   </div>
                 );
               })()}
-              {viewOrder.customerConcern ? (
-                <div className="sm:col-span-2">
-                  <dt className="text-xs uppercase tracking-wide text-slate-500">Customer concern</dt>
-                  <dd className="mt-1 text-sm text-slate-300">{viewOrder.customerConcern}</dd>
-                </div>
-              ) : null}
               {viewOrder.internalNotes ? (
                 <div className="sm:col-span-2">
                   <dt className="text-xs uppercase tracking-wide text-slate-500">Internal notes</dt>
@@ -813,6 +904,15 @@ export function WorkOrdersPanel() {
                 </button>
                 <button type="button" onClick={() => openDocument("estimate", viewOrder)} className={btnSecondary}>
                   <FileText className="h-3.5 w-3.5" /> Estimate
+                </button>
+              </Can>
+              <Can permission="work_orders.edit">
+                <button
+                  type="button"
+                  onClick={() => openStoryCorrections(viewOrder)}
+                  className={btnSecondary}
+                >
+                  <MessageSquareText className="h-3.5 w-3.5" /> Story corrections
                 </button>
               </Can>
               <Can permission={["inventory.view", "work_orders.document.edit"]} mode="all">
