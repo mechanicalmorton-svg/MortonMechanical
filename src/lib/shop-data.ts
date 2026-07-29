@@ -30,6 +30,8 @@ import {
   normalizeCategoryName,
   sortInventoryCategories,
   categorySettingsKey,
+  categoriesFromInventoryItems,
+  canonicalizeCategoryName,
   type InventoryCategoryFlags,
   type InventoryCategorySettingsMap,
 } from "./inventory-categories";
@@ -1403,13 +1405,57 @@ async function loadCustomInventoryCategories(): Promise<string[]> {
   return readJson<string[]>("inventory-categories.json", []).map(normalizeCategoryName).filter(Boolean);
 }
 
-export async function loadInventoryCategories(): Promise<string[]> {
+/** Register custom category names found on parts so Manage Categories stays in sync with All parts. */
+async function syncCustomCategoriesFromInventoryParts(items?: InventoryItem[]) {
+  const used = categoriesFromInventoryItems(items ?? (await loadInventory()));
   const custom = await loadCustomInventoryCategories();
-  return sortInventoryCategories(mergeInventoryCategories(custom));
+  const known = new Set(custom.map((name) => name.toLowerCase()));
+  const missing = used.filter(
+    (name) => !isDefaultInventoryCategory(name) && !known.has(name.toLowerCase()),
+  );
+  if (!missing.length) return;
+
+  if (useDatabase()) {
+    const client = requireAdminClient();
+    const nextCustom = sortInventoryCategories([...custom, ...missing]).filter(
+      (item) => !isDefaultInventoryCategory(item),
+    );
+
+    for (let index = 0; index < missing.length; index += 1) {
+      const name = missing[index];
+      const { error } = await client.from("inventory_categories").upsert({
+        name,
+        sort_order: 100 + custom.length + index + 1,
+        created_at: new Date().toISOString(),
+      });
+      if (error && isMissingInventoryCategoriesTable(error.message)) {
+        await saveCustomCategoriesToStorage(nextCustom);
+        return;
+      }
+      throwOnError(error, "Could not sync inventory category");
+    }
+    return;
+  }
+
+  const nextCustom = [...custom];
+  for (const name of missing) {
+    if (!nextCustom.some((item) => item.toLowerCase() === name.toLowerCase())) {
+      nextCustom.push(name);
+    }
+  }
+  writeJson("inventory-categories.json", nextCustom);
+}
+
+export async function loadInventoryCategories(): Promise<string[]> {
+  const items = await loadInventory();
+  await syncCustomCategoriesFromInventoryParts(items);
+  const custom = await loadCustomInventoryCategories();
+  const usedOnParts = categoriesFromInventoryItems(items);
+  return sortInventoryCategories(mergeInventoryCategories(custom, usedOnParts));
 }
 
 export async function addInventoryCategory(rawName: string): Promise<string[]> {
-  const name = normalizeCategoryName(rawName);
+  const name = canonicalizeCategoryName(rawName);
   if (!name) throw new Error("Category name is required.");
   if (name.length > 48) throw new Error("Category name must be 48 characters or less.");
 
@@ -1479,7 +1525,7 @@ export async function addInventoryCategory(rawName: string): Promise<string[]> {
 }
 
 export async function deleteInventoryCategory(rawName: string): Promise<string[]> {
-  const name = normalizeCategoryName(rawName);
+  const name = canonicalizeCategoryName(rawName);
   if (!name) throw new Error("Category name is required.");
   if (isDefaultInventoryCategory(name)) {
     throw new Error("Built-in categories cannot be deleted.");
@@ -1585,7 +1631,7 @@ export async function updateInventoryCategoryFlags(
   rawName: string,
   patch: Partial<InventoryCategoryFlags>,
 ): Promise<{ categories: string[]; settings: InventoryCategorySettingsMap }> {
-  const name = normalizeCategoryName(rawName);
+  const name = canonicalizeCategoryName(rawName);
   if (!name) throw new Error("Category name is required.");
 
   const categories = await loadInventoryCategories();

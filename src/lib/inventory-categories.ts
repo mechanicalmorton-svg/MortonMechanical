@@ -30,7 +30,33 @@ export const DEFAULT_CATEGORY_FLAGS: InventoryCategoryFlags = {
 };
 
 export function isDefaultInventoryCategory(name: string) {
-  return (DEFAULT_INVENTORY_CATEGORIES as readonly string[]).includes(name);
+  const key = normalizeCategoryName(name).toLowerCase();
+  return (DEFAULT_INVENTORY_CATEGORIES as readonly string[]).some((item) => item.toLowerCase() === key);
+}
+
+/** Prefer the canonical default spelling when the name matches a built-in. */
+export function canonicalizeCategoryName(raw: string) {
+  const normalized = normalizeCategoryName(raw);
+  if (!normalized) return "";
+  const match = (DEFAULT_INVENTORY_CATEGORIES as readonly string[]).find(
+    (item) => item.toLowerCase() === normalized.toLowerCase(),
+  );
+  return match ?? normalized;
+}
+
+/** Unique category names used on inventory parts (skips blank / Uncategorized). */
+export function categoriesFromInventoryItems(
+  items: Array<{ category?: string | null }>,
+): string[] {
+  const byKey = new Map<string, string>();
+  for (const item of items) {
+    const name = canonicalizeCategoryName(item.category ?? "");
+    if (!name) continue;
+    if (name.toLowerCase() === "uncategorized") continue;
+    const key = name.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, name);
+  }
+  return [...byKey.values()];
 }
 
 export function normalizeCategoryName(raw: string) {
@@ -57,7 +83,7 @@ export function mergeInventoryCategories(custom: string[] = [], extra: string[] 
   const result: string[] = [];
 
   for (const name of [...DEFAULT_INVENTORY_CATEGORIES, ...custom, ...extra]) {
-    const normalized = normalizeCategoryName(name);
+    const normalized = canonicalizeCategoryName(name);
     if (!normalized) continue;
     const key = normalized.toLowerCase();
     if (seen.has(key)) continue;

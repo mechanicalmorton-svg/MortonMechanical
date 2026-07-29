@@ -5,6 +5,7 @@ import { AlertTriangle, Barcode, ExternalLink, FolderPlus, Minus, Package, Penci
 import type { FleetVehicle, InventoryItem, StaffRole } from "@/lib/shop-types";
 import {
   DEFAULT_INVENTORY_CATEGORIES,
+  canonicalizeCategoryName,
   enabledInventoryCategories,
   isDefaultInventoryCategory,
   mergeInventoryCategories,
@@ -66,7 +67,7 @@ function normalizeSupplierLink(raw: string) {
 function groupByCategory(items: InventoryItem[], categories: string[]) {
   const map = new Map<string, InventoryItem[]>();
   for (const item of items) {
-    const category = item.category?.trim() || "Uncategorized";
+    const category = canonicalizeCategoryName(item.category ?? "") || "Uncategorized";
     const list = map.get(category) ?? [];
     list.push(item);
     map.set(category, list);
@@ -279,7 +280,12 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
   const grouped = groupByCategory(filtered, categories);
   const fleetOptions = sortFleetForSelect(fleet);
   const customCategories = categories.filter((name) => !isDefaultInventoryCategory(name));
-  const managedCategories = sortInventoryCategories(mergeInventoryCategories(categories));
+  const managedCategories = sortInventoryCategories(
+    mergeInventoryCategories(
+      categories,
+      items.map((item) => item.category?.trim() || "").filter(Boolean),
+    ),
+  );
 
   async function saveCategory(e: React.FormEvent) {
     e.preventDefault();
