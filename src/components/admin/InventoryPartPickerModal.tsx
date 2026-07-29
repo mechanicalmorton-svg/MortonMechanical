@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Package, Search } from "lucide-react";
 import type { InventoryItem } from "@/lib/shop-types";
+import {
+  resolveCategoryFlags,
+  type InventoryCategorySettingsMap,
+} from "@/lib/inventory-categories";
 import { adminGet } from "./admin-fetch";
 import { AdminModal } from "./AdminModal";
 import { useAdminToast } from "./AdminToast";
@@ -20,6 +24,7 @@ type Props = {
 export function InventoryPartPickerModal({ open, onClose, onPick, stacked, busy }: Props) {
   const toast = useAdminToast();
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [categorySettings, setCategorySettings] = useState<InventoryCategorySettingsMap>({});
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [qtyById, setQtyById] = useState<Record<string, number>>({});
@@ -27,9 +32,16 @@ export function InventoryPartPickerModal({ open, onClose, onPick, stacked, busy 
 
   async function load() {
     setLoading(true);
-    const { data, error } = await adminGet<InventoryItem[]>("/api/admin/inventory");
-    if (error) toast.error(error);
-    else setItems(data ?? []);
+    const [inventoryRes, categoriesRes] = await Promise.all([
+      adminGet<InventoryItem[]>("/api/admin/inventory"),
+      adminGet<{ categories: string[]; settings?: InventoryCategorySettingsMap }>(
+        "/api/admin/inventory/categories",
+      ),
+    ]);
+    if (inventoryRes.error) toast.error(inventoryRes.error);
+    else setItems(inventoryRes.data ?? []);
+    if (categoriesRes.error) toast.error(categoriesRes.error);
+    else setCategorySettings(categoriesRes.data?.settings ?? {});
     setLoading(false);
   }
 
@@ -43,15 +55,20 @@ export function InventoryPartPickerModal({ open, onClose, onPick, stacked, busy 
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const visible = items.filter((item) => {
+      const category = item.category?.trim() || "General";
+      const flags = resolveCategoryFlags(category, categorySettings);
+      return flags.enabled && flags.showInWorkOrders;
+    });
     const list = !q
-      ? items
-      : items.filter((item) =>
+      ? visible
+      : visible.filter((item) =>
           [item.name, item.partNumber, item.sku, item.category, item.location]
             .filter(Boolean)
             .some((value) => String(value).toLowerCase().includes(q)),
         );
     return [...list].sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, search]);
+  }, [items, search, categorySettings]);
 
   async function pick(item: InventoryItem) {
     const qty = Math.max(1, Math.floor(qtyById[item.id] ?? 1));
@@ -63,7 +80,6 @@ export function InventoryPartPickerModal({ open, onClose, onPick, stacked, busy 
     try {
       await onPick(item, qty);
       setQtyById((current) => ({ ...current, [item.id]: 1 }));
-      // Refresh stock after pull.
       void load();
     } finally {
       setPickingId(null);
@@ -74,7 +90,8 @@ export function InventoryPartPickerModal({ open, onClose, onPick, stacked, busy 
     <AdminModal open={open} onClose={onClose} title="Add parts from inventory" wide stacked={stacked}>
       <div className="space-y-4">
         <p className="text-sm text-slate-400">
-          Pull from All parts inventory. Adding a part puts it on the work order and reduces stock.
+          Pull from All parts inventory categories enabled for work orders. Adding a part puts it on
+          the work order and reduces stock.
         </p>
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -91,7 +108,10 @@ export function InventoryPartPickerModal({ open, onClose, onPick, stacked, busy 
           {loading ? (
             <p className="px-3 py-6 text-center text-sm text-slate-500">Loading inventory…</p>
           ) : !filtered.length ? (
-            <p className="px-3 py-6 text-center text-sm text-slate-500">No matching parts in All parts.</p>
+            <p className="px-3 py-6 text-center text-sm text-slate-500">
+              No matching parts in work-order categories. Founders can enable categories under Inventory →
+              Manage Categories.
+            </p>
           ) : (
             filtered.map((item) => {
               const qty = qtyById[item.id] ?? 1;

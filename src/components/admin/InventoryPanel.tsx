@@ -5,9 +5,12 @@ import { AlertTriangle, Barcode, ExternalLink, FolderPlus, Minus, Package, Penci
 import type { FleetVehicle, InventoryItem, StaffRole } from "@/lib/shop-types";
 import {
   DEFAULT_INVENTORY_CATEGORIES,
+  enabledInventoryCategories,
   isDefaultInventoryCategory,
   mergeInventoryCategories,
+  resolveCategoryFlags,
   sortInventoryCategories,
+  type InventoryCategorySettingsMap,
 } from "@/lib/inventory-categories";
 import {
   formatFleetVehicleOption,
@@ -38,8 +41,12 @@ const emptyForm = {
   vehicleId: "",
 };
 
-function categoryOptions(categories: string[], current?: string) {
-  return sortInventoryCategories(mergeInventoryCategories(categories, current ? [current] : []));
+function categoryOptions(
+  categories: string[],
+  settings: InventoryCategorySettingsMap,
+  current?: string,
+) {
+  return enabledInventoryCategories(categories, settings, current);
 }
 
 function formatUrlForDisplay(url: string) {
@@ -131,16 +138,18 @@ function FormField({
 
 export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Props) {
   const toast = useAdminToast();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isFounder } = usePermissions();
   const canScanBarcode = hasPermission("inventory.scan");
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [categories, setCategories] = useState<string[]>([...DEFAULT_INVENTORY_CATEGORIES]);
+  const [categorySettings, setCategorySettings] = useState<InventoryCategorySettingsMap>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [savingCategory, setSavingCategory] = useState(false);
+  const [savingCategoryFlags, setSavingCategoryFlags] = useState<string | null>(null);
   const [scanMode, setScanMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -153,14 +162,23 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
     const [inventoryRes, fleetRes, categoriesRes] = await Promise.all([
       adminGet<InventoryItem[]>("/api/admin/inventory"),
       adminGet<FleetVehicle[]>("/api/admin/fleet"),
-      adminGet<{ categories: string[] }>("/api/admin/inventory/categories"),
+      adminGet<{ categories: string[]; settings?: InventoryCategorySettingsMap }>(
+        "/api/admin/inventory/categories",
+      ),
     ]);
     if (inventoryRes.error) toast.error(inventoryRes.error);
     else setItems(inventoryRes.data ?? []);
     if (fleetRes.error) toast.error(fleetRes.error);
     else setFleet(fleetRes.data ?? []);
     if (categoriesRes.error) toast.error(categoriesRes.error);
-    else setCategories(categoriesRes.data?.categories?.length ? categoriesRes.data.categories : [...DEFAULT_INVENTORY_CATEGORIES]);
+    else {
+      setCategories(
+        categoriesRes.data?.categories?.length
+          ? categoriesRes.data.categories
+          : [...DEFAULT_INVENTORY_CATEGORIES],
+      );
+      setCategorySettings(categoriesRes.data?.settings ?? {});
+    }
     setLoading(false);
   }
 
@@ -261,12 +279,16 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
   const grouped = groupByCategory(filtered, categories);
   const fleetOptions = sortFleetForSelect(fleet);
   const customCategories = categories.filter((name) => !isDefaultInventoryCategory(name));
+  const managedCategories = sortInventoryCategories(mergeInventoryCategories(categories));
 
   async function saveCategory(e: React.FormEvent) {
     e.preventDefault();
     if (!canManageCategories) return;
     setSavingCategory(true);
-    const { data, error } = await adminSend<{ categories: string[] }>("/api/admin/inventory/categories", {
+    const { data, error } = await adminSend<{
+      categories: string[];
+      settings?: InventoryCategorySettingsMap;
+    }>("/api/admin/inventory/categories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newCategoryName }),
@@ -277,16 +299,19 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
       return;
     }
     setCategories(data.categories);
+    if (data.settings) setCategorySettings(data.settings);
     setForm((prev) => ({ ...prev, category: newCategoryName.trim() || prev.category }));
     setNewCategoryName("");
-    setShowCategoryModal(false);
     toast.success("Category added.");
   }
 
   async function removeCategory(name: string) {
     if (!canManageCategories) return;
     if (!window.confirm(`Delete category “${name}”? Parts must be moved out of it first.`)) return;
-    const { data, error } = await adminSend<{ categories: string[] }>("/api/admin/inventory/categories", {
+    const { data, error } = await adminSend<{
+      categories: string[];
+      settings?: InventoryCategorySettingsMap;
+    }>("/api/admin/inventory/categories", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -296,8 +321,32 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
       return;
     }
     setCategories(data.categories);
+    if (data.settings) setCategorySettings(data.settings);
     if (form.category === name) setForm((prev) => ({ ...prev, category: "General" }));
     toast.success("Category deleted.");
+  }
+
+  async function updateCategoryFlags(
+    name: string,
+    patch: { enabled?: boolean; showInWorkOrders?: boolean },
+  ) {
+    if (!isFounder) return;
+    setSavingCategoryFlags(name);
+    const { data, error } = await adminSend<{
+      categories: string[];
+      settings?: InventoryCategorySettingsMap;
+    }>("/api/admin/inventory/categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, ...patch }),
+    });
+    setSavingCategoryFlags(null);
+    if (error || !data) {
+      toast.error(error || "Could not update category.");
+      return;
+    }
+    setCategories(data.categories);
+    setCategorySettings(data.settings ?? {});
   }
 
   async function saveItem(e: React.FormEvent) {
@@ -399,7 +448,7 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
                 {scanMode ? "Scan mode on" : "Barcode scan"}
               </button>
             </Can>
-            {canManageCategories && !lowStockOnly ? (
+            { (canManageCategories || isFounder) && !lowStockOnly ? (
               <button
                 type="button"
                 onClick={() => {
@@ -408,7 +457,7 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
                 }}
                 className={btnSecondary}
               >
-                <FolderPlus className="h-4 w-4" /> Add Category
+                <FolderPlus className="h-4 w-4" /> Manage Categories
               </button>
             ) : null}
             <Can permission="inventory.create">
@@ -490,7 +539,7 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
                 <SearchableSelect
                   value={form.category}
                   onChange={(category) => setForm({ ...form, category })}
-                  options={categoryOptions(categories, form.category)}
+                  options={categoryOptions(categories, categorySettings, form.category)}
                   placeholder="Select category"
                   closeSignal={closeDropdowns}
                   className={inputClass}
@@ -724,32 +773,84 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
       <AdminModal
         open={showCategoryModal}
         onClose={() => {
-          if (savingCategory) return;
+          if (savingCategory || savingCategoryFlags) return;
           setShowCategoryModal(false);
           setNewCategoryName("");
         }}
-        title="Add Category"
+        title="Manage Categories"
+        wide
       >
-        <form onSubmit={saveCategory} className="space-y-5">
-          <p className="text-sm text-slate-400">
-            Create a custom inventory category for your shop. It will show up in Add/Edit Part and in the All parts list.
-          </p>
-          <FormField label="Category name" htmlFor="inv-new-category" required hint="Example: Suspension, Exhaust, Hardware">
-            <input
-              id="inv-new-category"
-              className={inputClass}
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder="e.g. Suspension"
-              maxLength={48}
-              required
-              autoFocus
-            />
-          </FormField>
-
-          {customCategories.length ? (
+        <div className="space-y-5">
+          {isFounder ? (
+            <div className="rounded-xl border border-slate-800 bg-slate-950/40">
+              <div className="border-b border-slate-800 px-4 py-3">
+                <p className="text-sm font-medium text-slate-200">Category visibility</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Select categories for inventory, and choose which ones appear when adding parts to a work order.
+                </p>
+              </div>
+              <ul className="divide-y divide-slate-800/80">
+                {managedCategories.map((name) => {
+                  const flags = resolveCategoryFlags(name, categorySettings);
+                  const busy = savingCategoryFlags === name;
+                  return (
+                    <li
+                      key={name}
+                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white">{name}</p>
+                        {!isDefaultInventoryCategory(name) ? (
+                          <p className="text-xs text-slate-500">Custom category</p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-slate-300">
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500/40"
+                            checked={flags.enabled}
+                            disabled={busy}
+                            onChange={(e) =>
+                              void updateCategoryFlags(name, { enabled: e.target.checked })
+                            }
+                          />
+                          Selected
+                        </label>
+                        <label className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500/40"
+                            checked={flags.showInWorkOrders}
+                            disabled={busy || !flags.enabled}
+                            onChange={(e) =>
+                              void updateCategoryFlags(name, { showInWorkOrders: e.target.checked })
+                            }
+                          />
+                          Work orders
+                        </label>
+                        {!isDefaultInventoryCategory(name) && canManageCategories ? (
+                          <button
+                            type="button"
+                            onClick={() => void removeCategory(name)}
+                            className={btnDanger}
+                            aria-label={`Delete category ${name}`}
+                            disabled={busy}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : customCategories.length ? (
             <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Custom categories</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Custom categories
+              </p>
               <ul className="mt-2 space-y-1.5">
                 {customCategories.map((name) => (
                   <li
@@ -757,38 +858,77 @@ export function InventoryPanel({ lowStockOnly, canManageCategories = false }: Pr
                     className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-200"
                   >
                     <span>{name}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeCategory(name)}
-                      className={btnDanger}
-                      aria-label={`Delete category ${name}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {canManageCategories ? (
+                      <button
+                        type="button"
+                        onClick={() => void removeCategory(name)}
+                        className={btnDanger}
+                        aria-label={`Delete category ${name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             </div>
-          ) : null}
+          ) : (
+            <p className="text-sm text-slate-500">No custom categories yet.</p>
+          )}
 
-          <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
-            <button
-              type="button"
-              className={btnSecondary}
-              onClick={() => {
-                setShowCategoryModal(false);
-                setNewCategoryName("");
-              }}
-              disabled={savingCategory}
-            >
-              Cancel
-            </button>
-            <button type="submit" className={btnPrimary} disabled={savingCategory || !newCategoryName.trim()}>
-              <FolderPlus className="h-4 w-4" />
-              {savingCategory ? "Saving…" : "Add Category"}
-            </button>
-          </div>
-        </form>
+          {canManageCategories ? (
+            <form onSubmit={saveCategory} className="space-y-4 border-t border-slate-800 pt-4">
+              <p className="text-sm text-slate-400">
+                Create a custom inventory category. It will show up in Add/Edit Part and in the All parts list.
+              </p>
+              <label className="block text-sm text-slate-300">
+                <span className="font-medium text-slate-200">
+                  Category name <span className="text-amber-400">*</span>
+                </span>
+                <p className="mt-0.5 text-xs text-slate-500">Example: Suspension, Exhaust, Hardware</p>
+                <input
+                  className={`${inputClass} mt-1.5`}
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="e.g. Suspension"
+                  maxLength={48}
+                  required
+                />
+              </label>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className={btnSecondary}
+                  onClick={() => {
+                    setShowCategoryModal(false);
+                    setNewCategoryName("");
+                  }}
+                  disabled={savingCategory}
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  className={btnPrimary}
+                  disabled={savingCategory || !newCategoryName.trim()}
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  {savingCategory ? "Saving…" : "Add Category"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex justify-end border-t border-slate-800 pt-4">
+              <button
+                type="button"
+                className={btnSecondary}
+                onClick={() => setShowCategoryModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          )}
+        </div>
       </AdminModal>
     </div>
   );

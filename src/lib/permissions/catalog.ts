@@ -58,7 +58,11 @@ function seedCatalog() {
       { action: "labor.add", label: "Add labor", comingSoon: true },
       { action: "labor.remove", label: "Remove labor", comingSoon: true },
       { action: "parts.add", label: "Add parts", comingSoon: true },
-      { action: "parts.remove", label: "Remove parts", comingSoon: true },
+      {
+        action: "parts.remove",
+        label: "Remove parts",
+        description: "Remove parts from a work order and restock linked inventory",
+      },
       { action: "photos.upload", label: "Upload photos", comingSoon: true },
       { action: "photos.delete", label: "Delete photos", comingSoon: true },
       { action: "print", label: "Print", comingSoon: true },

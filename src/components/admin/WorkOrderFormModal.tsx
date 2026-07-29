@@ -28,7 +28,6 @@ import { getWorkOrderParts, partLineTotal } from "@/lib/work-order-documents";
 import { adminGet, adminSend } from "./admin-fetch";
 import { CustomerPickerModal, type CustomerWithVehicles } from "./CustomerPickerModal";
 import { CustomerVehicleDetailModal } from "./CustomerVehicleDetailModal";
-import { PasswordRequiredModal } from "./PasswordRequiredModal";
 import { useAdminToast } from "./AdminToast";
 import { btnDanger, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { Can, usePermissions } from "./permissions";
@@ -165,7 +164,8 @@ function vehiclePayload(form: typeof emptyForm, id?: string) {
 
 export function WorkOrderFormModal({ onClose, onSaved, onOrderUpdated, editingOrder, staff }: Props) {
   const toast = useAdminToast();
-  const { isFounder } = usePermissions();
+  const { hasPermission } = usePermissions();
+  const canRemoveParts = hasPermission("work_orders.parts.remove");
   const [form, setForm] = useState(emptyForm);
   const [customer, setCustomer] = useState<CustomerWithVehicles | null>(null);
   const [vehicles, setVehicles] = useState<CustomerVehicle[]>([]);
@@ -185,7 +185,6 @@ export function WorkOrderFormModal({ onClose, onSaved, onOrderUpdated, editingOr
   const [services, setServices] = useState<ShopService[]>([]);
   const [vehicleDetailOpen, setVehicleDetailOpen] = useState(false);
   const [orderSnapshot, setOrderSnapshot] = useState<WorkOrder | null>(editingOrder ?? null);
-  const [removePartIndex, setRemovePartIndex] = useState<number | null>(null);
   const [removingPart, setRemovingPart] = useState(false);
 
   const addressListId = useMemo(() => `wo-address-${editingOrder?.id ?? "new"}`, [editingOrder?.id]);
@@ -352,8 +351,11 @@ export function WorkOrderFormModal({ onClose, onSaved, onOrderUpdated, editingOr
     [orderSnapshot],
   );
 
-  async function confirmRemovePart(password: string) {
-    if (!orderSnapshot || removePartIndex == null) return false;
+  async function removePart(partIndex: number) {
+    if (!orderSnapshot) return;
+    if (!window.confirm("Remove this part from the work order? Linked inventory stock will be restored.")) {
+      return;
+    }
     setRemovingPart(true);
     try {
       const { data, error } = await adminSend<WorkOrder>("/api/admin/work-orders/parts/remove", {
@@ -361,18 +363,18 @@ export function WorkOrderFormModal({ onClose, onSaved, onOrderUpdated, editingOr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workOrderId: orderSnapshot.id,
-          partIndex: removePartIndex,
-          password,
+          partIndex,
         }),
       });
-      if (error) throw new Error(error);
+      if (error) {
+        toast.error(error);
+        return;
+      }
       if (data) {
         setOrderSnapshot(data);
         onOrderUpdated?.(data);
       }
       toast.success("Part removed and stock restored when linked.");
-      setRemovePartIndex(null);
-      return true;
     } finally {
       setRemovingPart(false);
     }
@@ -819,7 +821,7 @@ export function WorkOrderFormModal({ onClose, onSaved, onOrderUpdated, editingOr
                     <div>
                       <p className="text-sm font-medium text-slate-200">Parts on this work order</p>
                       <p className="text-xs text-slate-500">
-                        Added from inventory. Removing a part requires the Founder password.
+                        Added from inventory. Removing a part requires the Remove parts permission.
                       </p>
                     </div>
                   </div>
@@ -841,17 +843,17 @@ export function WorkOrderFormModal({ onClose, onSaved, onOrderUpdated, editingOr
                                 .join(" · ")}
                             </p>
                           </div>
-                          {isFounder ? (
+                          {canRemoveParts ? (
                             <button
                               type="button"
                               className={btnDanger}
-                              onClick={() => setRemovePartIndex(index)}
+                              onClick={() => void removePart(index)}
                               disabled={removingPart}
                             >
                               <Trash2 className="h-3.5 w-3.5" /> Remove
                             </button>
                           ) : (
-                            <span className="text-xs text-slate-500">Founder only to remove</span>
+                            <span className="text-xs text-slate-500">No remove permission</span>
                           )}
                         </li>
                       ))}
@@ -990,16 +992,6 @@ export function WorkOrderFormModal({ onClose, onSaved, onOrderUpdated, editingOr
             vehicleNotes: updated.notes ?? prev.vehicleNotes,
           }));
         }}
-      />
-      <PasswordRequiredModal
-        open={removePartIndex != null}
-        onClose={() => setRemovePartIndex(null)}
-        onConfirm={confirmRemovePart}
-        title="Password Required"
-        description="Enter the Founder password to remove this part from the work order. Linked inventory stock will be restored."
-        confirmLabel="Remove part"
-        stacked
-        busy={removingPart}
       />
     </>
   );

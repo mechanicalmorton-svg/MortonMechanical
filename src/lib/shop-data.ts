@@ -29,6 +29,9 @@ import {
   mergeInventoryCategories,
   normalizeCategoryName,
   sortInventoryCategories,
+  categorySettingsKey,
+  type InventoryCategoryFlags,
+  type InventoryCategorySettingsMap,
 } from "./inventory-categories";
 import {
   defaultRoleDefinitions,
@@ -1533,6 +1536,98 @@ export async function deleteInventoryCategory(rawName: string): Promise<string[]
     page: "/admin#inventory",
   });
   return sortInventoryCategories(mergeInventoryCategories(nextCustom));
+}
+
+async function loadCategorySettingsFromStorage(): Promise<InventoryCategorySettingsMap> {
+  try {
+    const client = requireAdminClient();
+    const { data, error } = await client.storage
+      .from("shop-settings")
+      .download("inventory-category-settings.json");
+    if (error || !data) return {};
+    const parsed = JSON.parse(await data.text()) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as InventoryCategorySettingsMap;
+  } catch {
+    return {};
+  }
+}
+
+async function saveCategorySettingsToStorage(settings: InventoryCategorySettingsMap) {
+  const client = requireAdminClient();
+  const { data: buckets } = await client.storage.listBuckets();
+  if (!buckets?.some((bucket) => bucket.name === "shop-settings")) {
+    const created = await client.storage.createBucket("shop-settings", {
+      public: false,
+      fileSizeLimit: 256 * 1024,
+    });
+    if (created.error && !created.error.message.toLowerCase().includes("already exists")) {
+      throw created.error;
+    }
+  }
+  const { error } = await client.storage
+    .from("shop-settings")
+    .upload("inventory-category-settings.json", JSON.stringify(settings, null, 2), {
+      contentType: "application/json",
+      upsert: true,
+    });
+  if (error) throw error;
+}
+
+export async function loadInventoryCategorySettings(): Promise<InventoryCategorySettingsMap> {
+  if (useDatabase()) {
+    return loadCategorySettingsFromStorage();
+  }
+  return readJson<InventoryCategorySettingsMap>("inventory-category-settings.json", {});
+}
+
+export async function updateInventoryCategoryFlags(
+  rawName: string,
+  patch: Partial<InventoryCategoryFlags>,
+): Promise<{ categories: string[]; settings: InventoryCategorySettingsMap }> {
+  const name = normalizeCategoryName(rawName);
+  if (!name) throw new Error("Category name is required.");
+
+  const categories = await loadInventoryCategories();
+  if (!categories.some((item) => item.toLowerCase() === name.toLowerCase())) {
+    throw new Error("That category does not exist.");
+  }
+
+  const settings = { ...(await loadInventoryCategorySettings()) };
+  const key = categorySettingsKey(name);
+  const prev = settings[key] ?? {};
+  const next: Partial<InventoryCategoryFlags> = { ...prev };
+
+  if (typeof patch.enabled === "boolean") next.enabled = patch.enabled;
+  if (typeof patch.showInWorkOrders === "boolean") next.showInWorkOrders = patch.showInWorkOrders;
+
+  // Drop keys that match defaults to keep the file small.
+  const cleaned: Partial<InventoryCategoryFlags> = {};
+  if (next.enabled === false) cleaned.enabled = false;
+  if (next.showInWorkOrders === false) cleaned.showInWorkOrders = false;
+
+  if (Object.keys(cleaned).length) settings[key] = cleaned;
+  else delete settings[key];
+
+  if (useDatabase()) {
+    await saveCategorySettingsToStorage(settings);
+  } else {
+    writeJson("inventory-category-settings.json", settings);
+  }
+
+  void auditUpsert({
+    module: "inventory",
+    recordType: "inventory_category",
+    recordId: name,
+    recordLabel: name,
+    before: prev,
+    after: cleaned,
+    createDescription: `Inventory category settings updated: ${name}`,
+    updateDescription: `Inventory category settings updated: ${name}`,
+    page: "/admin#inventory-all",
+  });
+
+  return { categories, settings };
 }
 
 function isMissingStaffRolesTable(message?: string | null) {
