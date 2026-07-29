@@ -196,6 +196,9 @@ export function buildDefaultDocumentFields(
     };
   }
 
+  const story = order.documentData?.storyCorrections?.trim() || "";
+  const liveParts = order.documentData?.documents?.["work-order"]?.parts;
+
   return normalizeDocumentFields({
     workOrderNumber: formatOrderNumber(order.id),
     date: toInputDate(order.createdAt) || toInputDate(new Date().toISOString()),
@@ -218,9 +221,9 @@ export function buildDefaultDocumentFields(
       engine: vehicle?.powertrain || "",
     },
     services,
-    technicianNotes: order.internalNotes || "",
-    parts: emptyPartLines(),
-    workDescription: [order.service, order.customerConcern, order.notes].filter(Boolean).join("\n\n"),
+    technicianNotes: [order.internalNotes, story].filter(Boolean).join("\n\n"),
+    parts: liveParts?.length ? liveParts : emptyPartLines(),
+    workDescription: [order.service, order.customerConcern, story, order.notes].filter(Boolean).join("\n\n"),
     authorization: {
       customerSignature: "",
       date: "",
@@ -236,6 +239,36 @@ export function buildDefaultDocumentFields(
   });
 }
 
+/** Prefer non-empty live values so document fields stay synced with other editors. */
+function preferLive(live: string, saved: string) {
+  const next = live.trim();
+  return next || saved;
+}
+
+function syncPartsFromWorkOrder(order: WorkOrder, savedParts: WorkOrderPartLine[]) {
+  const woParts = order.documentData?.documents?.["work-order"]?.parts;
+  const filledWo = (woParts ?? []).filter(isFilledPartLine);
+  if (filledWo.length) return ensurePartRows(woParts);
+  return ensurePartRows(savedParts);
+}
+
+function syncServicesFromLive(
+  defaults: WorkOrderDocumentFields,
+  saved: WorkOrderDocumentFields,
+): WorkOrderServiceLine[] {
+  const next = ensureServiceRows(saved.services);
+  const live = defaults.services[0];
+  if (live?.description.trim()) {
+    next[0] = {
+      description: live.description,
+      estLabor: next[0].estLabor ?? live.estLabor,
+    };
+  } else if (!next.some((line) => line.description.trim() || line.estLabor != null)) {
+    return defaults.services;
+  }
+  return next;
+}
+
 export function resolveDocumentFields(
   order: WorkOrder,
   kind: WorkOrderDocumentKind,
@@ -245,9 +278,84 @@ export function resolveDocumentFields(
     vehicle?: CustomerVehicle | null;
   },
 ) {
+  const defaults = buildDefaultDocumentFields(order, { ...options, kind });
   const saved = order.documentData?.documents?.[kind];
-  if (saved) return normalizeDocumentFields(saved);
-  return buildDefaultDocumentFields(order, { ...options, kind });
+  if (!saved) return defaults;
+
+  const normalized = normalizeDocumentFields(saved);
+
+  return normalizeDocumentFields({
+    ...normalized,
+    workOrderNumber: defaults.workOrderNumber,
+    date: preferLive(defaults.date, normalized.date) || normalized.date,
+    // Due date / advisor / customer / vehicle always follow the live work order editors.
+    promisedDate: defaults.promisedDate || normalized.promisedDate,
+    advisor: preferLive(defaults.advisor, normalized.advisor),
+    customer: {
+      name: preferLive(defaults.customer.name, normalized.customer.name),
+      phone: preferLive(defaults.customer.phone, normalized.customer.phone),
+      email: preferLive(defaults.customer.email, normalized.customer.email),
+      address: preferLive(defaults.customer.address, normalized.customer.address),
+    },
+    vehicle: {
+      make: preferLive(defaults.vehicle.make, normalized.vehicle.make),
+      year: preferLive(defaults.vehicle.year, normalized.vehicle.year),
+      plate: preferLive(defaults.vehicle.plate, normalized.vehicle.plate),
+      color: preferLive(defaults.vehicle.color, normalized.vehicle.color),
+      model: preferLive(defaults.vehicle.model, normalized.vehicle.model),
+      vin: preferLive(defaults.vehicle.vin, normalized.vehicle.vin),
+      mileage: preferLive(defaults.vehicle.mileage, normalized.vehicle.mileage),
+      engine: preferLive(defaults.vehicle.engine, normalized.vehicle.engine),
+    },
+    services: syncServicesFromLive(defaults, normalized),
+    technicianNotes: preferLive(defaults.technicianNotes, normalized.technicianNotes),
+    parts: syncPartsFromWorkOrder(order, normalized.parts),
+    workDescription: preferLive(defaults.workDescription, normalized.workDescription),
+    notes: preferLive(defaults.notes, normalized.notes),
+  });
+}
+
+/**
+ * Keep work-order + estimate (and invoice if present) documents filled from the live order.
+ * Preserves document-only edits like signatures and tax via resolveDocumentFields merge.
+ */
+export async function hydrateWorkOrderDocuments(
+  order: WorkOrder,
+  options?: {
+    advisorName?: string;
+    customer?: Customer | null;
+    vehicle?: CustomerVehicle | null;
+  },
+): Promise<WorkOrder> {
+  const prev = order.documentData ?? {};
+  const documents = { ...(prev.documents ?? {}) };
+  const base = { ...order, documentData: prev };
+
+  const workOrderFields = resolveDocumentFields(base, "work-order", options);
+  documents["work-order"] = workOrderFields;
+
+  const withWo = {
+    ...base,
+    documentData: { ...prev, documents: { ...documents } },
+  };
+  documents.estimate = resolveDocumentFields(withWo, "estimate", options);
+
+  if (prev.documents?.invoice) {
+    documents.invoice = resolveDocumentFields(
+      { ...withWo, documentData: { ...prev, documents: { ...documents } } },
+      "invoice",
+      options,
+    );
+  }
+
+  return {
+    ...order,
+    documentData: {
+      ...prev,
+      viewToken: prev.viewToken || createViewToken(),
+      documents,
+    },
+  };
 }
 
 /** @deprecated Prefer the fillable React editor. Kept for emergency fallback. */

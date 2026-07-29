@@ -5,12 +5,14 @@ import {
   getCustomerById,
   getCustomerVehicleById,
   loadRoutes,
+  loadStaff,
   loadWorkOrders,
   upsertBooking,
   upsertRoute,
   upsertWorkOrder,
 } from "@/lib/shop-data";
 import type { Booking, RoutePlan, RouteStop, WorkOrder } from "@/lib/shop-types";
+import { hydrateWorkOrderDocuments } from "@/lib/work-order-documents";
 
 export type BookingOrchestrationResult = {
   booking: Booking;
@@ -23,6 +25,14 @@ export type BookingOrchestrationResult = {
 
 function shouldOrchestrate(booking: Booking) {
   return booking.status === "confirmed" || booking.status === "completed";
+}
+
+async function fillWorkOrderDocuments(order: WorkOrder, customer: Awaited<ReturnType<typeof getCustomerById>>, vehicle: Awaited<ReturnType<typeof getCustomerVehicleById>>) {
+  const staff = order.assignedTo ? await loadStaff() : [];
+  const advisorName = order.assignedTo
+    ? staff.find((member) => member.id === order.assignedTo)?.name
+    : undefined;
+  return hydrateWorkOrderDocuments(order, { customer, vehicle, advisorName });
 }
 
 /**
@@ -122,6 +132,7 @@ export async function orchestrateBookingConfirmed(booking: Booking): Promise<Boo
       if (workOrder.status === "draft") {
         workOrder.status = "scheduled";
       }
+      workOrder = await fillWorkOrderDocuments(workOrder, customer, vehicle);
       await upsertWorkOrder(workOrder);
     }
   }
@@ -148,6 +159,7 @@ export async function orchestrateBookingConfirmed(booking: Booking): Promise<Boo
       createdAt: now,
       updatedAt: now,
     };
+    workOrder = await fillWorkOrderDocuments(workOrder, customer, vehicle);
     await upsertWorkOrder(workOrder);
     void writeAuditEvent({
       module: "bookings",

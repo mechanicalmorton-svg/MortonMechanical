@@ -1,6 +1,6 @@
 "use client";
 
-import type { HTMLAttributes } from "react";
+import type { CSSProperties, HTMLAttributes } from "react";
 import {
   calculateDocumentTotals,
   DOCUMENT_TITLES,
@@ -17,9 +17,12 @@ type Props = {
 
 type Box = {
   left: string;
-  top: string;
   width: string;
+  /** Box top (used for centered table cells). */
+  top?: string;
   height?: string;
+  /** Printed underline Y% — text sits just above this line (baseline fields). */
+  line?: string;
 };
 
 function money(amount: number) {
@@ -33,8 +36,10 @@ function AbsInput({
   readOnly,
   type = "text",
   align = "left",
+  vAlign = "baseline",
   className = "",
   inputMode,
+  "aria-label": ariaLabel,
 }: {
   box: Box;
   value: string | number;
@@ -42,25 +47,44 @@ function AbsInput({
   readOnly?: boolean;
   type?: string;
   align?: "left" | "right" | "center";
+  /** baseline = sit on underline; center = middle of table row */
+  vAlign?: "baseline" | "center";
   className?: string;
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
+  "aria-label"?: string;
 }) {
-  return (
-    <input
-      className={`wo-abs-input ${className}`}
-      style={{
+  const baseline = vAlign === "baseline" && Boolean(box.line);
+  const style: CSSProperties = baseline
+    ? {
         left: box.left,
-        top: box.top,
+        /* Sit the control on the printed underline (line Y), growing upward */
+        top: `calc(${box.line} - 13px)`,
+        width: box.width,
+        height: "13px",
+      }
+    : {
+        left: box.left,
+        top: box.top ?? "0%",
         width: box.width,
         height: box.height ?? "2.1%",
-        textAlign: align,
-      }}
-      type={type}
-      inputMode={inputMode}
-      value={value}
-      readOnly={readOnly}
-      onChange={(e) => onChange?.(e.target.value)}
-    />
+      };
+
+  return (
+    <div
+      className={`wo-abs-field ${baseline ? "wo-abs-field--baseline" : "wo-abs-field--center"}`}
+      style={style}
+    >
+      <input
+        className={`wo-abs-input ${type === "date" ? "wo-abs-date" : ""} ${className}`}
+        style={{ textAlign: align }}
+        type={type}
+        inputMode={inputMode}
+        value={value}
+        readOnly={readOnly}
+        aria-label={ariaLabel}
+        onChange={(e) => onChange?.(e.target.value)}
+      />
+    </div>
   );
 }
 
@@ -98,6 +122,61 @@ function TitleCover({ kind }: { kind: WorkOrderDocumentKind }) {
   return <div className="wo-title-cover">{DOCUMENT_TITLES[kind]}</div>;
 }
 
+function MetaLabelCover({ kind }: { kind: WorkOrderDocumentKind }) {
+  if (kind === "work-order") return null;
+  return (
+    <div className="wo-meta-label-cover">
+      {kind === "estimate" ? "ESTIMATE #:" : "INVOICE #:"}
+    </div>
+  );
+}
+
+/**
+ * Coordinates are % of the 1024×1536 template.
+ * Baseline fields use `line` = underline / row-rule Y%; text sits just above it.
+ * Vehicle left/width vary by label length (LICENSE PLATE is much longer than MAKE).
+ */
+const P1 = {
+  meta: [
+    { left: "80.5%", line: "4.20%", width: "15%" },
+    { left: "74%", line: "7.13%", width: "21.5%" },
+    { left: "80.5%", line: "10.00%", width: "15%" },
+    { left: "86%", line: "12.96%", width: "10%" },
+  ],
+  // Customer / vehicle underlines at y=341,377,414,451
+  infoLines: ["22.20%", "24.54%", "26.95%", "29.36%"],
+  customer: { left: "12.5%", width: "33%" },
+  vehicle: {
+    make: { left: "55.8%", width: "14.8%" },
+    model: { left: "78.5%", width: "17%" },
+    year: { left: "55.8%", width: "14.8%" },
+    vin: { left: "76.5%", width: "19%" },
+    // LICENSE PLATE# label is long — value starts on the underline after it
+    plate: { left: "61.5%", width: "9.2%" },
+    mileage: { left: "79.5%", width: "16%" },
+    color: { left: "55.8%", width: "14.8%" },
+    engine: { left: "78.5%", width: "17%" },
+  },
+  // Service row bottom rules at y=584,617,650,683,717,750
+  serviceLineStart: 38.02,
+  servicePitch: 2.15,
+  // Notes: first rule y=856, pitch 22px → 1.432%
+  notes: { left: "5%", top: "54.80%", width: "90%", height: "8.7%" },
+  // Part row bottom rules at y=1099,1129,... pitch 29px
+  partLineStart: 71.55,
+  partPitch: 1.89,
+  partsTotalLine: "90.56%",
+} as const;
+
+const P2 = {
+  meta: [
+    { left: "80%", line: "4.69%", width: "16.5%" },
+    { left: "74.5%", line: "8.04%", width: "22%" },
+    { left: "80%", line: "11.42%", width: "16.5%" },
+    { left: "86%", line: "14.88%", width: "10.5%" },
+  ],
+} as const;
+
 export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props) {
   const totals = calculateDocumentTotals(value);
   const showAuthorization = kind !== "estimate";
@@ -133,13 +212,50 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
-        .wo-page-1 {
-          background-image: url("/documents/workorder-page-1.png");
+        .wo-page-1 { background-image: url("/documents/workorder-page-1.png"); }
+        .wo-page-2 { background-image: url("/documents/workorder-page-2.png"); }
+        .wo-abs-field {
+          position: absolute;
+          display: flex;
+          box-sizing: border-box;
+          z-index: 1;
+          pointer-events: none;
         }
-        .wo-page-2 {
-          background-image: url("/documents/workorder-page-2.png");
+        .wo-abs-field--baseline {
+          align-items: flex-end;
+          overflow: visible;
         }
-        .wo-abs-input,
+        .wo-abs-field--baseline .wo-abs-input {
+          height: 12px;
+          line-height: 12px;
+          font-size: 11px;
+          /* Seat ink on the printed rule */
+          transform: translateY(2px);
+        }
+        .wo-abs-field--center {
+          align-items: center;
+        }
+        .wo-abs-input {
+          pointer-events: auto;
+          display: block;
+          width: 100%;
+          margin: 0;
+          border: 0;
+          outline: none;
+          background: transparent;
+          color: #0b1b33;
+          font: inherit;
+          font-size: 11px;
+          line-height: 12px;
+          padding: 0 2px;
+          box-sizing: border-box;
+        }
+        .wo-abs-field--center .wo-abs-input {
+          height: 1.15em;
+          font-size: clamp(9px, 1.05vw, 11.5px);
+          line-height: 1.15;
+          transform: none;
+        }
         .wo-abs-area {
           position: absolute;
           margin: 0;
@@ -148,61 +264,101 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           background: transparent;
           color: #0b1b33;
           font: inherit;
-          font-size: clamp(9px, 1.15vw, 12px);
-          line-height: 1.2;
-          padding: 0 2px;
+          font-size: 11px;
+          /* Match note-rule pitch: 22px @ 1536 → 17.5px @ 1224 */
+          line-height: 17.5px;
+          padding: 0 4px;
           box-sizing: border-box;
-        }
-        .wo-abs-area {
           resize: none;
-          line-height: 1.55;
           overflow: hidden;
+          z-index: 1;
         }
         .wo-abs-input:focus,
         .wo-abs-area:focus {
-          background: rgba(0, 168, 255, 0.08);
-          box-shadow: inset 0 -1px 0 var(--wo-cyan);
+          background: rgba(0, 168, 255, 0.1);
+          box-shadow: inset 0 -1.5px 0 var(--wo-cyan);
         }
         .wo-abs-input[readonly],
         .wo-abs-area[readonly] {
           cursor: default;
         }
+        .wo-abs-date {
+          appearance: none;
+          -webkit-appearance: none;
+          min-width: 0;
+          max-width: 100%;
+          height: 12px;
+          color-scheme: light;
+          font-size: 10px;
+          line-height: 12px;
+        }
+        .wo-abs-date::-webkit-calendar-picker-indicator {
+          opacity: 0.35;
+          width: 11px;
+          height: 11px;
+          padding: 0;
+          margin: 0 0 0 2px;
+          cursor: pointer;
+        }
+        .wo-abs-date::-webkit-datetime-edit,
+        .wo-abs-date::-webkit-datetime-edit-fields-wrapper,
+        .wo-abs-date::-webkit-datetime-edit-text,
+        .wo-abs-date::-webkit-datetime-edit-month-field,
+        .wo-abs-date::-webkit-datetime-edit-day-field,
+        .wo-abs-date::-webkit-datetime-edit-year-field {
+          padding: 0;
+          margin: 0;
+        }
         .wo-title-cover {
           position: absolute;
-          left: 28%;
-          top: 3.4%;
-          width: 34%;
-          height: 4.2%;
+          left: 27%;
+          top: 1.55%;
+          width: 38%;
+          height: 4.9%;
           display: flex;
           align-items: center;
           justify-content: center;
           background: var(--wo-navy);
           color: #fff;
-          font-size: clamp(16px, 2.4vw, 28px);
+          font-size: clamp(15px, 2.2vw, 26px);
           font-weight: 800;
           letter-spacing: 0.06em;
-          z-index: 2;
+          z-index: 3;
+        }
+        .wo-meta-label-cover {
+          position: absolute;
+          left: 66%;
+          top: 1.9%;
+          width: 13.2%;
+          height: 2.7%;
+          background: var(--wo-navy);
+          color: var(--wo-cyan);
+          font-size: clamp(8px, 0.95vw, 10px);
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          display: flex;
+          align-items: center;
+          padding-left: 2px;
+          z-index: 3;
+        }
+        .wo-page-2 .wo-title-cover {
+          left: 26.9%;
+          top: 2%;
+          width: 37%;
+          height: 4.8%;
+        }
+        .wo-page-2 .wo-meta-label-cover {
+          left: 65.2%;
+          top: 2.35%;
+          width: 14.8%;
+          height: 2.6%;
         }
         .wo-check {
           position: absolute;
           width: 1.5%;
           height: 1%;
           accent-color: var(--wo-cyan);
-        }
-        .wo-meta-label-cover {
-          position: absolute;
-          left: 71.5%;
-          top: 2.7%;
-          width: 24%;
-          height: 2%;
-          background: var(--wo-navy);
-          color: var(--wo-cyan);
-          font-size: clamp(8px, 1vw, 10px);
-          font-weight: 700;
-          letter-spacing: 0.04em;
-          display: flex;
-          align-items: center;
-          z-index: 2;
+          z-index: 1;
         }
         .wo-estimate-banner {
           position: absolute;
@@ -219,23 +375,15 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           color: #243447;
           z-index: 3;
         }
+        .wo-total-input {
+          font-weight: 700;
+          font-size: clamp(11px, 1.3vw, 14px);
+        }
         @media print {
-          @page {
-            size: 8.5in 12.75in;
-            margin: 0;
-          }
-          html,
-          body {
-            background: #fff !important;
-            color-scheme: light !important;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          .wo-print-root,
-          .wo-print-root * {
-            visibility: visible !important;
-          }
+          @page { size: 8.5in 12.75in; margin: 0; }
+          html, body { background: #fff !important; color-scheme: light !important; }
+          body * { visibility: hidden !important; }
+          .wo-print-root, .wo-print-root * { visibility: visible !important; }
           .wo-print-root {
             position: absolute;
             inset: 0;
@@ -243,10 +391,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
             margin: 0 !important;
             max-width: none !important;
           }
-          .wo-sheet {
-            width: 8.5in;
-            margin: 0;
-          }
+          .wo-sheet { width: 8.5in; margin: 0; }
           .wo-page {
             width: 8.5in;
             height: 12.75in;
@@ -256,137 +401,128 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
             break-after: page;
             page-break-after: always;
           }
-          .wo-page:last-child {
-            break-after: auto;
-            page-break-after: auto;
-          }
-          .wo-abs-input:focus,
-          .wo-abs-area:focus {
+          .wo-page:last-child { break-after: auto; page-break-after: auto; }
+          .wo-abs-input:focus, .wo-abs-area:focus {
             background: transparent !important;
             box-shadow: none !important;
           }
-          .no-print {
-            display: none !important;
-          }
+          .wo-abs-date::-webkit-calendar-picker-indicator { display: none; }
+          .no-print { display: none !important; }
         }
       `}</style>
 
       <div className="wo-sheet">
         <section className="wo-page wo-page-1" aria-label="Work order page 1">
           <TitleCover kind={kind} />
-          {kind !== "work-order" ? (
-            <div className="wo-meta-label-cover">
-              {kind === "estimate" ? "ESTIMATE #:" : "INVOICE #:"}
-            </div>
-          ) : null}
+          <MetaLabelCover kind={kind} />
 
           <AbsInput
-            box={{ left: "78%", top: "3.5%", width: "17%" }}
+            box={P1.meta[0]}
             value={value.workOrderNumber}
             readOnly={readOnly}
             onChange={(workOrderNumber) => patch({ workOrderNumber })}
           />
           <AbsInput
-            box={{ left: "78%", top: "6.4%", width: "17%" }}
+            box={P1.meta[1]}
             type="date"
             value={value.date}
             readOnly={readOnly}
             onChange={(date) => patch({ date })}
           />
           <AbsInput
-            box={{ left: "78%", top: "9.3%", width: "17%" }}
+            box={P1.meta[2]}
             type="date"
             value={value.promisedDate}
             readOnly={readOnly}
             onChange={(promisedDate) => patch({ promisedDate })}
           />
           <AbsInput
-            box={{ left: "78%", top: "12.2%", width: "17%" }}
+            box={P1.meta[3]}
             value={value.advisor}
             readOnly={readOnly}
             onChange={(advisor) => patch({ advisor })}
           />
 
           <AbsInput
-            box={{ left: "12%", top: "20.8%", width: "34%" }}
+            box={{ left: P1.customer.left, line: P1.infoLines[0], width: P1.customer.width }}
             value={value.customer.name}
             readOnly={readOnly}
             onChange={(name) => patch({ customer: { ...value.customer, name } })}
           />
           <AbsInput
-            box={{ left: "12%", top: "23.8%", width: "34%" }}
+            box={{ left: P1.customer.left, line: P1.infoLines[1], width: P1.customer.width }}
             value={value.customer.phone}
             readOnly={readOnly}
             onChange={(phone) => patch({ customer: { ...value.customer, phone } })}
           />
           <AbsInput
-            box={{ left: "12%", top: "26.8%", width: "34%" }}
+            box={{ left: P1.customer.left, line: P1.infoLines[2], width: P1.customer.width }}
             value={value.customer.email}
             readOnly={readOnly}
             onChange={(email) => patch({ customer: { ...value.customer, email } })}
           />
           <AbsInput
-            box={{ left: "12%", top: "29.8%", width: "34%" }}
+            box={{ left: P1.customer.left, line: P1.infoLines[3], width: P1.customer.width }}
             value={value.customer.address}
             readOnly={readOnly}
             onChange={(address) => patch({ customer: { ...value.customer, address } })}
           />
 
           <AbsInput
-            box={{ left: "55%", top: "20.8%", width: "16%" }}
+            box={{ ...P1.vehicle.make, line: P1.infoLines[0] }}
             value={value.vehicle.make}
             readOnly={readOnly}
             onChange={(make) => patch({ vehicle: { ...value.vehicle, make } })}
           />
           <AbsInput
-            box={{ left: "78%", top: "20.8%", width: "16%" }}
+            box={{ ...P1.vehicle.model, line: P1.infoLines[0] }}
             value={value.vehicle.model}
             readOnly={readOnly}
             onChange={(model) => patch({ vehicle: { ...value.vehicle, model } })}
           />
           <AbsInput
-            box={{ left: "55%", top: "23.8%", width: "16%" }}
+            box={{ ...P1.vehicle.year, line: P1.infoLines[1] }}
             value={value.vehicle.year}
             readOnly={readOnly}
             onChange={(year) => patch({ vehicle: { ...value.vehicle, year } })}
           />
           <AbsInput
-            box={{ left: "78%", top: "23.8%", width: "16%" }}
+            box={{ ...P1.vehicle.vin, line: P1.infoLines[1] }}
             value={value.vehicle.vin}
             readOnly={readOnly}
             onChange={(vin) => patch({ vehicle: { ...value.vehicle, vin } })}
           />
           <AbsInput
-            box={{ left: "55%", top: "26.8%", width: "16%" }}
+            box={{ ...P1.vehicle.plate, line: P1.infoLines[2] }}
             value={value.vehicle.plate}
             readOnly={readOnly}
             onChange={(plate) => patch({ vehicle: { ...value.vehicle, plate } })}
           />
           <AbsInput
-            box={{ left: "78%", top: "26.8%", width: "16%" }}
+            box={{ ...P1.vehicle.mileage, line: P1.infoLines[2] }}
             value={value.vehicle.mileage}
             readOnly={readOnly}
             onChange={(mileage) => patch({ vehicle: { ...value.vehicle, mileage } })}
           />
           <AbsInput
-            box={{ left: "55%", top: "29.8%", width: "16%" }}
+            box={{ ...P1.vehicle.color, line: P1.infoLines[3] }}
             value={value.vehicle.color}
             readOnly={readOnly}
             onChange={(color) => patch({ vehicle: { ...value.vehicle, color } })}
           />
           <AbsInput
-            box={{ left: "78%", top: "29.8%", width: "16%" }}
+            box={{ ...P1.vehicle.engine, line: P1.infoLines[3] }}
             value={value.vehicle.engine}
             readOnly={readOnly}
             onChange={(engine) => patch({ vehicle: { ...value.vehicle, engine } })}
           />
 
           {value.services.map((line, index) => {
-            const top = `${36.6 + index * 2.55}%`;
+            const rule = `${P1.serviceLineStart + index * P1.servicePitch}%`;
             return (
               <div key={`svc-${index}`}>
                 <AbsInput
-                  box={{ left: "10%", top, width: "66%", height: "2.2%" }}
+                  box={{ left: "10%", line: rule, width: "66%" }}
                   value={line.description}
                   readOnly={readOnly}
                   onChange={(description) => {
@@ -397,7 +533,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                   }}
                 />
                 <AbsInput
-                  box={{ left: "84%", top, width: "10%", height: "2.2%" }}
+                  box={{ left: "85%", line: rule, width: "10%" }}
                   align="right"
                   inputMode="decimal"
                   value={line.estLabor ?? ""}
@@ -416,18 +552,18 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           })}
 
           <AbsArea
-            box={{ left: "5.5%", top: "54.2%", width: "89%", height: "8.2%" }}
+            box={P1.notes}
             value={value.technicianNotes}
             readOnly={readOnly}
             onChange={(technicianNotes) => patch({ technicianNotes })}
           />
 
           {value.parts.map((line, index) => {
-            const top = `${67.35 + index * 2.05}%`;
+            const rule = `${P1.partLineStart + index * P1.partPitch}%`;
             return (
               <div key={`part-${index}`}>
                 <AbsInput
-                  box={{ left: "5.5%", top, width: "7%", height: "1.9%" }}
+                  box={{ left: "5.5%", line: rule, width: "7%" }}
                   align="center"
                   value={line.qty ?? ""}
                   readOnly={readOnly}
@@ -439,7 +575,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                   }}
                 />
                 <AbsInput
-                  box={{ left: "13.5%", top, width: "34%", height: "1.9%" }}
+                  box={{ left: "13.5%", line: rule, width: "34%" }}
                   value={line.description}
                   readOnly={readOnly}
                   onChange={(description) => {
@@ -450,7 +586,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                   }}
                 />
                 <AbsInput
-                  box={{ left: "48.5%", top, width: "18%", height: "1.9%" }}
+                  box={{ left: "48.5%", line: rule, width: "18%" }}
                   value={line.partNumber}
                   readOnly={readOnly}
                   onChange={(partNumber) => {
@@ -461,7 +597,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                   }}
                 />
                 <AbsInput
-                  box={{ left: "70%", top, width: "11%", height: "1.9%" }}
+                  box={{ left: "70%", line: rule, width: "11%" }}
                   align="right"
                   value={line.unitPrice ?? ""}
                   readOnly={readOnly}
@@ -475,7 +611,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                   }}
                 />
                 <AbsInput
-                  box={{ left: "84%", top, width: "10%", height: "1.9%" }}
+                  box={{ left: "84%", line: rule, width: "10.5%" }}
                   align="right"
                   readOnly
                   value={line.qty || line.unitPrice ? money(partLineTotal(line)) : ""}
@@ -485,7 +621,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           })}
 
           <AbsInput
-            box={{ left: "84%", top: "88.2%", width: "10%", height: "2%" }}
+            box={{ left: "84%", line: P1.partsTotalLine, width: "10.5%" }}
             align="right"
             readOnly
             value={money(totals.partsTotal)}
@@ -496,41 +632,37 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
       <div className="wo-sheet">
         <section className="wo-page wo-page-2" aria-label="Work order page 2">
           <TitleCover kind={kind} />
-          {kind !== "work-order" ? (
-            <div className="wo-meta-label-cover">
-              {kind === "estimate" ? "ESTIMATE #:" : "INVOICE #:"}
-            </div>
-          ) : null}
+          <MetaLabelCover kind={kind} />
 
           <AbsInput
-            box={{ left: "78%", top: "3.5%", width: "17%" }}
+            box={P2.meta[0]}
             value={value.workOrderNumber}
             readOnly={readOnly}
             onChange={(workOrderNumber) => patch({ workOrderNumber })}
           />
           <AbsInput
-            box={{ left: "78%", top: "6.4%", width: "17%" }}
+            box={P2.meta[1]}
             type="date"
             value={value.date}
             readOnly={readOnly}
             onChange={(date) => patch({ date })}
           />
           <AbsInput
-            box={{ left: "78%", top: "9.3%", width: "17%" }}
+            box={P2.meta[2]}
             type="date"
             value={value.promisedDate}
             readOnly={readOnly}
             onChange={(promisedDate) => patch({ promisedDate })}
           />
           <AbsInput
-            box={{ left: "78%", top: "12.2%", width: "17%" }}
+            box={P2.meta[3]}
             value={value.advisor}
             readOnly={readOnly}
             onChange={(advisor) => patch({ advisor })}
           />
 
           <AbsArea
-            box={{ left: "5.5%", top: "19%", width: "89%", height: "28%" }}
+            box={{ left: "5.5%", top: "23.8%", width: "89%", height: "28.5%" }}
             value={value.workDescription}
             readOnly={readOnly}
             onChange={(workDescription) => patch({ workDescription })}
@@ -539,7 +671,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           {showAuthorization ? (
             <>
               <AbsInput
-                box={{ left: "22%", top: "58.8%", width: "28%", height: "2%" }}
+                box={{ left: "18%", top: "65.1%", width: "28%", height: "1.9%" }}
                 value={value.authorization.customerSignature}
                 readOnly={readOnly}
                 onChange={(customerSignature) =>
@@ -547,7 +679,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                 }
               />
               <AbsInput
-                box={{ left: "58%", top: "58.8%", width: "14%", height: "2%" }}
+                box={{ left: "52%", top: "65.1%", width: "14%", height: "1.9%" }}
                 type="date"
                 value={value.authorization.date}
                 readOnly={readOnly}
@@ -555,7 +687,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
               />
               <input
                 className="wo-check"
-                style={{ left: "7.2%", top: "62.4%" }}
+                style={{ left: "6.5%", top: "68.3%" }}
                 type="checkbox"
                 checked={value.authorization.textEmailUpdates}
                 disabled={readOnly}
@@ -570,7 +702,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                 aria-label="Receive text or email updates"
               />
               <AbsInput
-                box={{ left: "18%", top: "74.8%", width: "28%", height: "2%" }}
+                box={{ left: "13.5%", top: "87.2%", width: "28%", height: "1.9%" }}
                 value={value.authorization.paymentSignature}
                 readOnly={readOnly}
                 onChange={(paymentSignature) =>
@@ -578,7 +710,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                 }
               />
               <AbsInput
-                box={{ left: "54%", top: "74.8%", width: "14%", height: "2%" }}
+                box={{ left: "48%", top: "87.2%", width: "14%", height: "1.9%" }}
                 type="date"
                 value={value.authorization.paymentDate}
                 readOnly={readOnly}
@@ -596,25 +728,25 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           )}
 
           <AbsInput
-            box={{ left: "82%", top: "54.6%", width: "12%", height: "2%" }}
+            box={{ left: "82%", top: "54%", width: "13%", height: "1.9%" }}
             align="right"
             readOnly
             value={money(totals.laborTotal)}
           />
           <AbsInput
-            box={{ left: "82%", top: "57.4%", width: "12%", height: "2%" }}
+            box={{ left: "82%", top: "57.3%", width: "13%", height: "1.9%" }}
             align="right"
             readOnly
             value={money(totals.partsTotal)}
           />
           <AbsInput
-            box={{ left: "82%", top: "60.2%", width: "12%", height: "2%" }}
+            box={{ left: "82%", top: "61.1%", width: "13%", height: "1.9%" }}
             align="right"
             readOnly
             value={money(totals.subtotal)}
           />
           <AbsInput
-            box={{ left: "72%", top: "63%", width: "6%", height: "2%" }}
+            box={{ left: "72%", top: "64.7%", width: "6%", height: "1.9%" }}
             align="center"
             value={value.summary.taxPercent}
             readOnly={readOnly}
@@ -625,13 +757,13 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
             }
           />
           <AbsInput
-            box={{ left: "82%", top: "63%", width: "12%", height: "2%" }}
+            box={{ left: "82%", top: "64.7%", width: "13%", height: "1.9%" }}
             align="right"
             readOnly
             value={money(totals.taxAmount)}
           />
           <AbsInput
-            box={{ left: "82%", top: "65.8%", width: "12%", height: "2%" }}
+            box={{ left: "82%", top: "68.5%", width: "13%", height: "1.9%" }}
             align="right"
             value={value.summary.excise || ""}
             readOnly={readOnly}
@@ -645,7 +777,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
             }
           />
           <AbsInput
-            box={{ left: "78%", top: "69.2%", width: "16%", height: "2.6%" }}
+            box={{ left: "78%", top: "71%", width: "16%", height: "3%" }}
             align="right"
             className="wo-total-input"
             readOnly
@@ -654,7 +786,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           />
 
           <AbsArea
-            box={{ left: "58%", top: "76.5%", width: "36.5%", height: "10%" }}
+            box={{ left: "58%", top: "78%", width: "36.5%", height: "12%" }}
             value={value.notes}
             readOnly={readOnly}
             onChange={(notes) => patch({ notes })}

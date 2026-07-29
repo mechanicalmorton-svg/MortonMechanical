@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import { withPermission } from "@/lib/admin-route";
 import { normalizePlate, normalizeVin, plateValidationError, vinValidationError } from "@/lib/customer-vehicles";
-import { createId, deleteWorkOrder, loadWorkOrders, resolveWorkOrderLinks, upsertWorkOrder } from "@/lib/shop-data";
+import {
+  createId,
+  deleteWorkOrder,
+  getCustomerById,
+  getCustomerVehicleById,
+  loadStaff,
+  loadWorkOrders,
+  resolveWorkOrderLinks,
+  upsertWorkOrder,
+} from "@/lib/shop-data";
 import type { Priority, WorkOrder } from "@/lib/shop-types";
+import { hydrateWorkOrderDocuments } from "@/lib/work-order-documents";
 import { normalizeWorkOrderStatus } from "@/lib/work-order-status";
 
 function parseStatus(value: unknown) {
@@ -16,6 +26,23 @@ function parsePriority(value: unknown): Priority {
 function optionalId(value: unknown) {
   const trimmed = typeof value === "string" ? value.trim() : "";
   return trimmed || undefined;
+}
+
+async function withFilledDocuments(order: WorkOrder): Promise<WorkOrder> {
+  const [customer, vehicle, staff] = await Promise.all([
+    order.customerId ? getCustomerById(order.customerId) : Promise.resolve(null),
+    order.customerVehicleId ? getCustomerVehicleById(order.customerVehicleId) : Promise.resolve(null),
+    order.assignedTo ? loadStaff() : Promise.resolve([]),
+  ]);
+  const advisorName =
+    order.assignedTo && Array.isArray(staff)
+      ? staff.find((member) => member.id === order.assignedTo)?.name
+      : undefined;
+  return hydrateWorkOrderDocuments(order, {
+    customer,
+    vehicle,
+    advisorName,
+  });
 }
 
 export async function GET() {
@@ -59,7 +86,7 @@ export async function POST(req: Request) {
       }
 
       const status = parseStatus(body.status);
-      const order: WorkOrder = {
+      const draft: WorkOrder = {
         id: createId(),
         customerId: optionalId(links.customerId),
         customerVehicleId: optionalId(links.customerVehicleId),
@@ -81,6 +108,7 @@ export async function POST(req: Request) {
         createdAt: now,
         updatedAt: now,
       };
+      const order = await withFilledDocuments(draft);
       await upsertWorkOrder(order);
       return NextResponse.json(order);
     } catch (error) {
@@ -116,14 +144,13 @@ export async function PATCH(req: Request) {
           ? body.paymentStatus
           : (item.paymentStatus ?? "unpaid");
 
-      const updated: WorkOrder = {
+      const draft: WorkOrder = {
         id: item.id,
         customerId: optionalId(links.customerId ?? item.customerId),
         customerVehicleId: manualJobVehicle
           ? undefined
           : optionalId(links.customerVehicleId ?? body.customerVehicleId ?? item.customerVehicleId),
         bookingId: optionalId(body.bookingId) ?? item.bookingId,
-        // Empty string clears the catalog link (workOrderToRow writes null).
         serviceId: body.serviceId !== undefined ? optionalId(body.serviceId) || "" : item.serviceId,
         customerName: links.customerName || item.customerName,
         phone: links.phone || item.phone,
@@ -148,6 +175,9 @@ export async function PATCH(req: Request) {
         createdAt: item.createdAt,
         updatedAt: new Date().toISOString(),
       };
+
+      // Document editor saves already include full field payloads; still re-sync live WO fields.
+      const updated = await withFilledDocuments(draft);
       await upsertWorkOrder(updated);
       return NextResponse.json(updated);
     } catch (error) {
