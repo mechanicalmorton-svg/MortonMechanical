@@ -60,9 +60,7 @@ export function WorkOrderDocumentEditor({
       let vehicle: CustomerVehicle | null = null;
 
       if (order.customerId) {
-        const { data } = await adminGet<Customer[]>(
-          `/api/admin/customers?q=${encodeURIComponent(order.customerName || "")}`,
-        );
+        const { data } = await adminGet<Customer[]>("/api/admin/customers?includeVehicles=1");
         customer = data?.find((item) => item.id === order.customerId) ?? null;
       }
 
@@ -187,7 +185,7 @@ export function WorkOrderDocumentEditor({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[170] flex flex-col bg-slate-950/90 backdrop-blur-sm">
+    <div className="wo-print-shell fixed inset-0 z-[170] flex flex-col bg-slate-950/90 backdrop-blur-sm">
       <div className="no-print flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-4 py-3 sm:px-6">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-400/80">
@@ -224,7 +222,7 @@ export function WorkOrderDocumentEditor({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-4 sm:px-6">
+      <div className="wo-print-shell min-h-0 flex-1 overflow-auto px-3 py-4 sm:px-6">
         {loading || !fields ? (
           <div className="flex h-full min-h-[40vh] items-center justify-center text-slate-400">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />

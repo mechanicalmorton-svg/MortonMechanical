@@ -98,7 +98,7 @@ function WorkOrderCustomerView() {
             <p className="mt-2 text-sm text-slate-600">{error}</p>
           </div>
         ) : fields ? (
-          <div className="wo-print-root mx-auto max-w-[8.75in]">
+          <div className="wo-print-root mx-auto max-w-[8.5in]">
             <WorkOrderDocumentForm kind={kind} value={fields} readOnly />
           </div>
         ) : null}
