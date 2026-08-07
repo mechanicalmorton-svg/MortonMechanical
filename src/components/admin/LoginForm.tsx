@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ArrowRight, Lock, Mail, ShieldCheck, Truck, Wrench } from "lucide-react";
 import { PortalNavLinks } from "@/components/auth/PortalNavLinks";
 import { SiteLogo } from "@/components/SiteLogo";
+import { useShopContact } from "@/lib/use-shop-contact";
 import { useAdminToast } from "./AdminToast";
 import { btnPrimary, inputClass } from "./admin-ui";
 
@@ -62,6 +63,7 @@ const PORTAL_COPY: Record<
 
 export function LoginForm({ useEmailLogin = false, portal = "admin" }: Props) {
   const toast = useAdminToast();
+  const shop = useShopContact();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -102,6 +104,8 @@ export function LoginForm({ useEmailLogin = false, portal = "admin" }: Props) {
         <SiteLogo
           size={48}
           showName
+          name={shop.businessName}
+          src={shop.logos.staffLogin}
           subtitle={portal === "mechanic" ? "Mechanic Portal" : portal === "dispatcher" ? "Dispatcher Portal" : "Staff Portal"}
         />
       </div>
@@ -109,7 +113,7 @@ export function LoginForm({ useEmailLogin = false, portal = "admin" }: Props) {
       <div className="admin-rise relative w-full max-w-md">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-5 flex justify-center">
-            <SiteLogo size={84} />
+            <SiteLogo size={84} name={shop.businessName} src={shop.logos.staffLogin} />
           </div>
           <p
             className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${

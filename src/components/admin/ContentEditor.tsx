@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { ServiceIcon, SiteContent, SectionAlign } from "@/lib/content-types";
+import { SITE_LOGO_SLOTS } from "@/lib/content-types";
 import { normalizeContent } from "@/lib/content-normalize";
 import {
   createCustomBlock,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/page-layout";
 import { SITE_CONTENT_BROADCAST } from "@/lib/site-content-live";
 import { useAdminToast } from "./AdminToast";
+import { ImageUploadField } from "./ImageUploadField";
 import { PageHeader, btnPrimary, btnSecondary, inputClass } from "./admin-ui";
 import { Can, usePermissions } from "./permissions";
 
@@ -62,7 +64,7 @@ const CATEGORIES: { id: CategoryId; label: string; hint: string }[] = [
   { id: "custom", label: "Custom sections", hint: "Owner-added homepage blocks" },
   { id: "contact", label: "Contact page", hint: "Quote form and contact labels" },
   { id: "footer", label: "Footer", hint: "Footer link labels" },
-  { id: "images", label: "Images", hint: "Image URLs used on the site" },
+  { id: "images", label: "Images", hint: "Upload logos, favicon, and page images" },
 ];
 
 const iconOptions: ServiceIcon[] = ["scan", "calendar", "shield", "cog", "battery", "wind"];
@@ -748,7 +750,12 @@ export function ContentEditor() {
                 >
                   <Field label="Title" value={block.title} onChange={(v) => patch((c) => { c.customBlocks[i].title = v; return c; })} />
                   <Field label="Body" value={block.body} onChange={(v) => patch((c) => { c.customBlocks[i].body = v; return c; })} multiline />
-                  <Field label="Image URL (optional)" value={block.imageUrl} onChange={(v) => patch((c) => { c.customBlocks[i].imageUrl = v; return c; })} />
+                  <ImageUploadField
+                    label="Section image (optional)"
+                    slot="section"
+                    value={block.imageUrl}
+                    onChange={(v) => patch((c) => { c.customBlocks[i].imageUrl = v; return c; })}
+                  />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Button text (optional)" value={block.buttonText} onChange={(v) => patch((c) => { c.customBlocks[i].buttonText = v; return c; })} />
                     <Field label="Button link" value={block.buttonHref} onChange={(v) => patch((c) => { c.customBlocks[i].buttonHref = v; return c; })} />
@@ -819,12 +826,104 @@ export function ContentEditor() {
           )}
 
           {category === "images" && (
-            <div className="space-y-4 rounded-2xl border border-slate-800/70 bg-slate-900/20 p-5">
-              <p className="text-xs text-slate-500">Use direct image URLs (for example Unsplash). Hosts must be allowed in next.config.</p>
-              <Field label="Hero image" value={content.images.hero} onChange={(v) => patch((c) => { c.images.hero = v; return c; })} />
-              <Field label="About image" value={content.images.about} onChange={(v) => patch((c) => { c.images.about = v; return c; })} />
-              <Field label="Services banner" value={content.images.services} onChange={(v) => patch((c) => { c.images.services = v; return c; })} />
-              <Field label="Contact / CTA image" value={content.images.contact} onChange={(v) => patch((c) => { c.images.contact = v; return c; })} />
+            <div className="space-y-6 rounded-2xl border border-slate-800/70 bg-slate-900/20 p-5">
+              <p className="text-xs text-slate-500">
+                Upload JPG, PNG, WebP, GIF, or ICO files up to 5 MB. Changes go live after you save.
+              </p>
+
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-slate-300">Brand</p>
+                <ImageUploadField
+                  label="Default logo"
+                  hint="Used everywhere unless you upload a different logo for a specific place below."
+                  slot="logo"
+                  preview="square"
+                  fallback="/logo.png"
+                  value={content.images.logo}
+                  onChange={(v) => patch((c) => { c.images.logo = v; return c; })}
+                />
+                <ImageUploadField
+                  label="Browser tab icon"
+                  hint="Favicon shown on the browser tab and bookmarks. A square PNG or ICO works best."
+                  slot="favicon"
+                  preview="icon"
+                  fallback="/favicon.ico"
+                  value={content.images.favicon}
+                  onChange={(v) => patch((c) => { c.images.favicon = v; return c; })}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-slate-300">Logo by location</p>
+                <p className="text-xs text-slate-500">
+                  Upload a logo here to override the default one in that place. Remove it to go back
+                  to the default.
+                </p>
+                {SITE_LOGO_SLOTS.map((entry) => (
+                  <ImageUploadField
+                    key={entry.id}
+                    label={entry.label}
+                    hint={entry.hint}
+                    slot={`logo-${entry.id}`}
+                    preview="square"
+                    inherits={content.images.logo || "/logo.png"}
+                    value={content.images.logos[entry.id]}
+                    onChange={(v) => patch((c) => { c.images.logos[entry.id] = v; return c; })}
+                  />
+                ))}
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-slate-300">Homepage</p>
+                <ImageUploadField
+                  label="Hero background"
+                  hint="Full-width image behind the headline at the top of the homepage."
+                  slot="hero"
+                  value={content.images.hero}
+                  onChange={(v) => patch((c) => { c.images.hero = v; return c; })}
+                />
+                <ImageUploadField
+                  label="Services banner"
+                  hint="Wide banner inside the Services section."
+                  slot="services"
+                  value={content.images.services}
+                  onChange={(v) => patch((c) => { c.images.services = v; return c; })}
+                />
+                <ImageUploadField
+                  label="About photo"
+                  hint="Portrait photo beside the About story."
+                  slot="about"
+                  value={content.images.about}
+                  onChange={(v) => patch((c) => { c.images.about = v; return c; })}
+                />
+                <ImageUploadField
+                  label="Call to action / contact image"
+                  hint="Background of the bottom quote banner and the contact page header."
+                  slot="contact"
+                  value={content.images.contact}
+                  onChange={(v) => patch((c) => { c.images.contact = v; return c; })}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-slate-300">Custom sections</p>
+                {content.customBlocks.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    No custom sections yet. Add one under Custom sections to give it an image.
+                  </p>
+                ) : (
+                  content.customBlocks.map((block, i) => (
+                    <ImageUploadField
+                      key={block.id}
+                      label={block.title || `Custom section ${i + 1}`}
+                      hint="Optional image shown inside this homepage section."
+                      slot="section"
+                      value={block.imageUrl}
+                      onChange={(v) => patch((c) => { c.customBlocks[i].imageUrl = v; return c; })}
+                    />
+                  ))
+                )}
+              </div>
             </div>
           )}
 

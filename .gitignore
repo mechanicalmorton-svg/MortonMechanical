@@ -15,6 +15,9 @@
 # local data (legacy — use Supabase in production)
 /data/
 
+# site images uploaded while running without Supabase
+/public/uploads/
+
 # env
 .env
 .env*.local

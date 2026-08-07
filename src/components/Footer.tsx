@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { SiteLogo } from "@/components/SiteLogo";
 import { getContent } from "@/lib/content";
+import { logoFor } from "@/lib/content-types";
 
 export async function Footer() {
-  const { site, footer, header } = await getContent();
+  const { site, footer, header, images } = await getContent();
   const year = new Date().getFullYear();
 
   return (
@@ -11,7 +12,7 @@ export async function Footer() {
       <div className="mx-auto max-w-screen-xl px-4 py-12 sm:px-6 sm:py-14">
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           <div className="max-w-sm">
-            <SiteLogo size={40} showName name={site.name} />
+            <SiteLogo size={40} showName name={site.name} src={logoFor(images, "footer")} />
             <p className="mt-4 text-sm leading-relaxed text-slate-500">{site.description}</p>
           </div>
 

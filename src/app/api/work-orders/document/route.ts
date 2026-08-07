@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadWorkOrders } from "@/lib/shop-data";
 import type { WorkOrderDocumentKind } from "@/lib/shop-types";
 import { findWorkOrderDocumentByToken } from "@/lib/work-order-document-store";
+import { normalizeDocumentFields } from "@/lib/work-order-documents";
 
 function parseKind(value: string | null): WorkOrderDocumentKind {
   if (value === "estimate" || value === "invoice" || value === "work-order") return value;
@@ -31,7 +32,7 @@ export async function GET(req: Request) {
           kind,
           orderId: stored.orderId,
           customerName: fields?.customer.name || "Customer",
-          fields,
+          fields: fields ? normalizeDocumentFields(fields) : fields,
         });
       }
     }
@@ -52,6 +53,6 @@ export async function GET(req: Request) {
     kind,
     orderId: order.id,
     customerName: order.customerName,
-    fields,
+    fields: normalizeDocumentFields(fields),
   });
 }

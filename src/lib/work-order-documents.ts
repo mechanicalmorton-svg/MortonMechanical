@@ -1,4 +1,6 @@
+import type { SiteLogoSet } from "./content-types";
 import { parseWorkOrderVehicleLabel } from "./customer-vehicles";
+import { workOrderStatusLabel } from "./work-order-status";
 import type {
   Customer,
   CustomerVehicle,
@@ -21,8 +23,31 @@ export const SERVICE_ROW_COUNT = 6;
 export const PART_ROW_COUNT = 10;
 export const DEFAULT_TAX_PERCENT = 0;
 
-export const SHOP_CONTACT = {
+export type ShopContact = {
+  businessName: string;
+  phone: string;
+  email: string;
+  address: string;
+  slogan: string;
+  sloganAccent: string;
+  thankYou: string;
+  logoUrl: string;
+  /** Per-place logos, already resolved to the default when not overridden. */
+  logos: SiteLogoSet;
+};
+
+/** Fallback letterhead used until Site Contents business info loads. */
+export const SHOP_CONTACT: ShopContact = {
   businessName: "Morton's Mechanical LLC",
+  logoUrl: "/logo.png",
+  logos: {
+    header: "/logo.png",
+    footer: "/logo.png",
+    dashboard: "/logo.png",
+    staffLogin: "/logo.png",
+    customerPortal: "/logo.png",
+    documents: "/logo.png",
+  },
   phone: "(555) 123-4567",
   email: "info@mortonsmechanical.com",
   address: "1234 Wrench Way, Springfield, ST 12345",
@@ -153,15 +178,19 @@ export function normalizeDocumentFields(fields: WorkOrderDocumentFields): WorkOr
       email: fields.customer?.email ?? "",
       address: fields.customer?.address ?? "",
     },
+    status: fields.status ?? "",
+    priority: fields.priority ?? "",
     vehicle: {
       make: fields.vehicle?.make ?? "",
       year: fields.vehicle?.year ?? "",
       plate: fields.vehicle?.plate ?? "",
       color: fields.vehicle?.color ?? "",
       model: fields.vehicle?.model ?? "",
+      trim: fields.vehicle?.trim ?? "",
       vin: fields.vehicle?.vin ?? "",
       mileage: fields.vehicle?.mileage ?? "",
       engine: fields.vehicle?.engine ?? "",
+      notes: fields.vehicle?.notes ?? "",
     },
   };
 }
@@ -186,15 +215,21 @@ export function buildDefaultDocumentFields(
   const vehicle = options?.vehicle;
   const customer = options?.customer;
 
-  const services = emptyServiceLines();
   const concern = order.customerConcern?.trim() || "";
   const service = order.service?.trim() || "";
-  if (concern || service) {
+
+  // Each work order field lands in exactly one document field, never two.
+  // Customer's concern -> Requested services (falls back to the work description).
+  // Work description -> Work description panel, unless it is already the requested service.
+  const requested = concern || service;
+  const services = emptyServiceLines();
+  if (requested) {
     services[0] = {
-      description: concern && service && concern !== service ? `${concern} — ${service}` : concern || service,
+      description: requested,
       estLabor: order.revenue != null && order.revenue > 0 ? Number(order.revenue) : null,
     };
   }
+  const workDescription = service && service !== requested ? service : "";
 
   const story = order.documentData?.storyCorrections?.trim() || "";
   const liveParts = order.documentData?.documents?.["work-order"]?.parts;
@@ -204,6 +239,8 @@ export function buildDefaultDocumentFields(
     date: toInputDate(order.createdAt) || toInputDate(new Date().toISOString()),
     promisedDate: toInputDate(order.scheduledDate),
     advisor: options?.advisorName?.trim() || "",
+    status: workOrderStatusLabel(order.status),
+    priority: order.priority === "urgent" ? "Urgent" : "Normal",
     customer: {
       name: customer?.name || order.customerName || "",
       phone: customer?.phone || order.phone || "",
@@ -215,15 +252,17 @@ export function buildDefaultDocumentFields(
       year: vehicle?.year != null ? String(vehicle.year) : parsed.year != null ? String(parsed.year) : "",
       plate: vehicle?.plate || parsed.plate || "",
       color: vehicle?.color || "",
-      model: [vehicle?.model, vehicle?.trim].filter(Boolean).join(" ") || parsed.model || "",
+      model: vehicle?.model || parsed.model || "",
+      trim: vehicle?.trim || "",
       vin: vehicle?.vin || "",
       mileage: vehicle?.mileage != null ? String(vehicle.mileage) : "",
       engine: vehicle?.powertrain || "",
+      notes: vehicle?.notes || "",
     },
     services,
-    technicianNotes: [order.internalNotes, story].filter(Boolean).join("\n\n"),
+    technicianNotes: [order.internalNotes?.trim(), story].filter(Boolean).join("\n\n"),
     parts: liveParts?.length ? liveParts : emptyPartLines(),
-    workDescription: [order.service, order.customerConcern, story, order.notes].filter(Boolean).join("\n\n"),
+    workDescription,
     authorization: {
       customerSignature: "",
       date: "",
@@ -291,6 +330,8 @@ export function resolveDocumentFields(
     // Due date / advisor / customer / vehicle always follow the live work order editors.
     promisedDate: defaults.promisedDate || normalized.promisedDate,
     advisor: preferLive(defaults.advisor, normalized.advisor),
+    status: defaults.status || normalized.status,
+    priority: defaults.priority || normalized.priority,
     customer: {
       name: preferLive(defaults.customer.name, normalized.customer.name),
       phone: preferLive(defaults.customer.phone, normalized.customer.phone),
@@ -303,9 +344,11 @@ export function resolveDocumentFields(
       plate: preferLive(defaults.vehicle.plate, normalized.vehicle.plate),
       color: preferLive(defaults.vehicle.color, normalized.vehicle.color),
       model: preferLive(defaults.vehicle.model, normalized.vehicle.model),
+      trim: preferLive(defaults.vehicle.trim, normalized.vehicle.trim),
       vin: preferLive(defaults.vehicle.vin, normalized.vehicle.vin),
       mileage: preferLive(defaults.vehicle.mileage, normalized.vehicle.mileage),
       engine: preferLive(defaults.vehicle.engine, normalized.vehicle.engine),
+      notes: preferLive(defaults.vehicle.notes, normalized.vehicle.notes),
     },
     services: syncServicesFromLive(defaults, normalized),
     technicianNotes: preferLive(defaults.technicianNotes, normalized.technicianNotes),

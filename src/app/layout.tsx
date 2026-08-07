@@ -19,16 +19,15 @@ const appDisplay = Barlow_Condensed({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { site } = await getContent();
+  const { site, images } = await getContent();
+  const favicon = images.favicon?.trim() || "/favicon.ico";
+  const logo = images.logo?.trim() || "/logo.png";
   return {
     title: { default: site.name, template: `%s | ${site.name}` },
     description: site.description,
     icons: {
-      icon: [
-        { url: "/logo.png", type: "image/png" },
-        { url: "/favicon.ico", sizes: "any" },
-      ],
-      apple: [{ url: "/logo.png", type: "image/png" }],
+      icon: [{ url: favicon, sizes: "any" }],
+      apple: [{ url: logo }],
     },
     openGraph: { title: site.name, description: site.description, type: "website" },
   };

@@ -7,6 +7,7 @@ import { SiteLogo } from "@/components/SiteLogo";
 import { useAdminToast } from "@/components/admin/AdminToast";
 import { StatusBadge, btnSecondary } from "@/components/admin/admin-ui";
 import type { Booking, CustomerVehicle, WorkOrder } from "@/lib/shop-types";
+import { useShopContact } from "@/lib/use-shop-contact";
 
 type ClientMeResponse = {
   user: {
@@ -23,6 +24,7 @@ type ClientMeResponse = {
 
 export function ClientPortal() {
   const toast = useAdminToast();
+  const shop = useShopContact();
   const [data, setData] = useState<ClientMeResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -67,7 +69,7 @@ export function ClientPortal() {
       <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <Link href="/" className="transition hover:opacity-90">
-            <SiteLogo size={40} showName subtitle="Client Portal" />
+            <SiteLogo size={40} showName subtitle="Client Portal" name={shop.businessName} src={shop.logos.customerPortal} />
           </Link>
           <div className="flex items-center gap-2">
             <button type="button" onClick={load} className={btnSecondary} disabled={loading}>

@@ -156,6 +156,10 @@ export type WorkOrderDocumentFields = {
   date: string;
   promisedDate: string;
   advisor: string;
+  /** Work order status label, mirrors the Status field on the work order form. */
+  status: string;
+  /** Work order priority label, mirrors the Priority field on the work order form. */
+  priority: string;
   customer: {
     name: string;
     phone: string;
@@ -168,9 +172,11 @@ export type WorkOrderDocumentFields = {
     plate: string;
     color: string;
     model: string;
+    trim: string;
     vin: string;
     mileage: string;
     engine: string;
+    notes: string;
   };
   services: WorkOrderServiceLine[];
   technicianNotes: string;

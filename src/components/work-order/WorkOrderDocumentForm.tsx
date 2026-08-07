@@ -6,9 +6,10 @@ import type { HTMLAttributes, ReactNode } from "react";
 import {
   calculateDocumentTotals,
   DOCUMENT_TITLES,
-  SHOP_CONTACT,
   partLineTotal,
+  type ShopContact,
 } from "@/lib/work-order-documents";
+import { useShopContact } from "@/lib/use-shop-contact";
 import type { WorkOrderDocumentFields, WorkOrderDocumentKind } from "@/lib/shop-types";
 
 type Props = {
@@ -161,11 +162,12 @@ function RuledTextarea({
   );
 }
 
-function DocHeader({ kind, value, readOnly, patch }: {
+function DocHeader({ kind, value, readOnly, patch, shop }: {
   kind: WorkOrderDocumentKind;
   value: WorkOrderDocumentFields;
   readOnly?: boolean;
   patch: (next: Partial<WorkOrderDocumentFields>) => void;
+  shop: ShopContact;
 }) {
   const numberLabel =
     kind === "estimate" ? "ESTIMATE #" : kind === "invoice" ? "INVOICE #" : "WORK ORDER #";
@@ -175,11 +177,12 @@ function DocHeader({ kind, value, readOnly, patch }: {
       <div className="wo-head__brand">
         <Image
           className="wo-head__logo"
-          src="/logo.png"
-          alt="Morton's Mechanical LLC"
+          src={shop.logos.documents || shop.logoUrl}
+          alt={shop.businessName}
           width={96}
           height={96}
           priority
+          unoptimized
         />
       </div>
 
@@ -187,9 +190,10 @@ function DocHeader({ kind, value, readOnly, patch }: {
         <p className="wo-head__title">{DOCUMENT_TITLES[kind]}</p>
         <span className="wo-head__rule" aria-hidden />
         <ul className="wo-head__contact">
-          <li>{SHOP_CONTACT.phone}</li>
-          <li>{SHOP_CONTACT.email}</li>
-          <li>{SHOP_CONTACT.address}</li>
+          <li>{shop.businessName}</li>
+          <li>{shop.phone}</li>
+          <li>{shop.email}</li>
+          <li>{shop.address}</li>
         </ul>
       </div>
 
@@ -237,12 +241,12 @@ function DocHeader({ kind, value, readOnly, patch }: {
   );
 }
 
-function DocFooter() {
+function DocFooter({ shop }: { shop: ShopContact }) {
   return (
     <footer className="wo-foot">
-      <span className="wo-foot__thanks">{SHOP_CONTACT.thankYou}</span>
+      <span className="wo-foot__thanks">{shop.thankYou}</span>
       <span className="wo-foot__slogan">
-        {SHOP_CONTACT.slogan} <em>{SHOP_CONTACT.sloganAccent}</em>
+        {shop.slogan} <em>{shop.sloganAccent}</em>
       </span>
     </footer>
   );
@@ -300,6 +304,7 @@ const IconNote = (
 );
 
 export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props) {
+  const shop = useShopContact();
   const totals = calculateDocumentTotals(value);
   const showAuthorization = kind !== "estimate";
   const totalLabel = kind === "estimate" ? "ESTIMATE TOTAL" : "TOTAL DUE";
@@ -381,6 +386,12 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           color: #dbe8f7;
           font-size: 10px;
           line-height: 1.5;
+        }
+        .wo-head__contact li:first-child {
+          color: #fff;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
         }
         .wo-head__meta { display: grid; gap: 7px; min-width: 0; }
         .wo-head__meta .wo-field__label { color: #7fc4f5; }
@@ -475,6 +486,28 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
           gap: 9px 10px;
         }
+        .wo-vehicle-grid__wide { grid-column: 1 / -1; }
+
+        .wo-jobbar {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 4px 20px;
+          border: 1.5px solid var(--navy);
+          border-radius: 5px;
+          background: #eef3fa;
+          padding: 5px 10px;
+          font-size: 10.5px;
+        }
+        .wo-jobbar__item b {
+          color: var(--navy);
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          margin-right: 4px;
+        }
+        .wo-jobbar__item--urgent { color: #b3261e; font-weight: 700; }
 
         /* ---------- tables ---------- */
         .wo-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -728,7 +761,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
       {/* ------------------------------- page 1 ------------------------------- */}
       <div className="wo-sheet">
         <section className="wo-page" aria-label={`${DOCUMENT_TITLES[kind]} page 1`}>
-          <DocHeader kind={kind} value={value} readOnly={readOnly} patch={patch} />
+          <DocHeader kind={kind} value={value} readOnly={readOnly} patch={patch} shop={shop} />
 
           <div className="wo-grid-2">
             <Panel title="Customer Information" icon={IconUser}>
@@ -768,6 +801,14 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
 
             <Panel title="Vehicle Information" icon={IconCar}>
               <div className="wo-vehicle-grid">
+                <FieldRow label="Year:" labelWidth="3.4em">
+                  <LineInput
+                    value={value.vehicle.year}
+                    readOnly={readOnly}
+                    ariaLabel="Vehicle year"
+                    onChange={(year) => patch({ vehicle: { ...value.vehicle, year } })}
+                  />
+                </FieldRow>
                 <FieldRow label="Make:" labelWidth="3.4em">
                   <LineInput
                     value={value.vehicle.make}
@@ -784,15 +825,15 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                     onChange={(model) => patch({ vehicle: { ...value.vehicle, model } })}
                   />
                 </FieldRow>
-                <FieldRow label="Year:" labelWidth="3.4em">
+                <FieldRow label="Trim:" labelWidth="3.6em">
                   <LineInput
-                    value={value.vehicle.year}
+                    value={value.vehicle.trim ?? ""}
                     readOnly={readOnly}
-                    ariaLabel="Vehicle year"
-                    onChange={(year) => patch({ vehicle: { ...value.vehicle, year } })}
+                    ariaLabel="Vehicle trim"
+                    onChange={(trim) => patch({ vehicle: { ...value.vehicle, trim } })}
                   />
                 </FieldRow>
-                <FieldRow label="VIN:" labelWidth="3.6em">
+                <FieldRow label="VIN:" labelWidth="3.4em">
                   <LineInput
                     value={value.vehicle.vin}
                     readOnly={readOnly}
@@ -800,7 +841,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                     onChange={(vin) => patch({ vehicle: { ...value.vehicle, vin } })}
                   />
                 </FieldRow>
-                <FieldRow label="Plate:" labelWidth="3.4em">
+                <FieldRow label="License Plate:" labelWidth="6.2em">
                   <LineInput
                     value={value.vehicle.plate}
                     readOnly={readOnly}
@@ -808,7 +849,15 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                     onChange={(plate) => patch({ vehicle: { ...value.vehicle, plate } })}
                   />
                 </FieldRow>
-                <FieldRow label="Mileage:" labelWidth="3.6em">
+                <FieldRow label="Powertrain:" labelWidth="5em">
+                  <LineInput
+                    value={value.vehicle.engine}
+                    readOnly={readOnly}
+                    ariaLabel="Vehicle powertrain or fuel"
+                    onChange={(engine) => patch({ vehicle: { ...value.vehicle, engine } })}
+                  />
+                </FieldRow>
+                <FieldRow label="Mileage:" labelWidth="4.2em">
                   <LineInput
                     value={value.vehicle.mileage}
                     readOnly={readOnly}
@@ -824,16 +873,33 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                     onChange={(color) => patch({ vehicle: { ...value.vehicle, color } })}
                   />
                 </FieldRow>
-                <FieldRow label="Engine:" labelWidth="3.6em">
-                  <LineInput
-                    value={value.vehicle.engine}
-                    readOnly={readOnly}
-                    ariaLabel="Vehicle engine"
-                    onChange={(engine) => patch({ vehicle: { ...value.vehicle, engine } })}
-                  />
-                </FieldRow>
+                <div className="wo-vehicle-grid__wide">
+                  <FieldRow label="Vehicle Notes:" labelWidth="6.4em">
+                    <LineInput
+                      value={value.vehicle.notes ?? ""}
+                      readOnly={readOnly}
+                      ariaLabel="Vehicle notes"
+                      onChange={(notes) => patch({ vehicle: { ...value.vehicle, notes } })}
+                    />
+                  </FieldRow>
+                </div>
               </div>
             </Panel>
+          </div>
+
+          <div className="wo-jobbar">
+            <span className="wo-jobbar__item">
+              <b>Status:</b> {value.status || "—"}
+            </span>
+            <span
+              className={`wo-jobbar__item${
+                (value.priority ?? "").trim().toLowerCase() === "urgent"
+                  ? " wo-jobbar__item--urgent"
+                  : ""
+              }`}
+            >
+              <b>Priority:</b> {value.priority || "—"}
+            </span>
           </div>
 
           <Panel
@@ -884,20 +950,6 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
                     </td>
                   </tr>
                 ))}
-                <tr className="wo-total-row">
-                  <td className="wo-col-num" />
-                  <td className="wo-td-right">Labor Total</td>
-                  <td className="wo-cell-money">
-                    <span className="wo-money-cell">
-                      <input
-                        className="wo-cell-input"
-                        value={money(totals.laborTotal)}
-                        readOnly
-                        aria-label="Labor total"
-                      />
-                    </span>
-                  </td>
-                </tr>
               </tbody>
             </table>
           </Panel>
@@ -1016,14 +1068,14 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           </Panel>
 
           <div className="wo-spacer" />
-          <DocFooter />
+          <DocFooter shop={shop} />
         </section>
       </div>
 
       {/* ------------------------------- page 2 ------------------------------- */}
       <div className="wo-sheet">
         <section className="wo-page" aria-label={`${DOCUMENT_TITLES[kind]} page 2`}>
-          <DocHeader kind={kind} value={value} readOnly={readOnly} patch={patch} />
+          <DocHeader kind={kind} value={value} readOnly={readOnly} patch={patch} shop={shop} />
 
           <Panel title="Work Description" icon={IconClipboard}>
             <RuledTextarea
@@ -1086,8 +1138,8 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
 
                   <Panel title="Payment Authorization (If Applicable)" icon={IconShield}>
                     <p className="wo-legal">
-                      I authorize {SHOP_CONTACT.businessName} to charge the payment method on file
-                      for the final invoice amount.
+                      I authorize {shop.businessName} to charge the payment method on file for the
+                      final invoice amount.
                     </p>
                     <FieldRow label="Signature:" labelWidth="5.6em">
                       <LineInput
@@ -1234,7 +1286,7 @@ export function WorkOrderDocumentForm({ kind, value, onChange, readOnly }: Props
           </div>
 
           <div className="wo-spacer" />
-          <DocFooter />
+          <DocFooter shop={shop} />
         </section>
       </div>
     </div>

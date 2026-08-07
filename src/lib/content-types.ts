@@ -28,6 +28,26 @@ export type CustomBlock = {
   buttonHref: string;
 };
 
+/** Places that can show their own logo instead of the default one. */
+export type SiteLogoSlot =
+  | "header"
+  | "footer"
+  | "dashboard"
+  | "staffLogin"
+  | "customerPortal"
+  | "documents";
+
+export type SiteLogoSet = Record<SiteLogoSlot, string>;
+
+export const SITE_LOGO_SLOTS: { id: SiteLogoSlot; label: string; hint: string }[] = [
+  { id: "header", label: "Website header", hint: "Top of every public page." },
+  { id: "footer", label: "Website footer", hint: "Bottom of every public page." },
+  { id: "dashboard", label: "Dashboard sidebar", hint: "Staff dashboard navigation." },
+  { id: "staffLogin", label: "Staff login screens", hint: "Staff, mechanic, and dispatcher sign-in." },
+  { id: "customerPortal", label: "Customer portal", hint: "Client sign-in, registration, and portal header." },
+  { id: "documents", label: "Work order & estimate documents", hint: "Printed and shared document letterhead." },
+];
+
 export type SiteContent = {
   /** Homepage section order, visibility, and alignment. */
   pageLayout: {
@@ -62,7 +82,16 @@ export type SiteContent = {
   howItWorks: { step: string; title: string; text: string }[];
   cta: { title: string; description: string; buttonText: string };
   serviceOptions: string[];
-  images: { hero: string; about: string; services: string; contact: string };
+  images: {
+    logo: string;
+    favicon: string;
+    /** Per-place overrides. Empty means "use the default logo". */
+    logos: SiteLogoSet;
+    hero: string;
+    about: string;
+    services: string;
+    contact: string;
+  };
   pages: {
     contactTitle: string;
     contactSubtitle: string;
@@ -204,6 +233,16 @@ export const DEFAULT_CONTENT: SiteContent = {
     "Diagnostics", "Scheduled maintenance", "Battery / starter", "A/C repair", "Other",
   ],
   images: {
+    logo: "/logo.png",
+    favicon: "/favicon.ico",
+    logos: {
+      header: "",
+      footer: "",
+      dashboard: "",
+      staffLogin: "",
+      customerPortal: "",
+      documents: "",
+    },
     hero: "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=1600&q=80",
     about: "https://images.unsplash.com/photo-1625047509248-ec889cbff17f?auto=format&fit=crop&w=1200&q=80",
     services: "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=1600&q=80",
@@ -284,4 +323,20 @@ export function phoneHref(phone: string) {
 
 export function emailHref(email: string) {
   return `mailto:${email}`;
+}
+
+/** Logo for one place, falling back to the default logo then the bundled file. */
+export function logoFor(images: SiteContent["images"], slot: SiteLogoSlot) {
+  return images.logos?.[slot]?.trim() || images.logo?.trim() || DEFAULT_CONTENT.images.logo;
+}
+
+export function logoSet(images: SiteContent["images"]): SiteLogoSet {
+  return {
+    header: logoFor(images, "header"),
+    footer: logoFor(images, "footer"),
+    dashboard: logoFor(images, "dashboard"),
+    staffLogin: logoFor(images, "staffLogin"),
+    customerPortal: logoFor(images, "customerPortal"),
+    documents: logoFor(images, "documents"),
+  };
 }

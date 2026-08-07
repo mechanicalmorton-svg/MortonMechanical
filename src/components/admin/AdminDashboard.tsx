@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { SiteLogo } from "@/components/SiteLogo";
 import { canAccessPage, hasPermission } from "@/lib/permissions";
+import { useShopContact } from "@/lib/use-shop-contact";
 import { userHasOwnerRole, type RoleColorStyle, type RolePermissions } from "@/lib/role-definitions";
 import type { StaffRole } from "@/lib/shop-types";
 import { RoleBadge } from "./admin-ui";
@@ -182,6 +183,7 @@ function readTabFromHash(): Tab {
 
 export function AdminDashboard({ user }: Props) {
   const router = useRouter();
+  const shop = useShopContact();
   const [tab, setTab] = useState<Tab>("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -378,7 +380,7 @@ export function AdminDashboard({ user }: Props) {
     <>
       <div className="relative shrink-0 border-b border-slate-800/70 px-3 py-3">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
-        <SiteLogo size={34} showName subtitle="Dashboard" />
+        <SiteLogo size={34} showName subtitle="Dashboard" name={shop.businessName} src={shop.logos.dashboard} />
       </div>
 
       <nav className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-2 py-2">

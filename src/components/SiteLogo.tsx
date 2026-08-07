@@ -9,6 +9,8 @@ type Props = {
   showName?: boolean;
   name?: string;
   subtitle?: string;
+  /** Uploaded logo from Site Contents. Falls back to the bundled logo. */
+  src?: string;
 };
 
 export function SiteLogo({
@@ -17,16 +19,18 @@ export function SiteLogo({
   showName = false,
   name = SITE_NAME,
   subtitle,
+  src,
 }: Props) {
   return (
     <span className={`inline-flex min-w-0 items-center gap-3 ${className}`}>
       <Image
-        src={SITE_LOGO}
+        src={src?.trim() || SITE_LOGO}
         alt={name}
         width={size}
         height={size}
-        className="shrink-0 rounded-full"
+        className="shrink-0 rounded-full object-cover"
         priority
+        unoptimized
       />
       {showName && (
         <span className="min-w-0">

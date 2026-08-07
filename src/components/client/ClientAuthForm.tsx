@@ -7,6 +7,7 @@ import { PortalNavLinks } from "@/components/auth/PortalNavLinks";
 import { SiteLogo } from "@/components/SiteLogo";
 import { useAdminToast } from "@/components/admin/AdminToast";
 import { btnPrimary, inputClass } from "@/components/admin/admin-ui";
+import { useShopContact } from "@/lib/use-shop-contact";
 
 type Mode = "login" | "register";
 
@@ -16,6 +17,7 @@ type Props = {
 
 export function ClientAuthForm({ mode }: Props) {
   const toast = useAdminToast();
+  const shop = useShopContact();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -66,13 +68,13 @@ export function ClientAuthForm({ mode }: Props) {
       </div>
 
       <div className="absolute bottom-6 left-6 hidden sm:block">
-        <SiteLogo size={48} showName subtitle="Client Portal" />
+        <SiteLogo size={48} showName subtitle="Client Portal" name={shop.businessName} src={shop.logos.customerPortal} />
       </div>
 
       <div className="admin-rise relative w-full max-w-md">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-5 flex justify-center">
-            <SiteLogo size={84} />
+            <SiteLogo size={84} name={shop.businessName} src={shop.logos.customerPortal} />
           </div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-300/85">Customer access</p>
           <h1 className="admin-glass-title admin-display mt-2">

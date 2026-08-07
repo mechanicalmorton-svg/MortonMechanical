@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Loader2, Printer } from "lucide-react";
 import type { WorkOrderDocumentFields, WorkOrderDocumentKind } from "@/lib/shop-types";
 import { DOCUMENT_TITLES } from "@/lib/work-order-documents";
+import { useShopContact } from "@/lib/use-shop-contact";
 import { WorkOrderDocumentForm } from "@/components/work-order/WorkOrderDocumentForm";
 
 function parseKind(value: string | null): WorkOrderDocumentKind {
@@ -25,6 +26,7 @@ function WorkOrderCustomerView() {
   const params = useSearchParams();
   const token = params.get("token")?.trim() || "";
   const kind = useMemo(() => parseKind(params.get("kind")), [params]);
+  const shop = useShopContact();
 
   const [fields, setFields] = useState<WorkOrderDocumentFields | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +76,7 @@ function WorkOrderCustomerView() {
       <div className="no-print sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-300 bg-white/95 px-4 py-3 backdrop-blur">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-700">
-            Morton&apos;s Mechanical LLC
+            {shop.businessName}
           </p>
           <h1 className="text-lg font-semibold">{DOCUMENT_TITLES[kind]}</h1>
         </div>
