@@ -2,13 +2,18 @@ import { isSupabaseConfigured } from "./supabase/server";
 import { requireAdminClient, requireDatabaseInProduction, throwOnError } from "./supabase/db";
 import { readJson, writeJson, newId } from "./store";
 import { auditDelete, auditUpsert } from "./audit-instrument";
+import { vehicleLabel } from "./quote-vehicle";
 
 export type Quote = {
   id: string;
   name: string;
   phone: string;
   email?: string;
+  /** License plate. */
   rego?: string;
+  vehicleYear?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
   service: string;
   contactMethod: string;
   message?: string;
@@ -28,6 +33,9 @@ function rowToQuote(r: Record<string, unknown>): Quote {
     phone: r.phone as string,
     email: (r.email as string) || undefined,
     rego: (r.rego as string) || undefined,
+    vehicleYear: (r.vehicle_year as string) || undefined,
+    vehicleMake: (r.vehicle_make as string) || undefined,
+    vehicleModel: (r.vehicle_model as string) || undefined,
     service: r.service as string,
     contactMethod: r.contact_method as string,
     message: (r.message as string) || undefined,
@@ -43,12 +51,21 @@ function quoteToRow(q: Quote) {
     phone: q.phone,
     email: q.email ?? "",
     rego: q.rego ?? "",
+    vehicle_year: q.vehicleYear ?? "",
+    vehicle_make: q.vehicleMake ?? "",
+    vehicle_model: q.vehicleModel ?? "",
     service: q.service,
     contact_method: q.contactMethod,
     message: q.message ?? "",
     status: q.status,
     created_at: q.createdAt,
   };
+}
+
+/** True when the quotes table predates the vehicle columns. */
+function isMissingVehicleColumns(message: string) {
+  const lower = message.toLowerCase();
+  return lower.includes("vehicle_year") || lower.includes("vehicle_make") || lower.includes("vehicle_model");
 }
 
 export async function loadQuotes(): Promise<Quote[]> {
@@ -73,7 +90,20 @@ export async function addQuote(entry: Omit<Quote, "id" | "createdAt" | "status">
 
   if (useDatabase()) {
     const { error } = await requireAdminClient().from("quotes").insert(quoteToRow(quote));
-    throwOnError(error, "Could not save quote request");
+    if (error && isMissingVehicleColumns(error.message)) {
+      // Keep the request working before supabase/add-quote-vehicle.sql is run.
+      const car = vehicleLabel(quote);
+      const { vehicle_year, vehicle_make, vehicle_model, ...legacy } = quoteToRow(quote);
+      void vehicle_year;
+      void vehicle_make;
+      void vehicle_model;
+      const { error: retryError } = await requireAdminClient()
+        .from("quotes")
+        .insert({ ...legacy, message: [car ? `Vehicle: ${car}` : "", legacy.message].filter(Boolean).join("\n") });
+      throwOnError(retryError, "Could not save quote request");
+    } else {
+      throwOnError(error, "Could not save quote request");
+    }
   } else {
     const quotes = readJson<Quote[]>("quotes.json", []);
     quotes.push(quote);

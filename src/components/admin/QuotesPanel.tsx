@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Archive, CalendarPlus, Inbox, Mail, Phone, Trash2 } from "lucide-react";
 import type { Quote } from "@/lib/quotes";
+import { vehicleLabel } from "@/lib/quote-vehicle";
 import type { Booking } from "@/lib/shop-types";
 import { adminGet, adminSend } from "./admin-fetch";
 import { useAdminToast } from "./AdminToast";
@@ -81,7 +82,13 @@ export function QuotesPanel() {
         service: quote.service,
         date: new Date().toISOString().slice(0, 10),
         time: "09:00",
-        notes: [quote.rego ? `Rego: ${quote.rego}` : "", quote.message].filter(Boolean).join("\n"),
+        notes: [
+          vehicleLabel(quote) ? `Vehicle: ${vehicleLabel(quote)}` : "",
+          quote.rego ? `License plate: ${quote.rego}` : "",
+          quote.message,
+        ]
+          .filter(Boolean)
+          .join("\n"),
         status: "pending",
       }),
     });
@@ -194,9 +201,15 @@ export function QuotesPanel() {
                       </a>
                     </div>
                   )}
+                  {vehicleLabel(q) && (
+                    <div>
+                      <dt className="text-xs text-slate-500">Vehicle</dt>
+                      <dd className="text-slate-300">{vehicleLabel(q)}</dd>
+                    </div>
+                  )}
                   {q.rego && (
                     <div>
-                      <dt className="text-xs text-slate-500">Rego</dt>
+                      <dt className="text-xs text-slate-500">License plate</dt>
                       <dd className="text-slate-300">{q.rego}</dd>
                     </div>
                   )}

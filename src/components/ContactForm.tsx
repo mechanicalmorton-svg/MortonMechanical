@@ -9,6 +9,9 @@ type FormState = {
   phone: string;
   email: string;
   rego: string;
+  vehicleYear: string;
+  vehicleMake: string;
+  vehicleModel: string;
   service: string;
   contactMethod: "phone" | "email";
   message: string;
@@ -26,6 +29,9 @@ export function ContactForm({ serviceOptions, form: formCopy }: Props) {
     phone: "",
     email: "",
     rego: "",
+    vehicleYear: "",
+    vehicleMake: "",
+    vehicleModel: "",
     service: serviceOptions[0] ?? "Other",
     contactMethod: "phone",
     message: "",
@@ -124,12 +130,13 @@ export function ContactForm({ serviceOptions, form: formCopy }: Props) {
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
           <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-200">
-            Email <span className="text-slate-500">(optional)</span>
+            Email <span className="text-amber-400">*</span>
           </label>
           <input
             id="email"
             name="email"
             type="email"
+            required
             autoComplete="email"
             className={inputClass}
             value={form.email}
@@ -138,15 +145,62 @@ export function ContactForm({ serviceOptions, form: formCopy }: Props) {
         </div>
         <div>
           <label htmlFor="rego" className="mb-1 block text-sm font-medium text-slate-200">
-            Registration / plate
+            License Plate <span className="text-amber-400">*</span>
           </label>
           <input
             id="rego"
             name="rego"
+            required
             className={inputClass}
             placeholder="ABC123"
             value={form.rego}
             onChange={(e) => setForm({ ...form, rego: e.target.value })}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-3">
+        <div>
+          <label htmlFor="vehicleYear" className="mb-1 block text-sm font-medium text-slate-200">
+            Year
+          </label>
+          <input
+            id="vehicleYear"
+            name="vehicleYear"
+            inputMode="numeric"
+            maxLength={4}
+            className={inputClass}
+            placeholder="2018"
+            value={form.vehicleYear}
+            onChange={(e) =>
+              setForm({ ...form, vehicleYear: e.target.value.replace(/[^0-9]/g, "") })
+            }
+          />
+        </div>
+        <div>
+          <label htmlFor="vehicleMake" className="mb-1 block text-sm font-medium text-slate-200">
+            Make
+          </label>
+          <input
+            id="vehicleMake"
+            name="vehicleMake"
+            className={inputClass}
+            placeholder="Toyota"
+            value={form.vehicleMake}
+            onChange={(e) => setForm({ ...form, vehicleMake: e.target.value })}
+          />
+        </div>
+        <div>
+          <label htmlFor="vehicleModel" className="mb-1 block text-sm font-medium text-slate-200">
+            Model
+          </label>
+          <input
+            id="vehicleModel"
+            name="vehicleModel"
+            className={inputClass}
+            placeholder="Corolla"
+            value={form.vehicleModel}
+            onChange={(e) => setForm({ ...form, vehicleModel: e.target.value })}
           />
         </div>
       </div>
