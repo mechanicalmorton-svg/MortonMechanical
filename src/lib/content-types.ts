@@ -274,7 +274,7 @@ export const DEFAULT_CONTENT: SiteContent = {
     locationLabel: "Location",
     hoursLabel: "Hours",
     form: {
-      submitText: "Submit request",
+      submitText: "Submit Quote",
       successTitle: "Request received",
       successMessage: "Thanks — we'll contact you the same business day to confirm details and provide a quote.",
       footerNote: "We aim to confirm bookings within business hours the same day.",

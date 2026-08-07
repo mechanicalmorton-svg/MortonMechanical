@@ -38,5 +38,8 @@ export function normalizeContent(stored: Partial<SiteContent> = {}): SiteContent
   if (/^staff\s*login$/i.test(content.footer.staffLoginLabel.trim())) {
     content.footer.staffLoginLabel = DEFAULT_CONTENT.footer.staffLoginLabel;
   }
+  if (/^submit\s*request$/i.test(content.pages.form.submitText.trim())) {
+    content.pages.form.submitText = DEFAULT_CONTENT.pages.form.submitText;
+  }
   return normalizePageLayout(content);
 }
