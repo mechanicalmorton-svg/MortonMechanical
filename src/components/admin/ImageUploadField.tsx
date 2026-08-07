@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { ImageOff, Loader2, Trash2, Upload } from "lucide-react";
+import { MAX_LOGO_SCALE, MIN_LOGO_SCALE } from "@/lib/content-types";
 import { adminSend } from "./admin-fetch";
 import { useAdminToast } from "./AdminToast";
 import { btnSecondary } from "./admin-ui";
@@ -20,6 +21,9 @@ type Props = {
   /** Shown in the preview while this slot is empty and inheriting another image. */
   inherits?: string;
   preview?: "wide" | "square" | "icon";
+  /** Display size as a percentage of the built-in size. Omit to hide the control. */
+  scale?: number;
+  onScaleChange?: (next: number) => void;
 };
 
 export function ImageUploadField({
@@ -31,6 +35,8 @@ export function ImageUploadField({
   fallback = "",
   inherits,
   preview = "wide",
+  scale,
+  onScaleChange,
 }: Props) {
   const toast = useAdminToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -134,6 +140,32 @@ export function ImageUploadField({
           ) : null}
         </div>
       </div>
+
+      {onScaleChange ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-800/70 pt-3">
+          <span className="text-xs text-slate-400">Size</span>
+          <input
+            type="range"
+            min={MIN_LOGO_SCALE}
+            max={MAX_LOGO_SCALE}
+            step={5}
+            value={scale ?? 100}
+            onChange={(e) => onScaleChange(Number(e.target.value))}
+            className="h-1.5 w-48 max-w-full accent-amber-500"
+            aria-label={`${label} size`}
+          />
+          <span className="w-12 text-xs tabular-nums text-slate-300">{scale ?? 100}%</span>
+          {(scale ?? 100) !== 100 ? (
+            <button
+              type="button"
+              onClick={() => onScaleChange(100)}
+              className="text-xs text-amber-400"
+            >
+              Reset
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <input
         ref={inputRef}

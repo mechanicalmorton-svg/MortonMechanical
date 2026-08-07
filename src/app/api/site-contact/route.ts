@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getContent } from "@/lib/content";
-import { logoSet } from "@/lib/content-types";
+import { logoScaleSet, logoSet } from "@/lib/content-types";
 import { SHOP_CONTACT, type ShopContact } from "@/lib/work-order-documents";
 
 /** Letterhead info for documents, driven by Site Contents business info. */
@@ -14,6 +14,7 @@ export async function GET() {
       address: site.address?.trim() || SHOP_CONTACT.address,
       logoUrl: images.logo?.trim() || SHOP_CONTACT.logoUrl,
       logos: logoSet(images),
+      logoScales: logoScaleSet(images),
       slogan: SHOP_CONTACT.slogan,
       sloganAccent: SHOP_CONTACT.sloganAccent,
       thankYou: SHOP_CONTACT.thankYou,

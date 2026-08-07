@@ -12,9 +12,10 @@ type Props = {
   phone: string;
   header: SiteContent["header"];
   logo?: string;
+  logoScale?: number;
 };
 
-export function HeaderNav({ name, phone, header, logo }: Props) {
+export function HeaderNav({ name, phone, header, logo, logoScale }: Props) {
   const [open, setOpen] = useState(false);
   const tel = phoneHref(phone);
 
@@ -22,7 +23,7 @@ export function HeaderNav({ name, phone, header, logo }: Props) {
     <header className="sticky top-0 z-50 border-b border-white/5 bg-slate-950/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-screen-xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
         <Link href="/" className="flex min-w-0 items-center gap-3 transition hover:opacity-90">
-          <SiteLogo size={44} showName name={name} src={logo} />
+          <SiteLogo size={44} showName name={name} src={logo} scale={logoScale} />
         </Link>
 
         <nav className="hidden md:block" aria-label="Main">

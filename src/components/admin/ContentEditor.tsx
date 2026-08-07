@@ -856,8 +856,8 @@ export function ContentEditor() {
               <div className="space-y-3">
                 <p className="text-sm font-medium text-slate-300">Logo by location</p>
                 <p className="text-xs text-slate-500">
-                  Upload a logo here to override the default one in that place. Remove it to go back
-                  to the default.
+                  Upload a logo here to override the default one in that place, and set how large it
+                  appears. Remove it to go back to the default.
                 </p>
                 {SITE_LOGO_SLOTS.map((entry) => (
                   <ImageUploadField
@@ -869,6 +869,8 @@ export function ContentEditor() {
                     inherits={content.images.logo || "/logo.png"}
                     value={content.images.logos[entry.id]}
                     onChange={(v) => patch((c) => { c.images.logos[entry.id] = v; return c; })}
+                    scale={content.images.logoScales[entry.id]}
+                    onScaleChange={(v) => patch((c) => { c.images.logoScales[entry.id] = v; return c; })}
                   />
                 ))}
               </div>

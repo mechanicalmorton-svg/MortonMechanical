@@ -24,6 +24,7 @@ export function useShopContact(): ShopContact {
           ...SHOP_CONTACT,
           ...data,
           logos: { ...SHOP_CONTACT.logos, ...(data.logos ?? {}) },
+          logoScales: { ...SHOP_CONTACT.logoScales, ...(data.logoScales ?? {}) },
         };
         cachedContact = next;
         if (!cancelled) setContact(next);

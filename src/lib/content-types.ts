@@ -39,6 +39,12 @@ export type SiteLogoSlot =
 
 export type SiteLogoSet = Record<SiteLogoSlot, string>;
 
+/** Logo display size per place, as a percentage of the built-in size. */
+export type SiteLogoScaleSet = Record<SiteLogoSlot, number>;
+
+export const MIN_LOGO_SCALE = 50;
+export const MAX_LOGO_SCALE = 250;
+
 export const SITE_LOGO_SLOTS: { id: SiteLogoSlot; label: string; hint: string }[] = [
   { id: "header", label: "Website header", hint: "Top of every public page." },
   { id: "footer", label: "Website footer", hint: "Bottom of every public page." },
@@ -87,6 +93,8 @@ export type SiteContent = {
     favicon: string;
     /** Per-place overrides. Empty means "use the default logo". */
     logos: SiteLogoSet;
+    /** Per-place display size, 100 = the built-in size. */
+    logoScales: SiteLogoScaleSet;
     hero: string;
     about: string;
     services: string;
@@ -243,6 +251,14 @@ export const DEFAULT_CONTENT: SiteContent = {
       customerPortal: "",
       documents: "",
     },
+    logoScales: {
+      header: 100,
+      footer: 100,
+      dashboard: 100,
+      staffLogin: 100,
+      customerPortal: 100,
+      documents: 100,
+    },
     hero: "https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=1600&q=80",
     about: "https://images.unsplash.com/photo-1625047509248-ec889cbff17f?auto=format&fit=crop&w=1200&q=80",
     services: "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=1600&q=80",
@@ -339,4 +355,27 @@ export function logoSet(images: SiteContent["images"]): SiteLogoSet {
     customerPortal: logoFor(images, "customerPortal"),
     documents: logoFor(images, "documents"),
   };
+}
+
+export function logoScaleFor(images: SiteContent["images"], slot: SiteLogoSlot) {
+  const raw = Number(images.logoScales?.[slot]);
+  if (!Number.isFinite(raw) || raw <= 0) return 100;
+  return Math.min(MAX_LOGO_SCALE, Math.max(MIN_LOGO_SCALE, Math.round(raw)));
+}
+
+export function logoScaleSet(images: SiteContent["images"]): SiteLogoScaleSet {
+  return {
+    header: logoScaleFor(images, "header"),
+    footer: logoScaleFor(images, "footer"),
+    dashboard: logoScaleFor(images, "dashboard"),
+    staffLogin: logoScaleFor(images, "staffLogin"),
+    customerPortal: logoScaleFor(images, "customerPortal"),
+    documents: logoScaleFor(images, "documents"),
+  };
+}
+
+/** Applies a logo scale to a built-in pixel size. */
+export function scaledLogoSize(base: number, scale = 100) {
+  const pct = Number.isFinite(scale) && scale > 0 ? scale : 100;
+  return Math.round((base * Math.min(MAX_LOGO_SCALE, Math.max(MIN_LOGO_SCALE, pct))) / 100);
 }

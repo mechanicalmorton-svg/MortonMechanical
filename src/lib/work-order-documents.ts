@@ -1,4 +1,4 @@
-import type { SiteLogoSet } from "./content-types";
+import type { SiteLogoScaleSet, SiteLogoSet } from "./content-types";
 import { parseWorkOrderVehicleLabel } from "./customer-vehicles";
 import { workOrderStatusLabel } from "./work-order-status";
 import type {
@@ -34,6 +34,8 @@ export type ShopContact = {
   logoUrl: string;
   /** Per-place logos, already resolved to the default when not overridden. */
   logos: SiteLogoSet;
+  /** Per-place logo display size, 100 = the built-in size. */
+  logoScales: SiteLogoScaleSet;
 };
 
 /** Fallback letterhead used until Site Contents business info loads. */
@@ -47,6 +49,14 @@ export const SHOP_CONTACT: ShopContact = {
     staffLogin: "/logo.png",
     customerPortal: "/logo.png",
     documents: "/logo.png",
+  },
+  logoScales: {
+    header: 100,
+    footer: 100,
+    dashboard: 100,
+    staffLogin: 100,
+    customerPortal: 100,
+    documents: 100,
   },
   phone: "(555) 123-4567",
   email: "info@mortonsmechanical.com",

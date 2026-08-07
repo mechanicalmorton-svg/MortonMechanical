@@ -68,13 +68,25 @@ export function ClientAuthForm({ mode }: Props) {
       </div>
 
       <div className="absolute bottom-6 left-6 hidden sm:block">
-        <SiteLogo size={48} showName subtitle="Client Portal" name={shop.businessName} src={shop.logos.customerPortal} />
+        <SiteLogo
+          size={48}
+          showName
+          subtitle="Client Portal"
+          name={shop.businessName}
+          src={shop.logos.customerPortal}
+          scale={shop.logoScales.customerPortal}
+        />
       </div>
 
       <div className="admin-rise relative w-full max-w-md">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-5 flex justify-center">
-            <SiteLogo size={84} name={shop.businessName} src={shop.logos.customerPortal} />
+            <SiteLogo
+              size={84}
+              name={shop.businessName}
+              src={shop.logos.customerPortal}
+              scale={shop.logoScales.customerPortal}
+            />
           </div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-300/85">Customer access</p>
           <h1 className="admin-glass-title admin-display mt-2">

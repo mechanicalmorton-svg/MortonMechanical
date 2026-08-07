@@ -380,7 +380,14 @@ export function AdminDashboard({ user }: Props) {
     <>
       <div className="relative shrink-0 border-b border-slate-800/70 px-3 py-3">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
-        <SiteLogo size={34} showName subtitle="Dashboard" name={shop.businessName} src={shop.logos.dashboard} />
+        <SiteLogo
+          size={34}
+          showName
+          subtitle="Dashboard"
+          name={shop.businessName}
+          src={shop.logos.dashboard}
+          scale={shop.logoScales.dashboard}
+        />
       </div>
 
       <nav className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-2 py-2">

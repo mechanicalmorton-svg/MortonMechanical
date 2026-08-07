@@ -9,6 +9,7 @@ import {
   partLineTotal,
   type ShopContact,
 } from "@/lib/work-order-documents";
+import { scaledLogoSize } from "@/lib/content-types";
 import { useShopContact } from "@/lib/use-shop-contact";
 import type { WorkOrderDocumentFields, WorkOrderDocumentKind } from "@/lib/shop-types";
 
@@ -171,16 +172,18 @@ function DocHeader({ kind, value, readOnly, patch, shop }: {
 }) {
   const numberLabel =
     kind === "estimate" ? "ESTIMATE #" : kind === "invoice" ? "INVOICE #" : "WORK ORDER #";
+  const logoSize = scaledLogoSize(92, shop.logoScales.documents);
 
   return (
     <header className="wo-head">
       <div className="wo-head__brand">
         <Image
           className="wo-head__logo"
+          style={{ width: logoSize, height: logoSize }}
           src={shop.logos.documents || shop.logoUrl}
           alt={shop.businessName}
-          width={96}
-          height={96}
+          width={logoSize}
+          height={logoSize}
           priority
           unoptimized
         />
